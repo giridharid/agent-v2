@@ -1015,6 +1015,241 @@ async def get_segment_aspect(product_id: int):
 # ─────────────────────────────────────────
 # MAIN
 # ─────────────────────────────────────────
+
+# ─────────────────────────────────────────
+# FRONTEND COMPATIBILITY ALIASES
+# ─────────────────────────────────────────
+
+@app.get("/api/hotel_details")
+async def hotel_details_alias(product_id: Optional[int] = None, brand: Optional[str] = None):
+    client = get_bq()
+    if not client:
+        raise HTTPException(status_code=500, detail="Database unavailable")
+    if product_id:
+        return await get_hotel_summary(product_id)
+    elif brand:
+        return await get_brand_summary(brand)
+    return {}
+
+@app.get("/api/drivers")
+async def drivers_alias(product_id: Optional[int] = None, brand: Optional[str] = None):
+    client = get_bq()
+    if not client:
+        raise HTTPException(status_code=500, detail="Database unavailable")
+    ASPECT_ICONS = {1:"🍽️",2:"🧹",3:"🏊",4:"👨‍💼",5:"🛏️",6:"📍",7:"💰",8:"⭐"}
+    if product_id:
+        query = f"""
+        SELECT aspect_id, aspect_name, positive_count, negative_count,
+               total_mentions, satisfaction_pct as satisfaction, share_of_voice_pct as share_of_voice
+        FROM `{PROJECT}.{DATASET}.product_aspect_summary`
+        WHERE product_id = {product_id}
+        ORDER BY total_mentions DESC
+        """
+    elif brand:
+        query = f"""
+        SELECT a.aspect_id, a.aspect_name,
+               SUM(a.positive_count) as positive_count, SUM(a.negative_count) as negative_count,
+               SUM(a.total_mentions) as total_mentions,
+               ROUND(SUM(a.positive_count)*100/NULLIF(SUM(a.positive_count)+SUM(a.negative_count),0)) as satisfaction,
+               ROUND(SUM(a.total_mentions)*100/NULLIF(SUM(SUM(a.total_mentions)) OVER(),0)) as share_of_voice
+        FROM `{PROJECT}.{DATASET}.product_aspect_summary` a
+        JOIN `{PROJECT}.{DATASET}.hotel_master` h ON a.product_id = h.product_id
+        WHERE h.brand_name = '{brand}'
+        GROUP BY a.aspect_id, a.aspect_name
+        ORDER BY total_mentions DESC
+        """
+    else:
+        return []
+    df = client.query(query).to_dataframe()
+    results = df.to_dict(orient='records')
+    for r in results:
+        r['icon'] = ASPECT_ICONS.get(r.get('aspect_id'), '⭐')
+        for k, v in r.items():
+            if hasattr(v, 'item'): r[k] = v.item()
+    return results
+
+@app.get("/api/satisfaction")
+async def satisfaction_alias(product_id: Optional[int] = None, brand: Optional[str] = None):
+    return await drivers_alias(product_id=product_id, brand=brand)
+
+@app.get("/api/demographics")
+async def demographics_alias(product_id: Optional[int] = None, brand: Optional[str] = None):
+    client = get_bq()
+    if not client:
+        raise HTTPException(status_code=500, detail="Database unavailable")
+    if product_id:
+        query = f"""
+        SELECT dimension, dimension_value, review_count, pct_of_total
+        FROM `{PROJECT}.{DATASET}.product_demographics`
+        WHERE product_id = {product_id}
+        ORDER BY dimension, review_count DESC
+        """
+        df = client.query(query).to_dataframe()
+    elif brand:
+        query = f"""
+        SELECT d.dimension, d.dimension_value, SUM(d.review_count) as review_count, 0 as pct_of_total
+        FROM `{PROJECT}.{DATASET}.product_demographics` d
+        JOIN `{PROJECT}.{DATASET}.hotel_master` h ON d.product_id = h.product_id
+        WHERE h.brand_name = '{brand}'
+        GROUP BY d.dimension, d.dimension_value
+        ORDER BY d.dimension, review_count DESC
+        """
+        df = client.query(query).to_dataframe()
+    else:
+        return {"gender": [], "traveler_type": [], "stay_purpose": []}
+    result = {"gender": [], "traveler_type": [], "stay_purpose": []}
+    for _, row in df.iterrows():
+        dim = row['dimension']
+        if dim in result and row['dimension_value']:
+            result[dim].append({
+                "traveler_type": row['dimension_value'],
+                "gender": row['dimension_value'],
+                "stay_purpose": row['dimension_value'],
+                "review_count": int(row['review_count']),
+                "pct_of_total": int(row.get('pct_of_total') or 0)
+            })
+    return result
+
+@app.get("/api/stay_purpose_preferences")
+async def stay_purpose_preferences(product_id: Optional[int] = None, brand: Optional[str] = None):
+    client = get_bq()
+    if not client:
+        raise HTTPException(status_code=500, detail="Database unavailable")
+    if product_id:
+        where = f"s.product_id = {product_id}"
+        join_clause = ""
+    elif brand:
+        where = f"h.brand_name = '{brand}'"
+        join_clause = f"JOIN `{PROJECT}.{DATASET}.hotel_master` h ON s.product_id = h.product_id"
+    else:
+        return []
+    query = f"""
+    SELECT s.segment_value as stay_purpose, s.aspect_name,
+           SUM(s.total_mentions) as mentions,
+           ROUND(SUM(s.positive_count)*100/NULLIF(SUM(s.positive_count)+SUM(s.negative_count),0)) as satisfaction
+    FROM `{PROJECT}.{DATASET}.product_segment_aspect` s
+    {join_clause}
+    WHERE {where} AND s.segment_type = 'stay_purpose' AND s.segment_value IS NOT NULL
+    GROUP BY s.segment_value, s.aspect_name
+    ORDER BY s.segment_value, mentions DESC
+    """
+    df = client.query(query).to_dataframe()
+    if df.empty:
+        return []
+    result = {}
+    for _, row in df.iterrows():
+        sp = row['stay_purpose']
+        if sp not in result:
+            result[sp] = {"stay_purpose": sp, "aspects": {}}
+        result[sp]["aspects"][row['aspect_name']] = {
+            "satisfaction": int(row['satisfaction'] or 0),
+            "mentions": int(row['mentions'])
+        }
+    return list(result.values())
+
+@app.get("/api/traveler_preferences")
+async def traveler_preferences(product_id: Optional[int] = None, brand: Optional[str] = None):
+    client = get_bq()
+    if not client:
+        raise HTTPException(status_code=500, detail="Database unavailable")
+    if product_id:
+        where = f"s.product_id = {product_id}"
+        join_clause = ""
+    elif brand:
+        where = f"h.brand_name = '{brand}'"
+        join_clause = f"JOIN `{PROJECT}.{DATASET}.hotel_master` h ON s.product_id = h.product_id"
+    else:
+        return []
+    query = f"""
+    SELECT s.segment_value as traveler_type, s.aspect_name,
+           SUM(s.total_mentions) as mentions,
+           ROUND(SUM(s.positive_count)*100/NULLIF(SUM(s.positive_count)+SUM(s.negative_count),0)) as satisfaction
+    FROM `{PROJECT}.{DATASET}.product_segment_aspect` s
+    {join_clause}
+    WHERE {where} AND s.segment_type = 'traveler_type' AND s.segment_value IS NOT NULL
+    GROUP BY s.segment_value, s.aspect_name
+    ORDER BY s.segment_value, mentions DESC
+    """
+    df = client.query(query).to_dataframe()
+    if df.empty:
+        return []
+    result = {}
+    for _, row in df.iterrows():
+        tt = row['traveler_type']
+        if tt not in result:
+            result[tt] = {"traveler_type": tt, "aspects": {}}
+        result[tt]["aspects"][row['aspect_name']] = {
+            "satisfaction": int(row['satisfaction'] or 0),
+            "mentions": int(row['mentions'])
+        }
+    return list(result.values())
+
+@app.get("/api/comparison")
+async def comparison_alias(items: str = "", compare_by: str = "hotel"):
+    client = get_bq()
+    if not client:
+        raise HTTPException(status_code=500, detail="Database unavailable")
+    item_list = [i.strip() for i in items.split("|||") if i.strip()]
+    if len(item_list) < 2:
+        return {}
+    result = {}
+    if compare_by == "hotel":
+        for pid_str in item_list:
+            try:
+                pid = int(pid_str)
+                query = f"""
+                SELECT h.product_id, h.hotel_name as display_name,
+                       a.aspect_name, a.satisfaction_pct, a.share_of_voice_pct, a.total_mentions,
+                       a.positive_count, a.negative_count
+                FROM `{PROJECT}.{DATASET}.hotel_master` h
+                JOIN `{PROJECT}.{DATASET}.product_aspect_summary` a ON h.product_id = a.product_id
+                WHERE h.product_id = {pid}
+                """
+                df = client.query(query).to_dataframe()
+                if df.empty: continue
+                aspects = df[["aspect_name","satisfaction_pct","share_of_voice_pct","total_mentions"]].to_dict(orient='records')
+                total_pos = int(df["positive_count"].sum())
+                total_neg = int(df["negative_count"].sum())
+                result[pid_str] = {
+                    "display_name": str(df.iloc[0]["display_name"]),
+                    "aspects": aspects,
+                    "overall": {
+                        "total_mentions": int(df["total_mentions"].sum()),
+                        "positive": total_pos, "negative": total_neg,
+                        "satisfaction": round(total_pos*100/max(total_pos+total_neg,1))
+                    }
+                }
+            except Exception:
+                result[pid_str] = {"display_name": pid_str, "aspects": [], "overall": {}}
+    else:
+        for brand_name in item_list:
+            try:
+                query = f"""
+                SELECT h.brand_name as display_name, a.aspect_name,
+                       ROUND(SUM(a.satisfaction_pct*a.total_mentions)/NULLIF(SUM(a.total_mentions),0)) as satisfaction_pct,
+                       SUM(a.total_mentions) as total_mentions,
+                       SUM(a.positive_count) as positive_count, SUM(a.negative_count) as negative_count
+                FROM `{PROJECT}.{DATASET}.hotel_master` h
+                JOIN `{PROJECT}.{DATASET}.product_aspect_summary` a ON h.product_id = a.product_id
+                WHERE h.brand_name = '{brand_name}'
+                GROUP BY h.brand_name, a.aspect_name
+                """
+                df = client.query(query).to_dataframe()
+                if df.empty: continue
+                aspects = [{"aspect_name": r["aspect_name"], "satisfaction_pct": int(r["satisfaction_pct"] or 0),
+                            "total_mentions": int(r["total_mentions"])} for _, r in df.iterrows()]
+                total_pos = int(df["positive_count"].sum())
+                total_neg = int(df["negative_count"].sum())
+                result[brand_name] = {
+                    "display_name": brand_name, "aspects": aspects,
+                    "overall": {"total_mentions": int(df["total_mentions"].sum()),
+                                "positive": total_pos, "negative": total_neg,
+                                "satisfaction": round(total_pos*100/max(total_pos+total_neg,1))}
+                }
+            except Exception:
+                result[brand_name] = {"display_name": brand_name, "aspects": [], "overall": {}}
+    return result
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8080)

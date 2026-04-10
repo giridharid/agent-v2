@@ -850,6 +850,7 @@
             document.getElementById('subTabsRow').classList.remove('hidden');
             showSubTab('drivers');
             await loadDashboard();
+            await loadHotelDataV2(currentHotel);
             hideLoader();
         }
 
@@ -1090,6 +1091,7 @@
             document.getElementById('subTabsRow').classList.remove('hidden');
             showSubTab('drivers');
             await loadDashboard();
+            await loadHotelDataV2(currentHotel);
             hideLoader();
         }
         
@@ -1111,6 +1113,7 @@
             document.getElementById('subTabsRow').classList.remove('hidden');
             showSubTab('drivers');
             await loadDashboard();
+            await loadHotelDataV2(currentHotel);
             hideLoader();
         }
         
@@ -2128,22 +2131,54 @@
         
         let currentProductId = null;
         
+        let drilldownState = { productId: null, phrase: null, signalType: null, allReviews: [], showing: 3 };
+
+        function renderDrilldownReviews() {
+            const content = document.getElementById('drilldownContent');
+            const countText = document.getElementById('drilldownCount');
+            const { allReviews, showing, phrase } = drilldownState;
+            const visible = allReviews.slice(0, showing);
+            countText.textContent = `Showing ${visible.length} of ${allReviews.length} reviews`;
+            const reviewsHtml = visible.map(r => {
+                const stars = '⭐'.repeat(Math.round(r.star_rating || 0));
+                const reviewText = highlightSentiment(r.review_text || '', r.sentiment_text || '');
+                return `
+                    <div style="background:#252035;border-radius:8px;padding:14px;margin-bottom:10px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                            <div style="display:flex;align-items:center;gap:8px;">
+                                <span style="color:#fbbf24;font-size:12px;">${stars}</span>
+                                <span style="color:#e5e7eb;font-size:13px;font-weight:500;">${escapeHtml(r.reviewer_name || 'Guest')}</span>
+                                <span style="color:#6b7280;font-size:11px;">${formatDate(r.review_date)}</span>
+                            </div>
+                            ${r.traveler_type ? `<span style="background:#374151;color:#9ca3af;padding:2px 8px;border-radius:4px;font-size:11px;">${escapeHtml(r.traveler_type)}</span>` : ''}
+                        </div>
+                        <p style="color:#d1d5db;font-size:13px;line-height:1.6;margin:0;">${reviewText}</p>
+                    </div>`;
+            }).join('');
+            const loadMoreBtn = allReviews.length > showing
+                ? `<div style="text-align:center;padding:8px 0;">
+                     <button onclick="loadMoreDrilldown()" style="background:#374151;color:#e5e7eb;border:none;padding:8px 20px;border-radius:6px;font-size:13px;cursor:pointer;">
+                       Load More Reviews (${allReviews.length - showing} remaining)
+                     </button>
+                   </div>`
+                : '';
+            content.innerHTML = reviewsHtml + loadMoreBtn;
+        }
+
+        function loadMoreDrilldown() {
+            drilldownState.showing += 3;
+            renderDrilldownReviews();
+        }
+
         async function openDrilldown(productId, phrase, signalType) {
             const modal = document.getElementById('drilldownModal');
             const title = document.getElementById('drilldownTitle');
             const content = document.getElementById('drilldownContent');
             const countText = document.getElementById('drilldownCount');
             
-            // Set title based on signal type
-            const typeLabels = {
-                'pain_point': '❌ Pain Point',
-                'delight': '✅ Delight',
-                'rd_signal': '🔬 R&D Signal'
-            };
+            const typeLabels = { 'pain_point': '❌ Pain Point', 'delight': '✅ Delight', 'rd_signal': '🔬 R&D Signal' };
             title.innerHTML = `${typeLabels[signalType] || 'Reviews'}: "${phrase}"`;
-            
-            // Show loading
-            content.innerHTML = '<div class="text-center py-8 text-gray-400">Loading reviews...</div>';
+            content.innerHTML = '<div style="text-align:center;padding:2rem;color:#9ca3af;">Loading reviews...</div>';
             countText.textContent = '';
             modal.classList.remove('hidden');
             
@@ -2151,43 +2186,17 @@
                 const response = await fetch('/api/drilldown', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        product_id: productId,
-                        phrase: phrase,
-                        signal_type: signalType,
-                        limit: 10
-                    })
+                    body: JSON.stringify({ product_id: productId, phrase, signal_type: signalType, limit: 50 })
                 });
-                
                 const data = await response.json();
-                countText.textContent = `Showing ${data.reviews?.length || 0} of ${data.total_count || 0} reviews`;
-                
                 if (!data.reviews || data.reviews.length === 0) {
-                    content.innerHTML = '<div class="text-center py-8 text-gray-500">No reviews found for this phrase.</div>';
+                    content.innerHTML = '<div style="text-align:center;padding:2rem;color:#6b7280;">No reviews found for this phrase.</div>';
                     return;
                 }
-                
-                content.innerHTML = data.reviews.map(r => {
-                    const stars = '⭐'.repeat(Math.round(r.star_rating || 0));
-                    const reviewText = highlightSentiment(r.review_text || '', r.sentiment_text || '');
-                    
-                    return `
-                        <div class="glass-dark rounded-lg p-4 mb-3">
-                            <div class="flex justify-between items-center mb-2">
-                                <div class="flex items-center gap-2">
-                                    <span class="text-yellow-400 text-xs">${stars}</span>
-                                    <span class="text-white text-sm font-medium">${escapeHtml(r.reviewer_name || 'Guest')}</span>
-                                    <span class="text-gray-500 text-xs">${formatDate(r.review_date)}</span>
-                                </div>
-                                ${r.traveler_type ? `<span class="glass px-2 py-0.5 rounded text-xs text-gray-400">${r.traveler_type}</span>` : ''}
-                            </div>
-                            <p class="text-gray-300 text-sm leading-relaxed">${reviewText}</p>
-                        </div>
-                    `;
-                }).join('');
-                
+                drilldownState = { productId, phrase, signalType, allReviews: data.reviews, showing: 3 };
+                renderDrilldownReviews();
             } catch (e) {
-                content.innerHTML = `<div class="text-center py-8 text-red-400">Error loading reviews: ${e.message}</div>`;
+                content.innerHTML = `<div style="text-align:center;padding:2rem;color:#ef4444;">Error: ${e.message}</div>`;
             }
         }
         
@@ -2197,13 +2206,10 @@
         
         function highlightSentiment(reviewText, sentimentText) {
             if (!sentimentText || !reviewText) return escapeHtml(reviewText);
-            
             const escapedReview = escapeHtml(reviewText);
             const escapedSentiment = escapeHtml(sentimentText);
-            
-            // Try to find and highlight the sentiment text
             const regex = new RegExp(`(${escapedSentiment.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
-            return escapedReview.replace(regex, '<mark class="bg-yellow-400/30 text-yellow-200 px-1 rounded">$1</mark>');
+            return escapedReview.replace(regex, '<mark style="background:#fef08a;color:#1a1625;padding:1px 4px;border-radius:2px;">$1</mark>');
         }
         
         function formatDate(dateStr) {
