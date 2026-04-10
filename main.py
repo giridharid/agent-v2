@@ -220,7 +220,7 @@ def load_master_caches():
         # Load hotels
         hotels_query = f"""
         SELECT product_id, hotel_name, brand_id, brand_name, city, state, country,
-               star_rating, review_count, overall_satisfaction
+               star_category, review_count, overall_satisfaction
         FROM `{PROJECT}.{DATASET}.hotel_master`
         ORDER BY hotel_name
         """
@@ -312,7 +312,7 @@ async def get_hotels(
             filtered = [h for h in filtered if h.get('city') == city]
         if stars and stars != "All Stars":
             star_val = float(stars.replace('+', ''))
-            filtered = [h for h in filtered if (h.get('star_rating') or 0) >= star_val]
+            filtered = [h for h in filtered if (h.get('star_category') or 0) >= star_val]
         return {"hotels": filtered}
     
     client = get_bq()
@@ -326,11 +326,11 @@ async def get_hotels(
         conditions.append(f"city = '{city}'")
     if stars and stars != "All Stars":
         star_val = float(stars.replace('+', ''))
-        conditions.append(f"star_rating >= {star_val}")
+        conditions.append(f"star_category >= {star_val}")
     
     query = f"""
     SELECT product_id, hotel_name, brand_id, brand_name, city, state, country,
-           star_rating, review_count, overall_satisfaction
+           star_category, review_count, overall_satisfaction
     FROM `{PROJECT}.{DATASET}.hotel_master`
     WHERE {' AND '.join(conditions)}
     ORDER BY hotel_name
@@ -374,7 +374,7 @@ async def search_hotels(q: str = Query(..., min_length=2)):
         return {"results": []}
     
     query = f"""
-    SELECT product_id, hotel_name, brand_name, city, star_rating
+    SELECT product_id, hotel_name, brand_name, city, star_category
     FROM `{PROJECT}.{DATASET}.hotel_master`
     WHERE LOWER(hotel_name) LIKE '%{q.lower()}%'
        OR LOWER(city) LIKE '%{q.lower()}%'
@@ -789,7 +789,7 @@ async def compare_hotels(request: CompareHotelsRequest):
     
     # Get hotel info
     hotels_query = f"""
-    SELECT product_id, hotel_name, brand_name, city, star_rating,
+    SELECT product_id, hotel_name, brand_name, city, star_category,
            review_count, overall_satisfaction
     FROM `{PROJECT}.{DATASET}.hotel_master`
     WHERE product_id IN ({ids_str})
@@ -915,7 +915,7 @@ async def chat(request: ChatRequest):
 Category: {request.category}
 Hotel: {entity_name} (ID: {request.product_id})
 City: {summary.get('city', 'Unknown')}
-Star Rating: {summary.get('star_rating', 'N/A')}
+Star Rating: {summary.get('star_category', 'N/A')}
 Overall Satisfaction: {summary.get('overall_satisfaction', 0)}%
 
 === ASPECT SATISFACTION ===
