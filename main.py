@@ -15,6 +15,8 @@ import base64
 import traceback
 import threading
 import time
+import asyncio
+import math
 from datetime import datetime
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
@@ -22,6 +24,23 @@ from functools import lru_cache
 
 # Import agent prompts
 from agent_prompts import get_agent_prompt, DATA_CONTEXT_TEMPLATE, DRILLDOWN_CONTEXT_TEMPLATE
+
+
+def clean_val(v):
+    """Convert BigQuery/numpy types to JSON-serializable Python types"""
+    import math as _math
+    if v is None:
+        return None
+    if hasattr(v, 'isoformat'):
+        return v.isoformat()
+    if hasattr(v, 'item'):
+        v = v.item()
+    if isinstance(v, float) and (_math.isnan(v) or _math.isinf(v)):
+        return None
+    return v
+
+def clean_row(row_dict):
+    return {k: clean_val(v) for k, v in row_dict.items()}
 
 app = FastAPI(title="Smaartbrand Intelligence API", version="2.0")
 
@@ -498,106 +517,84 @@ async def get_brand_summary(brand_id: str):
 # ─────────────────────────────────────────
 @app.get("/api/hotel/{product_id}/summary")
 async def get_hotel_summary(product_id: int):
-    """Get full hotel summary with all data"""
+    """Get full hotel summary with all data - parallel BQ queries"""
     client = get_bq()
     if not client:
         raise HTTPException(status_code=500, detail="Database unavailable")
-    
-    # Hotel info
-    hotel_query = f"""
-    SELECT * FROM `{PROJECT}.{DATASET}.hotel_master`
-    WHERE product_id = {product_id}
-    """
-    hotel_df = client.query(hotel_query).to_dataframe()
-    if hotel_df.empty:
+
+    loop = asyncio.get_event_loop()
+
+    def run_query(sql):
+        try:
+            return client.query(sql).to_dataframe()
+        except Exception as e:
+            print(f"[BQ ERROR] {e}")
+            import pandas as pd
+            return pd.DataFrame()
+
+    # Run all queries in parallel using thread pool
+    queries = {
+        "hotel": f"SELECT * FROM `{PROJECT}.{DATASET}.hotel_master` WHERE product_id = {product_id}",
+        "aspects": f"""SELECT aspect_id, aspect_name, positive_count, negative_count,
+               total_mentions, satisfaction_pct, share_of_voice_pct
+               FROM `{PROJECT}.{DATASET}.product_aspect_summary`
+               WHERE product_id = {product_id} ORDER BY total_mentions DESC""",
+        "emotions": f"""SELECT emotion, mention_count as count, pct_of_total as percentage
+               FROM `{PROJECT}.{DATASET}.product_emotions`
+               WHERE product_id = {product_id} ORDER BY mention_count DESC""",
+        "demo": f"""SELECT dimension, dimension_value, review_count as count, pct_of_total
+               FROM `{PROJECT}.{DATASET}.product_demographics`
+               WHERE product_id = {product_id} ORDER BY dimension, review_count DESC""",
+        "pain": f"""SELECT phrase, treemap_name, aspect_id, aspect_name, mention_count, severity_rank
+               FROM `{PROJECT}.{DATASET}.product_pain_delights`
+               WHERE product_id = {product_id} AND signal_type = 'pain_point'
+               ORDER BY severity_rank LIMIT 10""",
+        "delight": f"""SELECT phrase, treemap_name, aspect_id, aspect_name, mention_count, severity_rank
+               FROM `{PROJECT}.{DATASET}.product_pain_delights`
+               WHERE product_id = {product_id} AND signal_type = 'delight'
+               ORDER BY severity_rank LIMIT 10""",
+        "rd": f"""SELECT signal_type as rd_signal, phrase, treemap_name, mention_count
+               FROM `{PROJECT}.{DATASET}.product_rd_signals`
+               WHERE product_id = {product_id} ORDER BY rd_signal, mention_count DESC"""
+    }
+
+    results = await asyncio.gather(*[
+        loop.run_in_executor(None, run_query, sql)
+        for sql in queries.values()
+    ])
+    dfs = dict(zip(queries.keys(), results))
+
+    if dfs["hotel"].empty:
         raise HTTPException(status_code=404, detail="Hotel not found")
-    
-    hotel_info = hotel_df.iloc[0].to_dict()
-    # Convert numpy types to Python types
-    for k, v in hotel_info.items():
-        if hasattr(v, 'item'):
-            hotel_info[k] = v.item()
-    
-    # Aspects
-    aspects_query = f"""
-    SELECT aspect_id, aspect_name, positive_count, negative_count, 
-           total_mentions, satisfaction_pct, share_of_voice_pct
-    FROM `{PROJECT}.{DATASET}.product_aspect_summary`
-    WHERE product_id = {product_id}
-    ORDER BY total_mentions DESC
-    """
-    aspects_df = client.query(aspects_query).to_dataframe()
-    aspects = aspects_df.to_dict(orient='records')
-    
-    # Emotions
-    emotions_query = f"""
-    SELECT emotion, mention_count as count, pct_of_total as percentage
-    FROM `{PROJECT}.{DATASET}.product_emotions`
-    WHERE product_id = {product_id}
-    ORDER BY mention_count DESC
-    """
-    emotions_df = client.query(emotions_query).to_dataframe()
-    emotions = emotions_df.to_dict(orient='records')
-    
-    # Demographics
-    demo_query = f"""
-    SELECT dimension, dimension_value, review_count as count, pct_of_total
-    FROM `{PROJECT}.{DATASET}.product_demographics`
-    WHERE product_id = {product_id}
-    ORDER BY dimension, review_count DESC
-    """
-    demo_df = client.query(demo_query).to_dataframe()
+
+    hotel_info = clean_row(dfs["hotel"].iloc[0].to_dict())
+    aspects = [clean_row(r) for r in dfs["aspects"].to_dict(orient='records')]
+    emotions = [clean_row(r) for r in dfs["emotions"].to_dict(orient='records')]
+
     demographics = {"traveler_type": [], "gender": [], "stay_purpose": []}
-    for _, row in demo_df.iterrows():
-        dim = row['dimension']
-        val = row['dimension_value']
+    for _, row in dfs["demo"].iterrows():
+        dim = str(row.get('dimension', ''))
+        val = row.get('dimension_value')
         if dim in demographics and val and str(val).lower() not in ('unknown', 'none', 'null', ''):
             demographics[dim].append({
-                "dimension_value": val,
-                "count": int(row['count']),
+                "dimension_value": str(val),
+                "count": int(row['count'] or 0),
                 "pct_of_total": int(row['pct_of_total'] or 0)
             })
-    
-    # Pain Points
-    pain_query = f"""
-    SELECT phrase, treemap_name, aspect_id, aspect_name, mention_count, severity_rank
-    FROM `{PROJECT}.{DATASET}.product_pain_delights`
-    WHERE product_id = {product_id} AND signal_type = 'pain_point'
-    ORDER BY severity_rank
-    LIMIT 10
-    """
-    pain_df = client.query(pain_query).to_dataframe()
-    pain_points = pain_df.to_dict(orient='records')
-    
-    # Delights
-    delight_query = f"""
-    SELECT phrase, treemap_name, aspect_id, aspect_name, mention_count, severity_rank
-    FROM `{PROJECT}.{DATASET}.product_pain_delights`
-    WHERE product_id = {product_id} AND signal_type = 'delight'
-    ORDER BY severity_rank
-    LIMIT 10
-    """
-    delight_df = client.query(delight_query).to_dataframe()
-    delights = delight_df.to_dict(orient='records')
-    
-    # R&D Signals
-    rd_query = f"""
-    SELECT rd_signal, phrase, treemap_name, mention_count
-    FROM `{PROJECT}.{DATASET}.product_rd_signals`
-    WHERE product_id = {product_id}
-    ORDER BY rd_signal, mention_count DESC
-    """
-    rd_df = client.query(rd_query).to_dataframe()
+
+    pain_points = [clean_row(r) for r in dfs["pain"].to_dict(orient='records')]
+    delights = [clean_row(r) for r in dfs["delight"].to_dict(orient='records')]
+
     rd_signals = {"feature_request": [], "price_feedback": [], "expectation_gap": []}
-    for _, row in rd_df.iterrows():
-        signal_type = row['rd_signal']
-        if signal_type in rd_signals:
-            rd_signals[signal_type].append({
-                "phrase": row['phrase'],
-                "treemap_name": row['treemap_name'],
-                "mention_count": int(row['mention_count'])
+    for _, row in dfs["rd"].iterrows():
+        sig = str(row.get('rd_signal', ''))
+        if sig in rd_signals:
+            rd_signals[sig].append({
+                "phrase": str(row['phrase'] or ''),
+                "treemap_name": str(row['treemap_name'] or ''),
+                "mention_count": int(row['mention_count'] or 0)
             })
-    
+
     return {
         **hotel_info,
         "aspects": aspects,
@@ -690,7 +687,7 @@ async def get_hotel_rd_signals(product_id: int):
         raise HTTPException(status_code=500, detail="Database unavailable")
     
     query = f"""
-    SELECT rd_signal, phrase, treemap_name, mention_count
+    SELECT signal_type as rd_signal, phrase, treemap_name, mention_count
     FROM `{PROJECT}.{DATASET}.product_rd_signals`
     WHERE product_id = {product_id}
     ORDER BY rd_signal, mention_count DESC
