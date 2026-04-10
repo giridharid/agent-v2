@@ -2273,13 +2273,13 @@
                         const pct = a.satisfaction_pct || 0;
                         const color = pct >= 80 ? '#22c55e' : pct >= 60 ? '#f59e0b' : '#ef4444';
                         const icon = ICONS[a.aspect_id] || '⭐';
-                        return \`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-                            <span style="width:80px;color:#9ca3af;font-size:12px;flex-shrink:0;">\${icon} \${a.aspect_name}</span>
+                        return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                            <span style="width:80px;color:#9ca3af;font-size:12px;flex-shrink:0;">${icon} ${a.aspect_name}</span>
                             <div style="flex:1;height:8px;background:#374151;border-radius:4px;overflow:hidden;">
-                                <div style="width:\${pct}%;height:100%;background:\${color};border-radius:4px;"></div>
+                                <div style="width:${pct}%;height:100%;background:${color};border-radius:4px;"></div>
                             </div>
-                            <span style="color:\${color};font-size:12px;width:32px;text-align:right;">\${pct}%</span>
-                        </div>\`;
+                            <span style="color:${color};font-size:12px;width:32px;text-align:right;">${pct}%</span>
+                        </div>`;
                     }).join('');
                 }
 

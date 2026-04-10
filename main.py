@@ -550,9 +550,10 @@ async def get_hotel_summary(product_id: int):
     demographics = {"traveler_type": [], "gender": [], "stay_purpose": []}
     for _, row in demo_df.iterrows():
         dim = row['dimension']
-        if dim in demographics and row['dimension_value']:
+        val = row['dimension_value']
+        if dim in demographics and val and str(val).lower() not in ('unknown', 'none', 'null', ''):
             demographics[dim].append({
-                "dimension_value": row['dimension_value'],
+                "dimension_value": val,
                 "count": int(row['count']),
                 "pct_of_total": int(row['pct_of_total'] or 0)
             })
@@ -1100,11 +1101,12 @@ async def demographics_alias(product_id: Optional[int] = None, brand: Optional[s
     result = {"gender": [], "traveler_type": [], "stay_purpose": []}
     for _, row in df.iterrows():
         dim = row['dimension']
-        if dim in result and row['dimension_value']:
+        val = row['dimension_value']
+        if dim in result and val and str(val).lower() not in ('unknown', 'none', 'null', ''):
             result[dim].append({
-                "traveler_type": row['dimension_value'],
-                "gender": row['dimension_value'],
-                "stay_purpose": row['dimension_value'],
+                "traveler_type": val,
+                "gender": val,
+                "stay_purpose": val,
                 "review_count": int(row['review_count']),
                 "pct_of_total": int(row.get('pct_of_total') or 0)
             })
