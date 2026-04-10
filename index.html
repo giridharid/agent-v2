@@ -684,7 +684,7 @@
         // ═══════════════════════════════════════════
         async function loadHotelSearchCache() {
             try {
-                const response = await fetch('/api/hotels/all');
+                const response = await fetch('/api/hotels');
                 if (response.ok) {
                     allHotelsCache = await response.json();
                     console.log(`Loaded ${allHotelsCache.length} hotels into search cache`);
