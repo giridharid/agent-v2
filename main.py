@@ -531,7 +531,7 @@ async def get_hotel_summary(product_id: int):
     
     # Emotions
     emotions_query = f"""
-    SELECT emotion, mention_count as count, percentage
+    SELECT emotion, mention_count as count, pct_of_total as percentage
     FROM `{PROJECT}.{DATASET}.product_emotions`
     WHERE product_id = {product_id}
     ORDER BY mention_count DESC
@@ -674,7 +674,7 @@ async def get_hotel_emotions(product_id: int):
         raise HTTPException(status_code=500, detail="Database unavailable")
     
     query = f"""
-    SELECT emotion, mention_count as count, percentage
+    SELECT emotion, mention_count as count, pct_of_total as percentage
     FROM `{PROJECT}.{DATASET}.product_emotions`
     WHERE product_id = {product_id}
     ORDER BY mention_count DESC
@@ -1020,6 +1020,27 @@ async def get_segment_aspect(product_id: int):
 # ─────────────────────────────────────────
 # FRONTEND COMPATIBILITY ALIASES
 # ─────────────────────────────────────────
+
+
+@app.get("/api/star_categories")
+async def get_star_categories(brand: Optional[str] = None, city: Optional[str] = None):
+    """Get distinct star categories for filter dropdown"""
+    client = get_bq()
+    if not client:
+        return []
+    conditions = ["star_category IS NOT NULL"]
+    if brand:
+        conditions.append(f"brand_name = '{brand}'")
+    if city:
+        conditions.append(f"city = '{city}'")
+    query = f"""
+    SELECT DISTINCT star_category
+    FROM `{PROJECT}.{DATASET}.hotel_master`
+    WHERE {" AND ".join(conditions)}
+    ORDER BY star_category
+    """
+    df = client.query(query).to_dataframe()
+    return [int(r['star_category']) for _, r in df.iterrows() if r['star_category']]
 
 @app.get("/api/hotel_details")
 async def hotel_details_alias(product_id: Optional[int] = None, brand: Optional[str] = None):

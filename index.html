@@ -13,7 +13,7 @@ body{background:#0f0c1a;color:#e2e8f0;min-height:100vh;font-size:13px}
 /* ── Layout ─────────────────────────────────── */
 .topbar{background:#1a1625;padding:10px 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #2d2438;position:sticky;top:0;z-index:100}
 .logo{display:flex;align-items:center;gap:8px}
-.logo-sq{width:28px;height:28px;background:#a855f7;border-radius:6px;flex-shrink:0}
+.logo-sq{width:32px;height:32px;border-radius:6px;flex-shrink:0;object-fit:cover}
 .logo-name{color:#a855f7;font-weight:600;font-size:15px}
 .logo-sub{color:#6b7280;font-size:12px}
 .search-wrap{position:relative;width:320px}
@@ -208,8 +208,10 @@ body{background:#0f0c1a;color:#e2e8f0;min-height:100vh;font-size:13px}
 <div class="topbar">
   <div class="logo">
     <img src="/acquink_logo.png" class="logo-sq" onerror="this.style.background='#a855f7';this.removeAttribute('src')">
-    <span class="logo-name">Smaartbrand</span>
-    <span class="logo-sub">Hotels Intelligence</span>
+    <div>
+      <div class="logo-name">Smaartbrand</div>
+      <div class="logo-sub">Hotels Intelligence</div>
+    </div>
   </div>
   <div class="search-wrap">
     <span class="search-icon">&#128269;</span>
