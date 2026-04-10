@@ -915,7 +915,7 @@ async def chat(request: ChatRequest):
 Category: {request.category}
 Hotel: {entity_name} (ID: {request.product_id})
 City: {summary.get('city', 'Unknown')}
-Star Rating: {summary.get('star_category', 'N/A')}
+Star Rating: {summary.get('star_category'), 'N/A')}
 Overall Satisfaction: {summary.get('overall_satisfaction', 0)}%
 
 === ASPECT SATISFACTION ===
