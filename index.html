@@ -1,2328 +1,1077 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Smaartbrand Hotels | Decision Intelligence</title>
-    <link rel="icon" type="image/png" href="/acquink_logo.png">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-        * { font-family: 'Inter', sans-serif; }
-        body { background: linear-gradient(135deg, #0f0f23 0%, #1a1a3e 50%, #0d0d1f 100%); min-height: 100vh; }
-        .glass { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.1); }
-        .glass-dark { background: rgba(0, 0, 0, 0.3); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.05); }
-        .gradient-text { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-        .chat-panel { transform: translateX(100%); transition: transform 0.3s ease-in-out, width 0.3s ease-in-out; }
-        .chat-panel.open { transform: translateX(0); }
-        .chat-panel.collapsed { width: 60px !important; min-width: 60px !important; }
-        .chat-panel.collapsed .chat-content { display: none; }
-        .chat-panel.collapsed .chat-collapsed-bar { display: flex !important; }
-        .stat-card { transition: all 0.3s ease; }
-        .stat-card:hover { transform: translateY(-3px); box-shadow: 0 8px 30px rgba(102, 126, 234, 0.2); }
-        .tab-btn.active { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
-        .typing-indicator span { animation: bounce 1.4s infinite ease-in-out both; }
-        .typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
-        .typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
-        @keyframes bounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
-        .message-content { line-height: 1.6; }
-        .message-content h3 { font-size: 1rem; font-weight: 600; margin-top: 1rem; margin-bottom: 0.5rem; color: #c4b5fd; }
-        .message-content h4 { font-size: 0.9rem; font-weight: 600; margin-top: 0.75rem; color: #a78bfa; }
-        .message-content ul { margin-left: 0.5rem; margin-bottom: 0.5rem; list-style: none; }
-        .message-content li { margin-bottom: 0.25rem; }
-        .message-content hr { border-color: rgba(255,255,255,0.1); margin: 1rem 0; }
-        .message-content strong { color: #e9d5ff; }
-        .message-content p { margin-bottom: 0.5rem; }
-        
-        /* Data tables - matching smartphones style */
-        .data-table { width: 100%; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
-        .data-table th { text-align: left; padding: 12px 16px; font-weight: 500; color: #94a3b8; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid rgba(255,255,255,0.08); }
-        .data-table td { padding: 10px 16px; font-size: 13px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.04); }
-        .data-table td:first-child { text-align: left; width: 180px; }
-        .data-table tbody tr:hover { background: rgba(255,255,255,0.02); }
-        
-        /* Comparison table column headers */
-        .data-table th.item-col { 
-            text-align: center; 
-            vertical-align: bottom;
-            padding: 10px 8px;
-            height: 60px;
-            text-transform: none;
-            letter-spacing: normal;
-        }
-        .item-header {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: flex-end;
-            height: 100%;
-            gap: 4px;
-        }
-        .item-header .dot {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            flex-shrink: 0;
-        }
-        .item-header .name {
-            font-weight: 600;
-            color: #e2e8f0;
-            text-align: center;
-            line-height: 1.2;
-            max-width: 100%;
-            overflow: hidden;
-            display: -webkit-box;
-            -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;
-            word-break: break-word;
-        }
-        .item-header .name.short { font-size: 13px; }
-        .item-header .name.medium { font-size: 11px; }
-        .item-header .name.long { font-size: 10px; }
-        
-        /* Heatmap cells - exactly matching smartphones */
-        .heat-cell { 
-            display: inline-block;
-            min-width: 50px;
-            padding: 6px 12px; 
-            border-radius: 4px; 
-            font-weight: 500; 
-            font-size: 13px; 
-            text-align: center;
-        }
-        .heat-vhigh { background: rgba(100, 200, 180, 0.4); color: #fff; }
-        .heat-high { background: rgba(100, 200, 180, 0.3); color: #5eead4; }
-        .heat-med { background: rgba(255, 180, 100, 0.3); color: #fcd34d; }
-        .heat-low { background: rgba(255, 99, 99, 0.3); color: #fca5a5; }
-        .heat-vlow { background: rgba(255, 99, 99, 0.35); color: #f87171; }
-        .heat-neutral { background: rgba(255, 255, 255, 0.05); color: #94a3b8; }
-        
-        .winner-cell { background: rgba(102, 126, 234, 0.35); color: #a5b4fc; font-weight: 600; }
-        
-        /* Attribute wins cards */
-        .wins-column { background: rgba(255,255,255,0.02); border-radius: 12px; padding: 16px; border: 1px solid rgba(255,255,255,0.05); }
-        .wins-column h4 { font-size: 14px; font-weight: 600; color: #a78bfa; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.1); }
-        .win-item { display: flex; justify-content: space-between; padding: 8px 0; font-size: 13px; border-bottom: 1px solid rgba(255,255,255,0.03); }
-        .win-item:last-child { border-bottom: none; }
-        .win-item .aspect { color: #e2e8f0; }
-        .win-item .score { color: #94a3b8; }
-        
-        /* Color legend - matching smartphones */
-        .legend { display: flex; gap: 4px; align-items: center; font-size: 11px; color: #64748b; }
-        .legend-item { display: flex; align-items: center; gap: 2px; }
-        .legend-box { width: 20px; height: 12px; border-radius: 2px; }
-        .legend-text { margin-left: 4px; }
-        
-        /* Hotel Search */
-        .hotel-search-container { position: relative; }
-        .hotel-search-input { 
-            width: 260px; 
-            padding: 8px 12px 8px 36px; 
-            background: rgba(0,0,0,0.3); 
-            border: 1px solid rgba(255,255,255,0.15); 
-            border-radius: 8px; 
-            color: #e2e8f0; 
-            font-size: 13px; 
-            outline: none;
-            transition: border-color 0.2s, box-shadow 0.2s;
-        }
-        .hotel-search-input:focus { 
-            border-color: rgba(102, 126, 234, 0.5); 
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-        }
-        .hotel-search-input::placeholder { color: #64748b; }
-        .hotel-search-icon { 
-            position: absolute; 
-            left: 12px; 
-            top: 50%; 
-            transform: translateY(-50%); 
-            color: #64748b; 
-            font-size: 14px; 
-            pointer-events: none;
-        }
-        .hotel-search-dropdown {
-            position: absolute;
-            top: 100%;
-            left: 0;
-            right: 0;
-            margin-top: 4px;
-            background: rgba(26, 26, 62, 0.98);
-            border: 1px solid rgba(255,255,255,0.15);
-            border-radius: 8px;
-            overflow: hidden;
-            box-shadow: 0 12px 32px rgba(0,0,0,0.5);
-            z-index: 100;
-            max-height: 320px;
-            overflow-y: auto;
-            display: none;
-        }
-        .hotel-search-dropdown.show { display: block; }
-        .hotel-search-result {
-            padding: 10px 12px;
-            cursor: pointer;
-            display: flex;
-            flex-direction: column;
-            gap: 2px;
-            border-bottom: 1px solid rgba(255,255,255,0.05);
-            transition: background 0.15s;
-        }
-        .hotel-search-result:last-child { border-bottom: none; }
-        .hotel-search-result:hover, .hotel-search-result.active { 
-            background: rgba(102, 126, 234, 0.15); 
-        }
-        .hotel-search-result .hotel-name { 
-            font-size: 13px; 
-            color: #e2e8f0; 
-            font-weight: 500;
-        }
-        .hotel-search-result .hotel-meta { 
-            font-size: 10px; 
-            color: #94a3b8;
-        }
-        .hotel-search-count {
-            padding: 6px 12px;
-            background: rgba(255,255,255,0.03);
-            border-bottom: 1px solid rgba(255,255,255,0.08);
-            font-size: 10px;
-            color: #64748b;
-        }
-        .hotel-search-empty {
-            padding: 16px 12px;
-            text-align: center;
-            color: #64748b;
-            font-size: 12px;
-        }
-        .hotel-search-loadmore {
-            padding: 10px 12px;
-            text-align: center;
-            color: #a78bfa;
-            font-size: 12px;
-            cursor: pointer;
-            background: rgba(102, 126, 234, 0.1);
-            border-top: 1px solid rgba(255,255,255,0.08);
-            transition: background 0.15s;
-        }
-        .hotel-search-loadmore:hover {
-            background: rgba(102, 126, 234, 0.2);
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Smaartbrand Hotels | Decision Intelligence</title>
+<link rel="icon" type="image/png" href="/acquink_logo.png">
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:'Inter',system-ui,sans-serif}
+body{background:#0f0c1a;color:#e2e8f0;min-height:100vh;font-size:13px}
+
+/* ── Layout ─────────────────────────────────── */
+.topbar{background:#1a1625;padding:10px 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #2d2438;position:sticky;top:0;z-index:100}
+.logo{display:flex;align-items:center;gap:8px}
+.logo-sq{width:28px;height:28px;background:#a855f7;border-radius:6px;flex-shrink:0}
+.logo-name{color:#a855f7;font-weight:600;font-size:15px}
+.logo-sub{color:#6b7280;font-size:12px}
+.search-wrap{position:relative;width:320px}
+#hotelSearchInput{width:100%;background:#2d2438;border:none;color:#e5e7eb;padding:7px 14px 7px 34px;border-radius:20px;font-size:12px;outline:none}
+#hotelSearchInput::placeholder{color:#6b7280}
+.search-icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:#6b7280;font-size:14px;pointer-events:none}
+#hotelSearchDropdown{position:absolute;top:100%;left:0;right:0;background:#1e1a29;border:1px solid #374151;border-radius:8px;margin-top:4px;z-index:200;display:none;max-height:300px;overflow-y:auto}
+#hotelSearchDropdown.show{display:block}
+.hotel-search-item{padding:10px 14px;cursor:pointer;border-bottom:1px solid #2d2438}
+.hotel-search-item:hover{background:#2d2438}
+.hotel-search-name{color:#e5e7eb;font-size:13px;font-weight:500}
+.hotel-search-meta{color:#9ca3af;font-size:11px;margin-top:2px}
+.hotel-search-loadmore{padding:10px 14px;color:#a855f7;cursor:pointer;text-align:center;font-size:12px}
+
+/* ── Tabs ───────────────────────────────────── */
+.tabs-bar{background:#1e1a29;padding:8px 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #2d2438}
+.tab-group{display:flex;gap:6px}
+.mode-tab{padding:7px 16px;border-radius:6px;font-size:12px;color:#9ca3af;cursor:pointer;border:none;background:transparent;transition:all .2s}
+.mode-tab:hover{color:#e5e7eb;background:#2d2438}
+.mode-tab.active-tab{background:#a855f7;color:#fff}
+#chatToggle{background:#2d2438;border:none;border-radius:6px;padding:6px 12px;color:#e5e7eb;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:6px}
+
+/* ── Filter rows ─────────────────────────────── */
+.filter-row{background:#1e1a29;padding:8px 20px;display:flex;align-items:center;gap:10px;border-bottom:1px solid #2d2438;flex-wrap:wrap}
+.filter-row.hidden{display:none}
+.fsel{background:#2d2438;border:none;color:#e5e7eb;padding:7px 12px;border-radius:6px;font-size:12px;outline:none;cursor:pointer}
+.apply-btn{background:#a855f7;color:#fff;border:none;padding:7px 20px;border-radius:6px;font-size:12px;cursor:pointer;margin-left:auto;font-weight:500}
+.apply-btn:hover{background:#9333ea}
+.compare-slot{display:flex;gap:6px;align-items:center}
+.compare-run-btn{background:#a855f7;color:#fff;border:none;padding:7px 20px;border-radius:6px;font-size:12px;cursor:pointer;margin-left:auto}
+
+/* ── Main content ───────────────────────────── */
+.main{padding:14px 20px;max-width:1400px}
+.hidden{display:none!important}
+
+/* ── Context header ─────────────────────────── */
+#contextHeader{background:#252035;border-radius:10px;padding:14px 20px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:flex-start}
+.ctx-left{flex:1}
+.ctx-icon-title{display:flex;align-items:center;gap:10px}
+.ctx-icon{font-size:20px}
+.ctx-title{font-size:17px;font-weight:600;color:#c4b5fd}
+.ctx-subtitle{color:#9ca3af;font-size:12px;margin-top:3px}
+.ctx-desc{color:#6b7280;font-size:12px;margin-top:6px;font-style:italic}
+#contextMeta{text-align:right}
+.ctx-meta-lbl{color:#9ca3af;font-size:11px}
+.ctx-meta-val{color:#e5e7eb;font-size:16px;font-weight:600;margin-top:2px}
+.ctx-meta-sub{color:#6b7280;font-size:11px;margin-top:2px}
+
+/* ── Stat cards ──────────────────────────────── */
+#statsRow{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px}
+.stat-card{background:#252035;border-radius:10px;padding:14px 16px}
+.stat-lbl{color:#9ca3af;font-size:11px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center}
+.stat-val{font-size:22px;font-weight:600}
+.stat-sub{color:#6b7280;font-size:11px;margin-top:4px}
+
+/* ── Emotions ────────────────────────────────── */
+#emotionsRow{background:#252035;border-radius:10px;padding:12px 18px;margin-bottom:12px}
+.sec-lbl{color:#9ca3af;font-size:11px;letter-spacing:.06em;margin-bottom:8px}
+#emotionsBar{display:flex;gap:7px;flex-wrap:wrap}
+.emotion-pill{padding:5px 11px;border-radius:20px;font-size:11px;font-weight:500}
+
+/* ── Charts row ──────────────────────────────── */
+#chartsRow{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+.card{background:#252035;border-radius:10px;padding:14px 18px}
+.card-title{color:#e5e7eb;font-size:13px;font-weight:600;margin-bottom:12px}
+
+/* CSS bar charts */
+.css-bar-row{display:flex;align-items:center;gap:8px;margin-bottom:7px;font-size:12px}
+.css-bar-lbl{width:75px;color:#9ca3af;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.css-bar-track{flex:1;height:8px;background:#374151;border-radius:4px;overflow:hidden}
+.css-bar-fill{height:100%;border-radius:4px;transition:width .4s ease}
+.css-bar-val{width:32px;text-align:right;font-size:11px;flex-shrink:0}
+
+/* ── Subtabs ─────────────────────────────────── */
+#subTabsRow{background:#1e1a29;border-radius:10px;padding:6px;margin-bottom:12px;display:flex;gap:4px}
+.sub-tab{padding:6px 14px;border-radius:6px;font-size:12px;color:#9ca3af;cursor:pointer;border:none;background:transparent;transition:all .2s}
+.sub-tab:hover{color:#e5e7eb}
+.sub-tab.active{background:#2d2438;color:#c4b5fd;border:1px solid #a855f740}
+.tab-panel{padding:0}
+
+/* ── Pain / Delights / RD ───────────────────── */
+#painDelightsRow{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+.sig-card{background:#252035;border-radius:10px;padding:14px 18px}
+.sig-title{font-size:13px;font-weight:600;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.sig-item{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:#1e1a29;border-radius:6px;margin-bottom:6px;cursor:pointer;transition:background .15s}
+.sig-item:hover{background:#2d2438}
+.sig-item.pain{border-left:3px solid #ef4444;border-radius:0 6px 6px 0}
+.sig-item.delight{border-left:3px solid #22c55e;border-radius:0 6px 6px 0}
+.sig-txt-r{color:#fca5a5;font-size:12px}
+.sig-txt-g{color:#86efac;font-size:12px}
+.sig-cnt{color:#6b7280;font-size:11px}
+#rdSignalsRow{background:#252035;border-radius:10px;padding:14px 18px;margin-bottom:12px}
+.rd-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:4px}
+.rd-col{background:#1e1a29;border-radius:8px;padding:12px}
+.rd-col-title{font-size:11px;font-weight:600;margin-bottom:8px}
+.rd-item{color:#9ca3af;font-size:12px;padding:4px 0;cursor:pointer;display:flex;justify-content:space-between}
+.rd-item:hover{color:#e5e7eb}
+
+/* ── Demographics / Satisfaction tabs ───────── */
+#satisfactionTab, #demographicsTab, #stayPurposeTab, #travelerTypeTab{background:#252035;border-radius:10px;padding:16px;margin-bottom:12px}
+.demo-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.demo-card{background:#1e1a29;border-radius:8px;padding:14px}
+.demo-title{color:#9ca3af;font-size:11px;margin-bottom:12px}
+#satisfactionBarsDiv{margin-top:4px}
+
+/* ── Comparison ──────────────────────────────── */
+#comparisonTab{background:#252035;border-radius:10px;padding:16px;margin-bottom:12px;overflow-x:auto}
+
+/* ── Drilldown modal ─────────────────────────── */
+#drilldownOverlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:500;align-items:center;justify-content:center;padding:20px}
+#drilldownOverlay.open{display:flex}
+#drilldownModal{background:#1e1a29;border:1px solid #374151;border-radius:12px;width:100%;max-width:620px;max-height:80vh;display:flex;flex-direction:column}
+.modal-hdr{padding:16px 20px;border-bottom:1px solid #374151;display:flex;justify-content:space-between;align-items:flex-start;flex-shrink:0}
+#drilldownTitle{font-size:14px;font-weight:600}
+#drilldownCount{color:#6b7280;font-size:11px;margin-top:3px}
+.modal-close-btn{background:none;border:none;color:#9ca3af;font-size:20px;cursor:pointer;line-height:1}
+#drilldownContent{padding:16px 20px;overflow-y:auto;flex:1}
+.review-card{background:#252035;border-radius:8px;padding:14px;margin-bottom:10px}
+.review-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.review-left{display:flex;align-items:center;gap:8px}
+.review-stars{color:#fbbf24;font-size:12px}
+.review-name{color:#e5e7eb;font-size:13px;font-weight:500}
+.review-date{color:#6b7280;font-size:11px}
+.review-badge{background:#374151;color:#9ca3af;padding:2px 8px;border-radius:4px;font-size:10px}
+.review-text{color:#d1d5db;font-size:13px;line-height:1.6}
+.review-text mark{background:#fef08a;color:#1a1625;padding:1px 4px;border-radius:2px}
+.modal-footer{padding:12px 20px;border-top:1px solid #374151;text-align:center;flex-shrink:0}
+.load-more-btn{background:#374151;color:#e5e7eb;border:none;padding:8px 20px;border-radius:6px;font-size:13px;cursor:pointer}
+.load-more-btn:hover{background:#4b5563}
+
+/* ── Chat panel ──────────────────────────────── */
+#chatPanel{position:fixed;right:0;top:0;height:100%;width:45vw;min-width:400px;max-width:720px;background:#1a1625;border-left:1px solid #2d2438;z-index:300;display:flex;flex-direction:column;transform:translateX(100%);transition:transform .3s ease}
+#chatPanel.open{transform:translateX(0)}
+.chat-header{padding:14px 18px;border-bottom:1px solid #2d2438;display:flex;justify-content:space-between;align-items:center;flex-shrink:0}
+.chat-title{color:#e5e7eb;font-size:14px;font-weight:600}
+#chatContextLabel{color:#9ca3af;font-size:11px;margin-top:2px}
+.chat-hdr-btns{display:flex;gap:8px}
+.chat-hdr-btn{background:none;border:none;color:#9ca3af;cursor:pointer;font-size:16px}
+#chatMessages{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px}
+.msg-user{align-self:flex-end;background:#2d2438;border-radius:12px 12px 2px 12px;padding:10px 14px;max-width:80%;color:#e5e7eb;font-size:13px}
+.msg-bot{align-self:flex-start;background:#252035;border-radius:12px 12px 12px 2px;padding:10px 14px;max-width:85%;color:#d1d5db;font-size:13px;line-height:1.6}
+.msg-bot strong{color:#e9d5ff}
+.typing{display:flex;gap:4px;padding:4px 0}
+.typing span{width:7px;height:7px;background:#a855f7;border-radius:50%;animation:bounce 1.4s infinite ease-in-out both}
+.typing span:nth-child(2){animation-delay:-.16s}
+.typing span:nth-child(3){animation-delay:0s}
+@keyframes bounce{0%,80%,100%{transform:scale(0)}40%{transform:scale(1)}}
+.chat-input-row{padding:12px 16px;border-top:1px solid #2d2438;display:flex;gap:8px;flex-shrink:0}
+#chatInput{flex:1;background:#2d2438;border:none;color:#e5e7eb;padding:10px 14px;border-radius:10px;font-size:13px;outline:none}
+#chatInput::placeholder{color:#6b7280}
+#chatSend{background:#a855f7;border:none;color:#fff;padding:10px 16px;border-radius:10px;cursor:pointer;font-size:14px}
+#chatSend:hover{background:#9333ea}
+#chatOverlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:290}
+#chatOverlay.show{display:block}
+
+/* ── Loader ──────────────────────────────────── */
+#loader{display:none;position:fixed;inset:0;background:rgba(15,12,26,.7);z-index:400;align-items:center;justify-content:center}
+#loader.show{display:flex}
+.loader-spin{width:36px;height:36px;border:3px solid #2d2438;border-top-color:#a855f7;border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── Utilities ───────────────────────────────── */
+.heat-cell{display:inline-block;padding:3px 8px;border-radius:4px;font-size:12px;font-weight:500}
+.heat-vlow{background:rgba(127,29,29,.5);color:#fca5a5}
+.heat-low{background:rgba(161,98,7,.35);color:#fcd34d}
+.heat-mid{background:rgba(21,128,61,.3);color:#86efac}
+.heat-high{background:rgba(13,148,136,.4);color:#5eead4}
+.heat-vhigh{background:rgba(13,148,136,.6);color:#2dd4bf}
+.data-table{width:100%;border-collapse:separate;border-spacing:0;table-layout:fixed}
+.data-table th{text-align:left;padding:10px 14px;font-weight:500;color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid rgba(255,255,255,.08)}
+.data-table th.item-col{text-align:center;vertical-align:bottom;padding:10px 8px;height:56px;text-transform:none;letter-spacing:normal}
+.data-table td{padding:9px 14px;font-size:13px;text-align:center;border-bottom:1px solid rgba(255,255,255,.04)}
+.data-table td:first-child{text-align:left}
+.data-table tbody tr:hover{background:rgba(255,255,255,.02)}
+.item-header{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:4px}
+.item-header .dot{width:9px;height:9px;border-radius:50%}
+.item-header .name{font-weight:600;color:#e2e8f0;text-align:center;line-height:1.2;font-size:12px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word}
+
+/* ── Footer ──────────────────────────────────── */
+.footer{background:#1a1625;padding:10px 20px;display:flex;justify-content:space-between;font-size:11px;color:#6b7280;border-top:1px solid #2d2438;margin-top:8px}
+.footer .masi{color:#a855f7}
+
+/* ── No data placeholder ─────────────────────── */
+.no-data{color:#4b5563;font-size:12px;padding:8px 0}
+</style>
 </head>
-<body class="text-white overflow-x-hidden min-h-screen flex flex-col">
-    <!-- Header -->
-    <header class="glass sticky top-0 z-40 px-4 py-3">
-        <div class="max-w-7xl mx-auto flex items-center justify-center gap-6">
-            <div class="flex items-center gap-3">
-                <img src="/acquink_logo.png" alt="Acquink" class="h-8" onerror="this.style.display='none'">
-                <div>
-                    <h1 class="text-lg font-bold gradient-text">Smaartbrand</h1>
-                    <p class="text-xs text-gray-400 hidden sm:block">Hotels Intelligence</p>
-                </div>
-            </div>
-            
-            <!-- Hotel Search -->
-            <div class="hotel-search-container">
-                <span class="hotel-search-icon">🔍</span>
-                <input type="text" id="hotelSearchInput" class="hotel-search-input" placeholder="Search hotel here..." autocomplete="off">
-                <div id="hotelSearchDropdown" class="hotel-search-dropdown"></div>
-            </div>
-        </div>
-    </header>
+<body>
 
-    <!-- Main Content -->
-<main class="max-w-7xl mx-auto px-6 py-4 flex-grow w-full">
-        <!-- ROW 1: Main Mode Tabs -->
-        <div class="glass rounded-t-2xl px-4 py-2 flex items-center border-b border-white/10">
-            <div class="flex gap-1 flex-1">
-                <button id="brandViewTab" class="mode-tab px-4 py-2 rounded-lg text-sm font-medium bg-gradient-to-r from-purple-500 to-indigo-600 text-white">Brand View</button>
-                <button id="hotelViewTab" class="mode-tab px-4 py-2 rounded-lg text-sm font-medium text-gray-400 hover:text-white transition">Hotel View</button>
-                <button id="compareBrandsTab" class="mode-tab px-4 py-2 rounded-lg text-sm font-medium text-gray-400 hover:text-white transition">Compare Brands</button>
-                <button id="compareHotelsTab" class="mode-tab px-4 py-2 rounded-lg text-sm font-medium text-gray-400 hover:text-white transition">Compare Hotels</button>
-            </div>
-            <button id="chatToggle" class="glass-dark px-3 py-1.5 rounded-lg flex items-center gap-2 hover:bg-white/10 transition">
-                <span>💬</span>
-                <span class="text-xs">SmaartAnalyst</span>
-            </button>
-        </div>
-        
-        <!-- ROW 2: Contextual Selectors -->
-        <div class="glass rounded-none px-4 py-3 border-b border-white/10">
-            <!-- Brand View Selectors -->
-            <div id="brandViewSelectors" class="flex items-center gap-3 flex-wrap">
-                <select id="brandSelect" class="glass-dark px-3 py-2 rounded-lg text-sm focus:outline-none" style="min-width: 140px;">
-                    <option value="">Loading...</option>
-                </select>
-                <select id="citySelect" class="glass-dark px-3 py-2 rounded-lg text-sm focus:outline-none" style="min-width: 120px;">
-                    <option value="">All Cities</option>
-                </select>
-                <select id="starSelect" class="glass-dark px-3 py-2 rounded-lg text-sm focus:outline-none" style="min-width: 100px;">
-                    <option value="">All Stars</option>
-                </select>
-                <button id="applyBrandBtn" class="px-5 py-2 rounded-lg text-sm font-medium bg-gradient-to-r from-purple-500 to-indigo-600 text-white hover:opacity-90 transition">Apply</button>
-            </div>
-            
-            <!-- Hotel View Selectors (hidden by default) -->
-            <div id="hotelViewSelectors" class="hidden flex items-center gap-3 flex-wrap">
-                <select id="hotelBrandSelect" class="glass-dark px-3 py-2 rounded-lg text-sm focus:outline-none" style="min-width: 140px;">
-                    <option value="">Select Brand</option>
-                </select>
-                <select id="hotelCitySelect" class="glass-dark px-3 py-2 rounded-lg text-sm focus:outline-none" style="min-width: 120px;">
-                    <option value="">All Cities</option>
-                </select>
-                <select id="hotelStarSelect" class="glass-dark px-3 py-2 rounded-lg text-sm focus:outline-none" style="min-width: 100px;">
-                    <option value="">All Stars</option>
-                </select>
-                <select id="hotelSelect" class="glass-dark px-3 py-2 rounded-lg text-sm focus:outline-none" style="min-width: 200px;">
-                    <option value="">Select Hotel</option>
-                </select>
-                <button id="applyHotelBtn" class="px-5 py-2 rounded-lg text-sm font-medium bg-gradient-to-r from-purple-500 to-indigo-600 text-white hover:opacity-90 transition">Apply</button>
-            </div>
-            
-            <!-- Compare Brands Selectors (hidden by default) -->
-            <div id="compareBrandsSelectors" class="hidden flex items-center gap-3 flex-wrap">
-                <select id="compareBrandOnly1" class="glass-dark px-3 py-2 rounded-lg text-sm focus:outline-none" style="min-width: 140px;">
-                    <option value="">Brand 1</option>
-                </select>
-                <select id="compareBrandOnly2" class="glass-dark px-3 py-2 rounded-lg text-sm focus:outline-none" style="min-width: 140px;">
-                    <option value="">Brand 2</option>
-                </select>
-                <select id="compareBrandOnly3" class="glass-dark px-3 py-2 rounded-lg text-sm focus:outline-none" style="min-width: 140px;">
-                    <option value="">Brand 3</option>
-                </select>
-                <button id="runCompareBrandsBtn" class="px-5 py-2 rounded-lg text-sm font-medium bg-gradient-to-r from-purple-500 to-indigo-600 text-white hover:opacity-90 transition">Compare</button>
-            </div>
-            
-            <!-- Compare Hotels Selectors (hidden by default) - 3x3 Grid -->
-            <div id="compareHotelsSelectors" class="hidden">
-                <div class="grid grid-cols-3 gap-3 mb-3">
-                    <!-- Column 1 -->
-                    <div class="glass-dark rounded-lg p-3 space-y-2">
-                        <div class="text-xs text-gray-400 mb-1">Hotel 1</div>
-                        <select id="compareBrand1" class="w-full glass-dark px-2 py-1.5 rounded text-xs focus:outline-none">
-                            <option value="">Select Brand</option>
-                        </select>
-                        <select id="compareCity1" class="w-full glass-dark px-2 py-1.5 rounded text-xs focus:outline-none">
-                            <option value="">Select City</option>
-                        </select>
-                        <select id="compareHotel1" class="w-full glass-dark px-2 py-1.5 rounded text-xs focus:outline-none">
-                            <option value="">Select Hotel</option>
-                        </select>
-                    </div>
-                    <!-- Column 2 -->
-                    <div class="glass-dark rounded-lg p-3 space-y-2">
-                        <div class="text-xs text-gray-400 mb-1">Hotel 2</div>
-                        <select id="compareBrand2" class="w-full glass-dark px-2 py-1.5 rounded text-xs focus:outline-none">
-                            <option value="">Select Brand</option>
-                        </select>
-                        <select id="compareCity2" class="w-full glass-dark px-2 py-1.5 rounded text-xs focus:outline-none">
-                            <option value="">Select City</option>
-                        </select>
-                        <select id="compareHotel2" class="w-full glass-dark px-2 py-1.5 rounded text-xs focus:outline-none">
-                            <option value="">Select Hotel</option>
-                        </select>
-                    </div>
-                    <!-- Column 3 -->
-                    <div class="glass-dark rounded-lg p-3 space-y-2">
-                        <div class="text-xs text-gray-400 mb-1">Hotel 3</div>
-                        <select id="compareBrand3" class="w-full glass-dark px-2 py-1.5 rounded text-xs focus:outline-none">
-                            <option value="">Select Brand</option>
-                        </select>
-                        <select id="compareCity3" class="w-full glass-dark px-2 py-1.5 rounded text-xs focus:outline-none">
-                            <option value="">Select City</option>
-                        </select>
-                        <select id="compareHotel3" class="w-full glass-dark px-2 py-1.5 rounded text-xs focus:outline-none">
-                            <option value="">Select Hotel</option>
-                        </select>
-                    </div>
-                </div>
-                <button id="runCompareHotelsBtn" class="px-5 py-2 rounded-lg text-sm font-medium bg-gradient-to-r from-purple-500 to-indigo-600 text-white hover:opacity-90 transition">Compare</button>
-            </div>
-        </div>
-        
-        <!-- Selection Context Header (1st) -->
-        <div id="contextHeader" class="glass rounded-none p-4 mb-4 hidden">
-            <div class="flex items-start justify-between">
-                <div class="flex-1">
-                    <div class="flex items-center gap-3 mb-2">
-                        <span id="contextIcon" class="text-2xl">🏨</span>
-                        <div>
-                            <h2 id="contextTitle" class="text-xl font-bold gradient-text">Loading...</h2>
-                            <p id="contextSubtitle" class="text-sm text-gray-400">Select a brand or hotel to view insights</p>
-                        </div>
-                    </div>
-                    <p id="contextDescription" class="text-sm text-gray-300 mt-2 line-clamp-2 hidden"></p>
-                </div>
-                <div id="contextMeta" class="text-right hidden">
-                    <div class="flex items-center gap-4">
-                        <div>
-                            <span class="text-xs text-gray-500">Rating</span>
-                            <div id="contextRating" class="text-lg font-bold text-yellow-400">--</div>
-                        </div>
-                        <div>
-                            <span class="text-xs text-gray-500">Reviews</span>
-                            <div id="contextReviews" class="text-lg font-bold text-purple-400">--</div>
-                        </div>
-                    </div>
-                    <p id="contextAddress" class="text-xs text-gray-500 mt-2 max-w-xs truncate"></p>
-                </div>
-            </div>
-        </div>
+<div id="loader"><div class="loader-spin"></div></div>
 
-        <!-- Stats Row (2nd) -->
-        <div id="statsRow" class="grid grid-cols-4 gap-4 mb-4 hidden">
-            <div class="stat-card glass rounded-2xl p-4">
-                <div class="flex items-center justify-between mb-2">
-                    <span class="text-gray-400 text-xs">Overall Satisfaction</span>
-                    <span class="text-xl">📈</span>
-                </div>
-                <div class="text-2xl font-bold gradient-text" id="statOverall">--</div>
-                <div class="text-xs text-gray-500 mt-1" id="statMentions">Based on mentions</div>
-            </div>
-            
-            <div class="stat-card glass rounded-2xl p-4">
-                <div class="flex items-center justify-between mb-2">
-                    <span class="text-gray-400 text-xs">Top Strength</span>
-                    <span class="text-xl">💪</span>
-                </div>
-                <div class="text-lg font-bold text-green-400" id="statStrength">--</div>
-                <div class="text-xs text-gray-500 mt-1" id="statStrengthScore">--</div>
-            </div>
-            
-            <div class="stat-card glass rounded-2xl p-4">
-                <div class="flex items-center justify-between mb-2">
-                    <span class="text-gray-400 text-xs">Top Weakness</span>
-                    <span class="text-xl">🔧</span>
-                </div>
-                <div class="text-lg font-bold text-red-400" id="statWeakness">--</div>
-                <div class="text-xs text-gray-500 mt-1" id="statWeaknessScore">--</div>
-            </div>
-            
-            <div class="stat-card glass rounded-2xl p-4">
-                <div class="flex items-center justify-between mb-2">
-                    <span class="text-gray-400 text-xs">Top Guest Type</span>
-                    <span class="text-xl">👥</span>
-                </div>
-                <div class="text-lg font-bold text-purple-400" id="statGuestType">--</div>
-                <div class="text-xs text-gray-500 mt-1" id="statGuestPct">--</div>
-            </div>
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="logo">
+    <img src="/acquink_logo.png" class="logo-sq" onerror="this.style.background='#a855f7';this.removeAttribute('src')">
+    <span class="logo-name">Smaartbrand</span>
+    <span class="logo-sub">Hotels Intelligence</span>
+  </div>
+  <div class="search-wrap">
+    <span class="search-icon">&#128269;</span>
+    <input id="hotelSearchInput" type="text" placeholder="Search hotel here...">
+    <div id="hotelSearchDropdown"></div>
+  </div>
+</div>
+
+<!-- TABS -->
+<div class="tabs-bar">
+  <div class="tab-group">
+    <button id="brandViewTab" class="mode-tab" onclick="switchMode('brand')">Brand View</button>
+    <button id="hotelViewTab" class="mode-tab" onclick="switchMode('hotel')">Hotel View</button>
+    <button id="compareBrandsTab" class="mode-tab" onclick="switchMode('compareBrands')">Compare Brands</button>
+    <button id="compareHotelsTab" class="mode-tab" onclick="switchMode('compareHotels')">Compare Hotels</button>
+  </div>
+  <button id="chatToggle" onclick="openChat()">&#128172; SmaartAnalyst</button>
+</div>
+
+<!-- FILTER ROWS -->
+<div id="brandViewSelectors" class="filter-row hidden">
+  <select id="brandSelect" class="fsel" onchange="loadCitiesFor('brandView');loadStarCategoriesFor('brandView')"><option value="">Select Brand</option></select>
+  <select id="citySelect" class="fsel" onchange="loadStarCategoriesFor('brandView')"><option value="">All Cities</option></select>
+  <select id="starSelect" class="fsel"><option value="">All Stars</option></select>
+  <button class="apply-btn" id="applyBrandBtn" onclick="applyBrandView()">Apply</button>
+</div>
+
+<div id="hotelViewSelectors" class="filter-row hidden">
+  <select id="hotelBrandSelect" class="fsel" onchange="loadCitiesFor('hotelView')"><option value="">Select Brand</option></select>
+  <select id="hotelCitySelect" class="fsel" onchange="loadStarCategoriesFor('hotelView');loadHotelsFor('hotelView')"><option value="">All Cities</option></select>
+  <select id="hotelStarSelect" class="fsel" onchange="loadHotelsFor('hotelView')"><option value="">All Stars</option></select>
+  <select id="hotelSelect" class="fsel" style="min-width:220px"><option value="">Select Hotel</option></select>
+  <button class="apply-btn" id="applyHotelBtn" onclick="applyHotelView()">Apply</button>
+</div>
+
+<div id="compareBrandsSelectors" class="filter-row hidden">
+  <select id="compareBrandOnly1" class="fsel"><option value="">Brand 1</option></select>
+  <select id="compareBrandOnly2" class="fsel"><option value="">Brand 2</option></select>
+  <select id="compareBrandOnly3" class="fsel"><option value="">Brand 3</option></select>
+  <button class="compare-run-btn" id="runCompareBrandsBtn" onclick="runBrandComparison()">Compare</button>
+</div>
+
+<div id="compareHotelsSelectors" class="filter-row hidden">
+  <div class="compare-slot">
+    <select id="compareBrand1" class="fsel" onchange="loadCitiesForCompareSlot(1)"><option value="">Brand</option></select>
+    <select id="compareCity1" class="fsel" onchange="loadHotelsForCompareSlot(1)"><option value="">City</option></select>
+    <select id="compareHotel1" class="fsel" onchange="storeProductId(1)"><option value="">Hotel</option></select>
+  </div>
+  <div class="compare-slot">
+    <select id="compareBrand2" class="fsel" onchange="loadCitiesForCompareSlot(2)"><option value="">Brand</option></select>
+    <select id="compareCity2" class="fsel" onchange="loadHotelsForCompareSlot(2)"><option value="">City</option></select>
+    <select id="compareHotel2" class="fsel" onchange="storeProductId(2)"><option value="">Hotel</option></select>
+  </div>
+  <div class="compare-slot">
+    <select id="compareBrand3" class="fsel" onchange="loadCitiesForCompareSlot(3)"><option value="">Brand</option></select>
+    <select id="compareCity3" class="fsel" onchange="loadHotelsForCompareSlot(3)"><option value="">City</option></select>
+    <select id="compareHotel3" class="fsel" onchange="storeProductId(3)"><option value="">Hotel</option></select>
+  </div>
+  <button class="compare-run-btn" id="runCompareHotelsBtn" onclick="runHotelComparison()">Compare</button>
+</div>
+
+<!-- MAIN CONTENT -->
+<div class="main">
+
+  <!-- Context header -->
+  <div id="contextHeader" class="hidden">
+    <div class="ctx-left">
+      <div class="ctx-icon-title">
+        <span id="contextIcon" class="ctx-icon">&#127968;</span>
+        <div>
+          <div id="contextTitle" class="ctx-title">--</div>
+          <div id="contextSubtitle" class="ctx-subtitle">--</div>
         </div>
-
-        <!-- EMOTIONS BAR -->
-        <div id="emotionsRow" class="mb-4 hidden" style="background:#252035;border-radius:12px;padding:14px 18px;">
-            <div style="color:#9ca3af;font-size:11px;letter-spacing:.05em;margin-bottom:8px;">😊 TOP EMOTIONS</div>
-            <div id="emotionsBar" class="flex gap-2 flex-wrap"></div>
-        </div>
-
-        <!-- CHARTS ROW -->
-        <div id="chartsRow" class="grid grid-cols-2 gap-4 mb-4 hidden">
-            <div style="background:#252035;border-radius:12px;padding:16px;">
-                <div style="color:#e5e7eb;font-size:14px;font-weight:500;margin-bottom:12px;">Share of Voice</div>
-                <div id="sovChart" style="height:300px;"></div>
-            </div>
-            <div style="background:#252035;border-radius:12px;padding:16px;">
-                <div style="color:#e5e7eb;font-size:14px;font-weight:500;margin-bottom:12px;">Satisfaction by Aspect</div>
-                <div id="satisfactionBarsDiv"></div>
-            </div>
-        </div>
-
-        <!-- PAIN POINTS & DELIGHTS -->
-        <div id="painDelightsRow" class="grid grid-cols-2 gap-4 mb-4 hidden">
-            <div style="background:#252035;border-radius:12px;padding:16px;">
-                <div style="color:#ef4444;font-size:14px;font-weight:500;margin-bottom:12px;">❌ Pain Points <span style="color:#6b7280;font-size:11px;">(click to see reviews)</span></div>
-                <div id="painPointsList" class="space-y-2"></div>
-            </div>
-            <div style="background:#252035;border-radius:12px;padding:16px;">
-                <div style="color:#22c55e;font-size:14px;font-weight:500;margin-bottom:12px;">✅ Delights <span style="color:#6b7280;font-size:11px;">(click to see reviews)</span></div>
-                <div id="delightsList" class="space-y-2"></div>
-            </div>
-        </div>
-
-        <!-- R&D SIGNALS -->
-        <div id="rdSignalsRow" class="mb-4 hidden" style="background:#252035;border-radius:12px;padding:16px;">
-            <div style="color:#e5e7eb;font-size:14px;font-weight:500;margin-bottom:12px;">🔬 R&D Signals <span style="color:#6b7280;font-size:11px;">(click to see reviews)</span></div>
-            <div class="grid grid-cols-3 gap-4">
-                <div style="background:#1e1a29;border-radius:8px;padding:12px;">
-                    <div style="color:#fbbf24;font-size:12px;font-weight:500;margin-bottom:8px;">💡 Feature Requests</div>
-                    <div id="featureRequestsList" class="space-y-1 text-xs"></div>
-                </div>
-                <div style="background:#1e1a29;border-radius:8px;padding:12px;">
-                    <div style="color:#f87171;font-size:12px;font-weight:500;margin-bottom:8px;">💰 Price Feedback</div>
-                    <div id="priceFeedbackList" class="space-y-1 text-xs"></div>
-                </div>
-                <div style="background:#1e1a29;border-radius:8px;padding:12px;">
-                    <div style="color:#fb923c;font-size:12px;font-weight:500;margin-bottom:8px;">⚠️ Expectation Gap</div>
-                    <div id="expectationGapList" class="space-y-1 text-xs"></div>
-                </div>
-            </div>
-        </div>
-
-        <!-- ROW 3: Sub-tabs (3rd - for Brand View / Hotel View only) -->
-        <!-- Analytics Sub-tabs (Demographics only) -->
-        <div id="subTabsRow" class="glass rounded-none px-4 py-2 mb-4 flex gap-2 hidden">
-            <button class="sub-tab active px-4 py-2 rounded-lg text-sm font-medium bg-gradient-to-r from-purple-500/20 to-indigo-600/20 text-purple-300 border border-purple-500/30" data-tab="demographics">👥 Demographics</button>
-            <button class="sub-tab px-4 py-2 rounded-lg text-sm font-medium text-gray-400 hover:text-white transition" data-tab="stayPurpose">🎯 Stay Purpose</button>
-            <button class="sub-tab px-4 py-2 rounded-lg text-sm font-medium text-gray-400 hover:text-white transition" data-tab="travelerType">✈️ Traveler Type</button>
-        </div>
-
-        <div id="tabContent">
-            <!-- Comparison Tab -->
-            <div id="comparisonTab" class="tab-panel hidden">
-                <div class="glass rounded-2xl p-6">
-                    <div id="comparisonContent">
-                        <p class="text-gray-500 text-center py-12">Select items and click Compare</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Demographics Tab -->
-            <div id="demographicsTab" class="tab-panel hidden">
-                <div class="grid grid-cols-3 gap-6">
-                    <div class="glass rounded-2xl p-6">
-                        <h3 class="text-lg font-semibold mb-4">Gender Distribution</h3>
-                        <div id="genderChart" style="height: 280px;"></div>
-                    </div>
-                    <div class="glass rounded-2xl p-6">
-                        <h3 class="text-lg font-semibold mb-4">Traveler Type</h3>
-                        <div id="travelerChart" style="height: 280px;"></div>
-                    </div>
-                    <div class="glass rounded-2xl p-6">
-                        <h3 class="text-lg font-semibold mb-4">Stay Purpose</h3>
-                        <div id="purposeChart" style="height: 280px;"></div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Stay Purpose Preferences Tab -->
-            <div id="stayPurposeTab" class="tab-panel hidden">
-                <div class="glass rounded-2xl p-6">
-                    <h3 class="text-lg font-semibold mb-4">Satisfaction by Stay Purpose</h3>
-                    <div id="stayPurposeContent"></div>
-                </div>
-            </div>
-
-            <!-- Traveler Type Preferences Tab -->
-            <div id="travelerTypeTab" class="tab-panel hidden">
-                <div class="glass rounded-2xl p-6">
-                    <h3 class="text-lg font-semibold mb-4">Satisfaction by Traveler Type</h3>
-                    <div id="travelerTypeContent"></div>
-                </div>
-            </div>
-        </div>
-    </main>
-
-    <!-- Footer -->
-<footer class="glass py-4 px-6 mt-auto">
-        <div class="max-w-7xl mx-auto flex items-center justify-between">
-            <div class="flex items-center gap-3">
-                <img src="/acquink_logo.png" alt="Acquink" class="h-6 opacity-70">
-                <span class="text-xs text-gray-400">© 2026 Acquink. All rights reserved.</span>
-            </div>
-            <div class="text-xs text-gray-500">
-                Powered by <span class="text-purple-400">MASI</span> Technology
-            </div>
-        </div>
-    </footer>
-
-    <!-- Chat Panel -->
-    <!-- Loader Overlay -->
-    <div id="loaderOverlay" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden items-center justify-center">
-        <div class="flex flex-col items-center gap-4">
-            <div class="w-12 h-12 border-4 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
-            <p class="text-sm text-gray-300">Loading...</p>
-        </div>
+      </div>
+      <div id="contextDescription" class="ctx-desc hidden"></div>
     </div>
-
-    <!-- Login Modal -->
-    <!-- Chat Panel - WIDER WITH COLLAPSE -->
-    <div id="chatPanel" class="chat-panel fixed right-0 top-0 h-full w-[50vw] min-w-[500px] max-w-[800px] glass-dark z-50 flex flex-col">
-        <!-- Collapsed Bar (hidden by default) -->
-        <div class="chat-collapsed-bar hidden flex-col items-center justify-center h-full py-4 cursor-pointer" onclick="expandChat()">
-            <div class="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center mb-3">
-                <span>🤖</span>
-            </div>
-            <span class="text-xs text-gray-400" style="writing-mode: vertical-rl; text-orientation: mixed;">SmaartAnalyst</span>
-            <div class="mt-4 text-purple-400">◀</div>
-        </div>
-        
-        <!-- Main Chat Content -->
-        <div class="chat-content flex flex-col h-full">
-            <div class="p-4 border-b border-white/10 flex items-center justify-between">
-                <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center">
-                        <span>🤖</span>
-                    </div>
-                    <div>
-                        <h3 class="font-semibold">SmaartAnalyst</h3>
-                        <p class="text-xs text-gray-400" id="chatContextLabel">Hotel Intelligence AI</p>
-                    </div>
-                </div>
-                <div class="flex items-center gap-2">
-                    <button id="chatCollapse" class="text-gray-400 hover:text-white transition text-lg" title="Collapse">▶</button>
-                    <button id="chatClose" class="text-gray-400 hover:text-white transition text-xl" title="Close">✕</button>
-                </div>
-            </div>
-            
-            <div class="p-4 border-b border-white/10">
-                <p class="text-xs text-gray-400 mb-2">Quick questions:</p>
-                <div class="flex flex-wrap gap-2">
-                    <button class="quick-btn glass text-xs px-3 py-1.5 rounded-full hover:bg-white/10" data-question="What should we improve?">🔧 Improvements</button>
-                    <button class="quick-btn glass text-xs px-3 py-1.5 rounded-full hover:bg-white/10" data-question="How do families rate us?">👨‍👩‍👧 Families</button>
-                    <button class="quick-btn glass text-xs px-3 py-1.5 rounded-full hover:bg-white/10" data-question="What are our top strengths?">💪 Strengths</button>
-                    <button class="quick-btn glass text-xs px-3 py-1.5 rounded-full hover:bg-white/10" data-question="Compare us to competitors">🏆 vs Competitors</button>
-                    <button class="quick-btn glass text-xs px-3 py-1.5 rounded-full hover:bg-white/10" data-question="What do business travelers think?">💼 Business</button>
-                    <button class="quick-btn glass text-xs px-3 py-1.5 rounded-full hover:bg-white/10" data-question="Generate SEO keywords">🔑 SEO Keywords</button>
-                </div>
-            </div>
-            
-            <div id="chatMessages" class="flex-1 overflow-y-auto p-4 space-y-4">
-                <div class="flex gap-3">
-                    <div class="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center flex-shrink-0">🤖</div>
-                    <div class="glass rounded-2xl rounded-tl-none p-4 max-w-[85%]">
-                        <p class="text-sm">Hi! I'm SmaartAnalyst. Ask me about guest sentiment, comparisons, traveler segments, or marketing recommendations.</p>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="p-4 border-t border-white/10">
-                <div class="flex gap-2">
-                    <input id="chatInput" type="text" placeholder="Ask about guest sentiment, comparisons, recommendations..." 
-                           class="flex-1 glass px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm">
-                    <button id="chatSend" class="px-4 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-indigo-600 hover:opacity-90 transition">➤</button>
-                </div>
-            </div>
-        </div><!-- end chat-content -->
+    <div id="contextMeta">
+      <div class="ctx-meta-lbl">Rating &nbsp;&nbsp;&nbsp; Reviews</div>
+      <div style="display:flex;gap:20px;justify-content:flex-end;margin-top:4px">
+        <div id="contextRating" class="ctx-meta-val" style="color:#fbbf24">--</div>
+        <div id="contextReviews" class="ctx-meta-val" style="color:#a855f7">--</div>
+      </div>
+      <div id="contextAddress" class="ctx-meta-sub"></div>
     </div>
-    
-    <!-- Chat Overlay -->
-    <div id="chatOverlay" class="fixed inset-0 bg-black/50 z-40 hidden"></div>
+  </div>
 
-    <script>
-        // ═══════════════════════════════════════════
-        // STATE
-        // ═══════════════════════════════════════════
-        let currentBrand = null;
-        let currentHotel = null;      // Now stores product_id
-        let currentHotelName = null;  // Stores display name
-        let currentCity = null;
-        let currentStar = null;
-        let viewMode = 'brand';
-        let brands = [];
-        let hotels = [];
-        let charts = {};
-        
-        // Hotel search cache
-        let allHotelsCache = [];
-        let searchSelectedIndex = -1;
-        
-        function showLoader() {
-            document.getElementById('loaderOverlay').classList.remove('hidden');
-            document.getElementById('loaderOverlay').classList.add('flex');
-        }
-        
-        function hideLoader() {
-            document.getElementById('loaderOverlay').classList.add('hidden');
-            document.getElementById('loaderOverlay').classList.remove('flex');
-        }
-
-        // ═══════════════════════════════════════════
-        // INITIALIZATION
-        // ═══════════════════════════════════════════
-        document.addEventListener('DOMContentLoaded', async () => {
-            showLoader();
-            await loadBrands();
-            await loadHotelSearchCache();
-            setupEventListeners();
-            setupHotelSearch();
-            
-            // Don't auto-load - wait for user to select and click Apply
-            // Hide content sections until user applies
-            document.getElementById('contextHeader').classList.add('hidden');
-            document.getElementById('statsRow').classList.add('hidden');
-            hideLoader();
-        });
-        
-        // ═══════════════════════════════════════════
-        // HOTEL SEARCH
-        // ═══════════════════════════════════════════
-        async function loadHotelSearchCache() {
-            try {
-                const response = await fetch('/api/hotels');
-                if (response.ok) {
-                    const hotelsData = await response.json();
-                    allHotelsCache = hotelsData.hotels || [];
-                    console.log(`Loaded ${allHotelsCache.length} hotels into search cache`);
-                }
-            } catch (e) {
-                console.error('Failed to load hotel search cache:', e);
-            }
-        }
-        
-        function setupHotelSearch() {
-            const input = document.getElementById('hotelSearchInput');
-            const dropdown = document.getElementById('hotelSearchDropdown');
-            
-            input.addEventListener('input', (e) => {
-                const query = e.target.value.trim().toLowerCase();
-                searchSelectedIndex = -1;
-                
-                if (query.length < 3) {
-                    dropdown.classList.remove('show');
-                    return;
-                }
-                
-                const allResults = allHotelsCache.filter(h => 
-                    h.hotel_name.toLowerCase().includes(query)
-                );
-                
-                currentSearchResults = allResults;
-                currentSearchQuery = query;
-                searchDisplayCount = 10;
-                
-                renderSearchResults(allResults.slice(0, 10), query, allResults.length);
-            });
-            
-            input.addEventListener('keydown', (e) => {
-                const results = dropdown.querySelectorAll('.hotel-search-result');
-                if (!results.length) return;
-                
-                if (e.key === 'ArrowDown') {
-                    e.preventDefault();
-                    searchSelectedIndex = Math.min(searchSelectedIndex + 1, results.length - 1);
-                    updateSearchSelection(results);
-                } else if (e.key === 'ArrowUp') {
-                    e.preventDefault();
-                    searchSelectedIndex = Math.max(searchSelectedIndex - 1, 0);
-                    updateSearchSelection(results);
-                } else if (e.key === 'Enter' && searchSelectedIndex >= 0) {
-                    e.preventDefault();
-                    results[searchSelectedIndex].click();
-                } else if (e.key === 'Escape') {
-                    dropdown.classList.remove('show');
-                    input.blur();
-                }
-            });
-            
-            // Close dropdown when clicking outside
-            document.addEventListener('click', (e) => {
-                if (!e.target.closest('.hotel-search-container')) {
-                    dropdown.classList.remove('show');
-                }
-            });
-        }
-        
-        // Search state for load more
-        let currentSearchResults = [];
-        let currentSearchQuery = '';
-        let searchDisplayCount = 10;
-        
-        function loadMoreSearchResults() {
-            searchDisplayCount += 10;
-            const toShow = currentSearchResults.slice(0, searchDisplayCount);
-            renderSearchResults(toShow, currentSearchQuery, currentSearchResults.length);
-        }
-        
-        function updateSearchSelection(results) {
-            results.forEach((r, i) => {
-                r.classList.toggle('active', i === searchSelectedIndex);
-            });
-            if (searchSelectedIndex >= 0) {
-                results[searchSelectedIndex].scrollIntoView({ block: 'nearest' });
-            }
-        }
-        
-        function renderSearchResults(results, query, totalCount) {
-            const dropdown = document.getElementById('hotelSearchDropdown');
-            
-            if (results.length === 0) {
-                dropdown.innerHTML = '<div class="hotel-search-empty">No hotels found</div>';
-                dropdown.classList.add('show');
-                return;
-            }
-            
-            let html = `<div class="hotel-search-count">${totalCount} hotel${totalCount > 1 ? 's' : ''} found</div>`;
-            
-            results.forEach((hotel, idx) => {
-                const stars = hotel.star_category ? '★'.repeat(hotel.star_category) : '';
-                html += `
-                    <div class="hotel-search-result" data-product-id="${hotel.product_id}" data-hotel-name="${escapeHtml(hotel.hotel_name)}" data-brand="${escapeHtml(hotel.Brand)}" data-city="${escapeHtml(hotel.City || '')}">
-                        <span class="hotel-name">${highlightMatch(hotel.hotel_name, query)}</span>
-                        <span class="hotel-meta">${stars} • ${hotel.City || ''} • ${hotel.Brand}</span>
-                    </div>
-                `;
-            });
-            
-            // Add Load more button if there are more results
-            if (results.length < totalCount) {
-                html += `<div class="hotel-search-loadmore" onclick="loadMoreSearchResults()">Load more (${totalCount - results.length} remaining)</div>`;
-            }
-            
-            dropdown.innerHTML = html;
-            dropdown.classList.add('show');
-            
-            // Add click handlers
-            dropdown.querySelectorAll('.hotel-search-result').forEach(el => {
-                el.addEventListener('click', () => selectSearchResult(el));
-            });
-        }
-        
-        function highlightMatch(text, query) {
-            const idx = text.toLowerCase().indexOf(query);
-            if (idx === -1) return escapeHtml(text);
-            const before = text.slice(0, idx);
-            const match = text.slice(idx, idx + query.length);
-            const after = text.slice(idx + query.length);
-            return `${escapeHtml(before)}<strong style="color:#a78bfa">${escapeHtml(match)}</strong>${escapeHtml(after)}`;
-        }
-        
-        async function selectSearchResult(el) {
-            const productId = el.dataset.productId;
-            const hotelName = el.dataset.hotelName;
-            const brand = el.dataset.brand;
-            const city = el.dataset.city;
-            
-            // Clear search
-            document.getElementById('hotelSearchInput').value = '';
-            document.getElementById('hotelSearchDropdown').classList.remove('show');
-            
-            // Switch to Hotel View mode
-            switchMode('hotel');
-            
-            // Set state directly with product_id
-            currentHotel = productId;
-            currentHotelName = hotelName;
-            currentBrand = brand;
-            viewMode = 'hotel';
-            
-            // Update the selectors for display
-            document.getElementById('hotelBrandSelect').value = brand;
-            await loadCitiesFor('hotelView');
-            
-            if (city) {
-                document.getElementById('hotelCitySelect').value = city;
-            }
-            await loadHotelsFor('hotelView');
-            
-            // Select the hotel in dropdown (now using product_id as value)
-            document.getElementById('hotelSelect').value = productId;
-            
-            // Load dashboard directly (skip applyHotelView since we already set state)
-            showLoader();
-            document.getElementById('contextHeader').classList.remove('hidden');
-            document.getElementById('statsRow').classList.remove('hidden');
-            document.getElementById('subTabsRow').classList.remove('hidden');
-            showSubTab('demographics');
-            await loadHotelDataV2(currentHotel);
-            hideLoader();
-        }
-
-        async function loadBrands() {
-            try {
-                const response = await fetch('/api/brands');
-                if (!response.ok) return;
-                const brandsData = await response.json();
-                brands = (brandsData.brands || []).map(b => b.brand_name);
-                
-                const brandOptions = brands.map(b => `<option value="${b}">${b}</option>`).join('');
-                
-                // Brand View selector - add placeholder
-                document.getElementById('brandSelect').innerHTML = '<option value="">Select Brand</option>' + brandOptions;
-                
-                // Hotel View selector
-                document.getElementById('hotelBrandSelect').innerHTML = '<option value="">Select Brand</option>' + brandOptions;
-                
-                // Compare Brand selectors
-                document.getElementById('compareBrandOnly1').innerHTML = '<option value="">Brand 1</option>' + brandOptions;
-                document.getElementById('compareBrandOnly2').innerHTML = '<option value="">Brand 2</option>' + brandOptions;
-                document.getElementById('compareBrandOnly3').innerHTML = '<option value="">Brand 3</option>' + brandOptions;
-                
-                // Compare Hotel brand selectors
-                document.getElementById('compareBrand1').innerHTML = '<option value="">Brand</option>' + brandOptions;
-                document.getElementById('compareBrand2').innerHTML = '<option value="">Brand</option>' + brandOptions;
-                document.getElementById('compareBrand3').innerHTML = '<option value="">Brand</option>' + brandOptions;
-                
-            } catch (e) {
-                console.error('Failed to load brands:', e);
-            }
-        }
-        
-        function populateCompareSelects() {
-            // Pre-select first 3 brands for compare
-            if (brands.length >= 3) {
-                document.getElementById('compareBrandOnly1').value = brands[0];
-                document.getElementById('compareBrandOnly2').value = brands[1];
-                document.getElementById('compareBrandOnly3').value = brands[2];
-            }
-        }
-
-        function setupEventListeners() {
-            // ROW 1: Main Mode Tabs
-            document.getElementById('brandViewTab').addEventListener('click', () => switchMode('brand'));
-            document.getElementById('hotelViewTab').addEventListener('click', () => switchMode('hotel'));
-            document.getElementById('compareBrandsTab').addEventListener('click', () => switchMode('compareBrands'));
-            document.getElementById('compareHotelsTab').addEventListener('click', () => switchMode('compareHotels'));
-            
-            // ROW 2: Apply buttons
-            document.getElementById('applyBrandBtn').addEventListener('click', applyBrandView);
-            document.getElementById('applyHotelBtn').addEventListener('click', applyHotelView);
-            document.getElementById('runCompareBrandsBtn').addEventListener('click', runBrandComparison);
-            document.getElementById('runCompareHotelsBtn').addEventListener('click', runHotelComparison);
-            
-            // ROW 3: Sub-tabs
-            document.querySelectorAll('.sub-tab').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    const tab = e.target.dataset.tab;
-                    showSubTab(tab);
-                });
-            });
-            
-            // Brand View cascading selectors
-            document.getElementById('brandSelect').addEventListener('change', async (e) => {
-                currentBrand = e.target.value;
-                await loadCitiesFor('brandView');
-            });
-            document.getElementById('citySelect').addEventListener('change', async () => {
-                await loadStarCategoriesFor('brandView');
-            });
-            
-            // Hotel View cascading selectors
-            document.getElementById('hotelBrandSelect').addEventListener('change', async (e) => {
-                await loadCitiesFor('hotelView');
-            });
-            document.getElementById('hotelCitySelect').addEventListener('change', async () => {
-                await loadStarCategoriesFor('hotelView');
-                await loadHotelsFor('hotelView');
-            });
-            document.getElementById('hotelStarSelect').addEventListener('change', async () => {
-                await loadHotelsFor('hotelView');
-            });
-            
-            // Compare Hotels cascading selectors (3 slots)
-            for (let i = 1; i <= 3; i++) {
-                document.getElementById(`compareBrand${i}`).addEventListener('change', (e) => loadCitiesForCompareSlot(i));
-                document.getElementById(`compareCity${i}`).addEventListener('change', (e) => loadHotelsForCompareSlot(i));
-                document.getElementById(`compareHotel${i}`).addEventListener('change', (e) => storeProductId(e.target, i));
-            }
-            
-            // Chat Panel Handlers
-            document.getElementById('chatToggle').addEventListener('click', openChat);
-            document.getElementById('chatClose').addEventListener('click', closeChat);
-            document.getElementById('chatCollapse').addEventListener('click', collapseChat);
-            document.getElementById('chatOverlay').addEventListener('click', closeChat);
-            document.getElementById('chatSend').addEventListener('click', () => sendMessage(document.getElementById('chatInput').value));
-            document.getElementById('chatInput').addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(e.target.value); });
-            
-            // Quick question buttons
-            document.querySelectorAll('.quick-btn').forEach(btn => {
-                btn.addEventListener('click', () => sendMessage(btn.dataset.question));
-            });
-        }
-        
-        // Mode switching
-        let currentMode = 'brand'; // 'brand', 'hotel', 'compareBrands', 'compareHotels'
-        
-        function switchMode(mode) {
-            currentMode = mode;
-            viewMode = mode;
-            
-            // Update ROW 1 tabs
-            document.querySelectorAll('.mode-tab').forEach(t => {
-                t.className = 'mode-tab px-4 py-2 rounded-lg text-sm font-medium text-gray-400 hover:text-white transition';
-            });
-            document.getElementById(mode + 'ViewTab')?.classList.add('bg-gradient-to-r', 'from-purple-500', 'to-indigo-600', 'text-white');
-            document.getElementById(mode + 'Tab')?.classList.add('bg-gradient-to-r', 'from-purple-500', 'to-indigo-600', 'text-white');
-            
-            // Hide all ROW 2 selectors
-            document.getElementById('brandViewSelectors').classList.add('hidden');
-            document.getElementById('hotelViewSelectors').classList.add('hidden');
-            document.getElementById('compareBrandsSelectors').classList.add('hidden');
-            document.getElementById('compareHotelsSelectors').classList.add('hidden');
-            
-            // Hide all tab panels
-            document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
-
-            // Show correct content based on mode — preserve existing loaded data
-            if (mode === 'brand') {
-                document.getElementById('brandViewSelectors').classList.remove('hidden');
-                if (currentBrand) {
-                    document.getElementById('contextHeader').classList.remove('hidden');
-                    document.getElementById('statsRow').classList.remove('hidden');
-                    document.getElementById('emotionsRow').classList.remove('hidden');
-                    document.getElementById('chartsRow').classList.remove('hidden');
-                    document.getElementById('painDelightsRow').classList.remove('hidden');
-                    document.getElementById('rdSignalsRow').classList.remove('hidden');
-                    document.getElementById('subTabsRow').classList.remove('hidden');
-                    document.getElementById((activeTab || 'drivers') + 'Tab').classList.remove('hidden');
-                } else {
-                    document.getElementById('contextHeader').classList.add('hidden');
-                    document.getElementById('statsRow').classList.add('hidden');
-                    document.getElementById('subTabsRow').classList.add('hidden');
-                }
-            } else if (mode === 'hotel') {
-                document.getElementById('hotelViewSelectors').classList.remove('hidden');
-                if (currentHotel) {
-                    document.getElementById('contextHeader').classList.remove('hidden');
-                    document.getElementById('statsRow').classList.remove('hidden');
-                    document.getElementById('emotionsRow').classList.remove('hidden');
-                    document.getElementById('chartsRow').classList.remove('hidden');
-                    document.getElementById('painDelightsRow').classList.remove('hidden');
-                    document.getElementById('rdSignalsRow').classList.remove('hidden');
-                    document.getElementById('subTabsRow').classList.remove('hidden');
-                    document.getElementById((activeTab || 'drivers') + 'Tab').classList.remove('hidden');
-                } else {
-                    document.getElementById('contextHeader').classList.add('hidden');
-                    document.getElementById('statsRow').classList.add('hidden');
-                    document.getElementById('subTabsRow').classList.add('hidden');
-                }
-            } else if (mode === 'compareBrands') {
-                document.getElementById('compareBrandsSelectors').classList.remove('hidden');
-                document.getElementById('comparisonTab').classList.remove('hidden');
-                document.getElementById('contextHeader').classList.add('hidden');
-                document.getElementById('statsRow').classList.add('hidden');
-                document.getElementById('subTabsRow').classList.add('hidden');
-                populateCompareSelects();
-            } else if (mode === 'compareHotels') {
-                document.getElementById('compareHotelsSelectors').classList.remove('hidden');
-                document.getElementById('comparisonTab').classList.remove('hidden');
-                document.getElementById('contextHeader').classList.add('hidden');
-                document.getElementById('statsRow').classList.add('hidden');
-                document.getElementById('subTabsRow').classList.add('hidden');
-                populateCompareSelects();
-            }
-
-            updateChatContext();
-        }
-        
-        function showComparisonTab() {
-            document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
-            document.getElementById('comparisonTab').classList.remove('hidden');
-        }
-        
-        function showSubTab(tabName) {
-            // Update sub-tab buttons
-            document.querySelectorAll('.sub-tab').forEach(btn => {
-                btn.className = 'sub-tab px-4 py-2 rounded-lg text-sm font-medium text-gray-400 hover:text-white transition';
-            });
-            document.querySelector(`.sub-tab[data-tab="${tabName}"]`).className = 'sub-tab active px-4 py-2 rounded-lg text-sm font-medium bg-gradient-to-r from-purple-500/20 to-indigo-600/20 text-purple-300 border border-purple-500/30';
-            
-            // Show tab panel
-            document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
-            document.getElementById(tabName + 'Tab').classList.remove('hidden');
-            
-            // Load tab data
-            activeTab = tabName;
-            if (tabName === 'satisfaction') loadSatisfactionTab();
-            if (tabName === 'demographics') loadDemographics();
-            if (tabName === 'stayPurpose') loadStayPurposePreferences();
-            if (tabName === 'travelerType') loadTravelerTypePreferences();
-        }
-        
-        // Apply functions
-        async function applyBrandView() {
-            currentBrand = document.getElementById('brandSelect').value;
-            currentCity = document.getElementById('citySelect').value || null;
-            currentStar = document.getElementById('starSelect').value || null;
-            currentHotel = null;
-            viewMode = 'brand';
-            if (!currentBrand) {
-                alert('Please select a brand first');
-                return;
-            }
-            showLoader();
-            // Show content sections
-            document.getElementById('contextHeader').classList.remove('hidden');
-            document.getElementById('statsRow').classList.remove('hidden');
-            document.getElementById('subTabsRow').classList.remove('hidden');
-            showSubTab('demographics');
-            await loadDashboard();
-            await loadHotelDataV2(currentHotel);
-            hideLoader();
-        }
-        
-        async function applyHotelView() {
-            const brand = document.getElementById('hotelBrandSelect').value;
-            const hotelSelect = document.getElementById('hotelSelect');
-            currentHotel = hotelSelect.value; // Now this is product_id
-            currentHotelName = hotelSelect.selectedOptions[0]?.dataset.name || hotelSelect.selectedOptions[0]?.textContent || '';
-            currentBrand = brand;
-            viewMode = 'hotel';
-            if (!currentHotel) {
-                alert('Please select a hotel first');
-                return;
-            }
-            showLoader();
-            // Show content sections
-            document.getElementById('contextHeader').classList.remove('hidden');
-            document.getElementById('statsRow').classList.remove('hidden');
-            document.getElementById('subTabsRow').classList.remove('hidden');
-            showSubTab('demographics');
-            await loadHotelDataV2(currentHotel);
-            hideLoader();
-        }
-        
-        async function runBrandComparison() {
-            const items = [
-                document.getElementById('compareBrandOnly1').value,
-                document.getElementById('compareBrandOnly2').value,
-                document.getElementById('compareBrandOnly3').value
-            ].filter(v => v);
-            
-            if (items.length < 2) {
-                alert('Please select at least 2 brands to compare');
-                return;
-            }
-            
-            showLoader();
-            await loadComparison(items, 'brand');
-            hideLoader();
-        }
-        
-        async function runHotelComparison() {
-            const items = [];
-            for (let i = 1; i <= 3; i++) {
-                const productId = document.getElementById(`compareHotel${i}`).dataset.productId;
-                if (productId) items.push(productId);
-            }
-            
-            if (items.length < 2) {
-                alert('Please select at least 2 hotels to compare');
-                return;
-            }
-            
-            showLoader();
-            await loadComparison(items, 'hotel');
-            hideLoader();
-        }
-        
-        // Cascading loaders for different views
-        async function loadCitiesFor(view) {
-            const brandSelect = view === 'brandView' ? 'brandSelect' : 'hotelBrandSelect';
-            const citySelect = view === 'brandView' ? 'citySelect' : 'hotelCitySelect';
-            const brand = document.getElementById(brandSelect).value;
-            
-            try {
-                const response = await fetch(`/api/cities?brand=${encodeURIComponent(brand)}`);
-                const citiesData = await response.json();
-                const cities = citiesData.cities || [];
-                document.getElementById(citySelect).innerHTML = '<option value="">All Cities</option>' + cities.map(c => `<option value="${c}">${c}</option>`).join('');
-            } catch (e) {
-                console.error('Failed to load cities:', e);
-            }
-        }
-        
-        async function loadStarCategoriesFor(view) {
-            const brandSelect = view === 'brandView' ? 'brandSelect' : 'hotelBrandSelect';
-            const citySelect = view === 'brandView' ? 'citySelect' : 'hotelCitySelect';
-            const starSelect = view === 'brandView' ? 'starSelect' : 'hotelStarSelect';
-            
-            const brand = document.getElementById(brandSelect).value;
-            const city = document.getElementById(citySelect).value;
-            
-            try {
-                let url = `/api/star_categories?brand=${encodeURIComponent(brand)}`;
-                if (city) url += `&city=${encodeURIComponent(city)}`;
-                const response = await fetch(url);
-                const stars = await response.json();
-                document.getElementById(starSelect).innerHTML = '<option value="">All Stars</option>' + stars.map(s => `<option value="${s}">${'⭐'.repeat(s)}</option>`).join('');
-            } catch (e) {
-                console.error('Failed to load star categories:', e);
-            }
-        }
-        
-        async function loadHotelsFor(view) {
-            const brand = document.getElementById('hotelBrandSelect').value;
-            const city = document.getElementById('hotelCitySelect').value;
-            const star = document.getElementById('hotelStarSelect').value;
-            
-            try {
-                let url = `/api/hotels?brand=${encodeURIComponent(brand)}`;
-                if (city) url += `&city=${encodeURIComponent(city)}`;
-                if (star) url += `&star_category=${star}`;
-                const response = await fetch(url);
-                const hotelsResp = await response.json();
-                const hotels = hotelsResp.hotels || [];
-                document.getElementById('hotelSelect').innerHTML = '<option value="">Select Hotel</option>' + hotels.map(h => `<option value="${h.product_id}" data-name="${h.hotel_name}">${h.hotel_name}</option>`).join('');
-            } catch (e) {
-                console.error('Failed to load hotels:', e);
-            }
-        }
-        
-        async function loadCitiesForCompareSlot(idx) {
-            const brand = document.getElementById(`compareBrand${idx}`).value;
-            const citySelect = document.getElementById(`compareCity${idx}`);
-            const hotelSelect = document.getElementById(`compareHotel${idx}`);
-            
-            citySelect.innerHTML = '<option value="">City</option>';
-            hotelSelect.innerHTML = '<option value="">Hotel</option>';
-            hotelSelect.dataset.productId = '';
-            
-            if (!brand) return;
-            
-            try {
-                const response = await fetch(`/api/cities?brand=${encodeURIComponent(brand)}`);
-                const citiesResp2 = await response.json();
-                const cities = citiesResp2.cities || [];
-                citySelect.innerHTML = '<option value="">City</option>' + cities.map(c => `<option value="${c}">${c}</option>`).join('');
-            } catch (e) {
-                console.error('Failed to load cities:', e);
-            }
-        }
-        
-        async function loadHotelsForCompareSlot(idx) {
-            const brand = document.getElementById(`compareBrand${idx}`).value;
-            const city = document.getElementById(`compareCity${idx}`).value;
-            const hotelSelect = document.getElementById(`compareHotel${idx}`);
-            
-            hotelSelect.innerHTML = '<option value="">Hotel</option>';
-            hotelSelect.dataset.productId = '';
-            
-            if (!brand || !city) return;
-            
-            try {
-                const response = await fetch(`/api/hotels?brand=${encodeURIComponent(brand)}&city=${encodeURIComponent(city)}`);
-                const hotelsResp2 = await response.json();
-                const hotels = hotelsResp2.hotels || [];
-                hotelSelect.innerHTML = '<option value="">Hotel</option>' + hotels.map(h => 
-                    `<option value="${h.product_id}" data-name="${h.hotel_name}">${h.hotel_name}</option>`
-                ).join('');
-            } catch (e) {
-                console.error('Failed to load hotels:', e);
-            }
-        }
-        
-        function storeProductId(select, idx) {
-            const option = select.selectedOptions[0];
-            if (option && option.value) {
-                select.dataset.productId = option.value;
-                select.dataset.hotelName = option.dataset.name || option.textContent;
-            } else {
-                select.dataset.productId = '';
-                select.dataset.hotelName = '';
-            }
-        }
-        
-        // Chat panel functions
-        function openChat() {
-            const panel = document.getElementById('chatPanel');
-            panel.classList.add('open');
-            panel.classList.remove('collapsed');
-            document.getElementById('chatOverlay').classList.remove('hidden');
-            updateChatContext();
-        }
-        
-        function closeChat() {
-            document.getElementById('chatPanel').classList.remove('open');
-            document.getElementById('chatOverlay').classList.add('hidden');
-        }
-        
-        function collapseChat() {
-            document.getElementById('chatPanel').classList.add('collapsed');
-        }
-        
-        function expandChat() {
-            document.getElementById('chatPanel').classList.remove('collapsed');
-        }
-        
-        function updateChatContext() {
-            const label = document.getElementById('chatContextLabel');
-            if (viewMode === 'hotel' && currentHotel) {
-                label.textContent = `Analyzing: ${currentHotelName || currentHotel}`;
-            } else if (viewMode === 'brand' && currentBrand) {
-                label.textContent = `Analyzing: ${currentBrand}`;
-            } else {
-                label.textContent = 'Hotel Intelligence AI';
-            }
-        }
-        
-        function resetCompareSelections() {
-            // Reset brand-only selectors
-            const b1 = document.getElementById('compareBrandOnly1');
-            const b2 = document.getElementById('compareBrandOnly2');
-            const b3 = document.getElementById('compareBrandOnly3');
-            if (b1) b1.value = '';
-            if (b2) b2.value = '';
-            if (b3) b3.value = '';
-            
-            // Reset hotel comparison selectors
-            for (let i = 1; i <= 3; i++) {
-                const brand = document.getElementById(`compareBrand${i}`);
-                const city = document.getElementById(`compareCity${i}`);
-                const hotel = document.getElementById(`compareHotel${i}`);
-                if (brand) brand.value = '';
-                if (city) city.innerHTML = '<option value="">City</option>';
-                if (hotel) {
-                    hotel.innerHTML = '<option value="">Hotel</option>';
-                    hotel.dataset.productId = '';
-                    hotel.dataset.hotelName = '';
-                }
-            }
-            
-            // Clear comparison results
-            const content = document.getElementById('comparisonContent');
-            if (content) content.innerHTML = '<p class="text-gray-400 text-center py-8">Select items and click Compare</p>';
-        }
-
-        // ═══════════════════════════════════════════
-        // DASHBOARD LOADING
-        // ═══════════════════════════════════════════
-        let activeTab = 'demographics'; // Track active tab
-        
-        // Build API params with optional city/star filters for brand view
-        function buildParams() {
-            let params = viewMode === 'hotel' 
-                ? `product_id=${encodeURIComponent(currentHotel)}` 
-                : `brand=${encodeURIComponent(currentBrand)}`;
-            
-            // Add city and star filters for brand view
-            if (viewMode === 'brand') {
-                if (currentCity) params += `&city=${encodeURIComponent(currentCity)}`;
-                if (currentStar) params += `&star=${encodeURIComponent(currentStar)}`;
-            }
-            return params;
-        }
-
-        async function loadDashboard() {
-            if (viewMode === 'hotel' && !currentHotel) return;
-            if (viewMode === 'brand' && !currentBrand) return;
-            
-            await Promise.all([loadDrivers(), loadStats(), loadContextHeader()]);
-            refreshActiveTab();
-        }
-        
-        function refreshActiveTab() {
-            switch(activeTab) {
-                case 'satisfaction': loadSatisfactionTab(); break;
-                case 'demographics': loadDemographics(); break;
-                case 'stayPurpose': loadStayPurposePreferences(); break;
-                case 'travelerType': loadTravelerTypePreferences(); break;
-                case 'comparison': populateCompareSelects(); break;
-            }
-        }
-        
-        async function loadContextHeader() {
-            try {
-                const params = buildParams();
-                
-                const response = await fetch(`/api/hotel_details?${params}`);
-                const data = await response.json();
-                
-                if (data.error) return;
-                
-                if (viewMode === 'hotel') {
-                    document.getElementById('contextIcon').textContent = '🏨';
-                    document.getElementById('contextTitle').textContent = data.hotel_name || currentHotelName || currentHotel;
-                    const stars = data.star_category ? '⭐'.repeat(data.star_category) : '';
-                    document.getElementById('contextSubtitle').textContent = `${data.brand_name || ''} • ${data.city || ''} ${stars ? '• ' + stars : ''}`;
-                    
-                    if (data.about_us) {
-                        document.getElementById('contextDescription').textContent = data.about_us;
-                        document.getElementById('contextDescription').classList.remove('hidden');
-                    } else {
-                        document.getElementById('contextDescription').classList.add('hidden');
-                    }
-                    
-                    document.getElementById('contextMeta').classList.remove('hidden');
-                    document.getElementById('contextRating').textContent = data.google_rating ? `★ ${Number(data.google_rating).toFixed(1)}` : '--';
-                    document.getElementById('contextReviews').textContent = data.review_count ? Number(data.review_count).toLocaleString() : '--';
-                    document.getElementById('contextAddress').textContent = data.address || '';
-                } else {
-                    document.getElementById('contextIcon').textContent = '🏢';
-                    document.getElementById('contextTitle').textContent = data.brand_name || currentBrand;
-                    document.getElementById('contextSubtitle').textContent = `${data.hotel_count || 0} hotels in portfolio`;
-                    document.getElementById('contextDescription').classList.add('hidden');
-                    
-                    document.getElementById('contextMeta').classList.remove('hidden');
-                    document.getElementById('contextRating').textContent = data.overall_satisfaction ? `${data.overall_satisfaction}% sat` : '--';
-                    document.getElementById('contextReviews').textContent = data.review_count ? Number(data.review_count).toLocaleString() : '--';
-                    document.getElementById('contextAddress').textContent = '';
-                }
-            } catch (e) {
-                console.error('Context header error:', e);
-            }
-        }
-
-        async function loadStats() {
-            const params = buildParams();
-            try {
-                const [satResponse, demoResponse] = await Promise.all([
-                    fetch(`/api/satisfaction?${params}`),
-                    fetch(`/api/demographics?${params}`)
-                ]);
-                
-                const satisfaction = await satResponse.json();
-                const demographics = await demoResponse.json();
-                
-                const totalPos = satisfaction.reduce((s, a) => s + (a.positive_count || 0), 0);
-                const totalNeg = satisfaction.reduce((s, a) => s + (a.negative_count || 0), 0);
-                const totalMentions = totalPos + totalNeg;
-                const overallSat = totalMentions > 0 ? Math.round(totalPos * 100 / totalMentions) : 0;
-                
-                document.getElementById('statOverall').textContent = overallSat + '%';
-                document.getElementById('statMentions').textContent = `Based on ${totalMentions.toLocaleString()} mentions`;
-                
-                const sorted = [...satisfaction].sort((a, b) => (b.satisfaction || 0) - (a.satisfaction || 0));
-                if (sorted.length > 0) {
-                    document.getElementById('statStrength').textContent = sorted[0].aspect_name;
-                    document.getElementById('statStrengthScore').textContent = sorted[0].satisfaction + '% satisfaction';
-                    const weakest = sorted[sorted.length - 1];
-                    document.getElementById('statWeakness').textContent = weakest.aspect_name;
-                    document.getElementById('statWeaknessScore').textContent = weakest.satisfaction + '% satisfaction';
-                }
-                
-                const knownTypes = (demographics.traveler_type || []).filter(t => t.traveler_type && t.traveler_type.toLowerCase() !== 'unknown');
-                if (knownTypes.length > 0) {
-                    const topType = knownTypes[0];
-                    const knownTotal = knownTypes.reduce((s, t) => s + t.review_count, 0);
-                    document.getElementById('statGuestType').textContent = topType.traveler_type;
-                    document.getElementById('statGuestPct').textContent = Math.round(topType.review_count * 100 / knownTotal) + '% of guests';
-                }
-            } catch (e) {
-                console.error('Stats error:', e);
-            }
-        }
-
-        async function loadDrivers() {
-            const params = buildParams();
-            try {
-                const response = await fetch(`/api/drivers?${params}`);
-                const data = await response.json();
-                
-                if (charts.sov) charts.sov.destroy();
-                const sorted = [...data].sort((a, b) => (b.share_of_voice || 0) - (a.share_of_voice || 0));
-                
-                charts.sov = new ApexCharts(document.getElementById('sovChart'), {
-                    series: [{ name: 'Share of Voice', data: sorted.map(d => d.share_of_voice || 0) }],
-                    chart: { type: 'bar', height: 350, background: 'transparent', toolbar: { show: false } },
-                    plotOptions: { bar: { horizontal: true, borderRadius: 4, barHeight: '70%' } },
-                    colors: ['#0d9488'],
-                    xaxis: { categories: sorted.map(d => `${d.icon || ''} ${d.aspect_name}`), labels: { style: { colors: '#9ca3af' }, formatter: v => v + '%' } },
-                    yaxis: { labels: { style: { colors: '#e2e8f0', fontSize: '12px' } } },
-                    dataLabels: { enabled: true, formatter: v => v + '%', style: { colors: ['#fff'], fontSize: '11px' } },
-                    grid: { borderColor: 'rgba(255,255,255,0.06)' },
-                    tooltip: { theme: 'dark' }
-                });
-                charts.sov.render();
-                
-                if (charts.radar) charts.radar.destroy();
-                charts.radar = new ApexCharts(document.getElementById('radarChart'), {
-                    series: [{ name: 'Satisfaction', data: data.map(d => d.satisfaction || 0) }],
-                    chart: { type: 'radar', height: 350, background: 'transparent', toolbar: { show: false } },
-                    xaxis: { categories: data.map(d => d.aspect_name) },
-                    yaxis: { max: 100 },
-                    colors: ['#14b8a6'],
-                    stroke: { width: 2 },
-                    fill: { opacity: 0.2 },
-                    markers: { size: 4 },
-                    tooltip: { theme: 'dark', y: { formatter: v => v + '%' } }
-                });
-                charts.radar.render();
-            } catch (e) {
-                console.error('Drivers error:', e);
-            }
-        }
-
-        async function loadSatisfactionTab() {
-            const params = buildParams();
-            if ((viewMode === 'hotel' && !currentHotel) || (viewMode === 'brand' && !currentBrand)) return;
-            
-            try {
-                const response = await fetch(`/api/satisfaction?${params}`);
-                const data = await response.json();
-                
-                if (charts.satisfaction) charts.satisfaction.destroy();
-                const sorted = [...data].sort((a, b) => (a.satisfaction || 0) - (b.satisfaction || 0));
-                
-                charts.satisfaction = new ApexCharts(document.getElementById('satisfactionChart'), {
-                    series: [{ name: 'Satisfaction', data: sorted.map(d => d.satisfaction || 0) }],
-                    chart: { type: 'bar', height: 400, background: 'transparent', toolbar: { show: false } },
-                    plotOptions: { bar: { horizontal: true, borderRadius: 6, barHeight: '65%' } },
-                    colors: sorted.map(d => (d.satisfaction || 0) >= 80 ? '#0d9488' : (d.satisfaction || 0) >= 60 ? '#eab308' : '#ef4444'),
-                    xaxis: { categories: sorted.map(d => `${d.icon || ''} ${d.aspect_name || 'Unknown'}`), max: 100, labels: { style: { colors: '#9ca3af' }, formatter: v => v + '%' } },
-                    yaxis: { labels: { style: { colors: '#e2e8f0', fontSize: '13px' } } },
-                    dataLabels: { enabled: true, formatter: v => v + '%', style: { colors: ['#fff'], fontSize: '12px', fontWeight: 600 } },
-                    grid: { borderColor: 'rgba(255,255,255,0.06)' },
-                    tooltip: { theme: 'dark' }
-                });
-                charts.satisfaction.render();
-            } catch (e) {
-                console.error('Satisfaction tab error:', e);
-            }
-        }
-
-        async function loadDemographics() {
-            const params = buildParams();
-            if ((viewMode === 'hotel' && !currentHotel) || (viewMode === 'brand' && !currentBrand)) return;
-            
-            // Colorblind-safe palette (Wong palette)
-            const cbSafePalette = ['#0072B2', '#D55E00', '#009E73', '#F0E442', '#CC79A7', '#56B4E9', '#E69F00'];
-            
-            try {
-                const response = await fetch(`/api/demographics?${params}`);
-                const data = await response.json();
-                
-                // Gender - Pie Chart
-                if (data.gender?.length > 0) {
-                    if (charts.gender) charts.gender.destroy();
-                    const total = data.gender.reduce((s, g) => s + g.review_count, 0);
-                    charts.gender = new ApexCharts(document.getElementById('genderChart'), {
-                        series: data.gender.map(g => Math.round(g.review_count * 100 / total)),
-                        chart: { type: 'donut', height: 280, background: 'transparent' },
-                        labels: data.gender.map(g => g.gender === 'M' ? 'Male' : g.gender === 'F' ? 'Female' : g.gender),
-                        colors: ['#0072B2', '#D55E00'],
-                        legend: { position: 'bottom', labels: { colors: '#9ca3af' } },
-                        dataLabels: { enabled: true, formatter: v => Math.round(v) + '%' },
-                        tooltip: { theme: 'dark' }
-                    });
-                    charts.gender.render();
-                }
-                
-                // Traveler Type - Pie Chart
-                const knownTravelers = (data.traveler_type || []).filter(t => t.traveler_type && t.traveler_type.toLowerCase() !== 'unknown');
-                if (knownTravelers.length > 0) {
-                    if (charts.traveler) charts.traveler.destroy();
-                    const total = knownTravelers.reduce((s, t) => s + t.review_count, 0);
-                    charts.traveler = new ApexCharts(document.getElementById('travelerChart'), {
-                        series: knownTravelers.map(t => Math.round(t.review_count * 100 / total)),
-                        chart: { type: 'donut', height: 280, background: 'transparent' },
-                        labels: knownTravelers.map(t => t.traveler_type),
-                        colors: cbSafePalette,
-                        legend: { position: 'bottom', labels: { colors: '#9ca3af' } },
-                        dataLabels: { enabled: true, formatter: v => Math.round(v) + '%' },
-                        tooltip: { theme: 'dark' }
-                    });
-                    charts.traveler.render();
-                }
-                
-                // Stay Purpose - Pie Chart (matching Gender and Traveler)
-                const knownPurposes = (data.stay_purpose || []).filter(p => p.stay_purpose && p.stay_purpose.toLowerCase() !== 'unknown');
-                if (knownPurposes.length > 0) {
-                    if (charts.purpose) charts.purpose.destroy();
-                    const total = knownPurposes.reduce((s, p) => s + p.review_count, 0);
-                    // Map numeric/raw values to readable names
-                    const purposeLabels = {
-                        '1': 'Leisure', '2': 'Business', '3': 'Family', '4': 'Romantic', '5': 'Other',
-                        '50.5': 'Mixed', '100': 'Special',
-                        'Leisure': 'Leisure', 'Business': 'Business', 'Family': 'Family', 
-                        'Romantic': 'Romantic', 'Transit': 'Transit', 'Event': 'Event', 
-                        'Honeymoon': 'Honeymoon', 'Wedding': 'Wedding'
-                    };
-                    charts.purpose = new ApexCharts(document.getElementById('purposeChart'), {
-                        series: data.stay_purpose.map(p => Math.round(p.review_count * 100 / total)),
-                        chart: { type: 'donut', height: 280, background: 'transparent' },
-                        labels: data.stay_purpose.map(p => purposeLabels[String(p.stay_purpose)] || String(p.stay_purpose)),
-                        colors: cbSafePalette,
-                        legend: { position: 'bottom', labels: { colors: '#9ca3af' } },
-                        dataLabels: { enabled: true, formatter: v => Math.round(v) + '%' },
-                        tooltip: { theme: 'dark' }
-                    });
-                    charts.purpose.render();
-                }
-            } catch (e) {
-                console.error('Demographics error:', e);
-            }
-        }
-
-        // ═══════════════════════════════════════════
-        // COMPARISON
-        // ═══════════════════════════════════════════
-        
-        async function loadComparison(items, compareBy) {
-            if (items.length < 2) {
-                alert('Select at least 2 items to compare');
-                return;
-            }
-            
-            let url = `/api/comparison?items=${encodeURIComponent(items.join('|||'))}&compare_by=${compareBy}`;
-            
-            try {
-                const response = await fetch(url);
-                const data = await response.json();
-                
-                const aspects = ['Dining', 'Cleanliness', 'Amenities', 'Staff', 'Room', 'Location', 'Value for Money', 'General'];
-                
-                // Calculate stats (use display_name from API response)
-                const itemStats = items.map((item, i) => {
-                    const d = data[item] || { display_name: item, aspects: [], overall: {} };
-                    const totalMentions = d.overall.total_mentions || 0;
-                    const posCount = d.overall.positive || 0;
-                    const negCount = d.overall.negative || 0;
-                    const posPct = totalMentions > 0 ? Math.round(posCount * 100 / totalMentions) : 0;
-                    const negPct = totalMentions > 0 ? Math.round(negCount * 100 / totalMentions) : 0;
-                    const netScore = posPct - negPct;
-                    // Use display_name from API
-                    const name = d.display_name || item;
-                    return { item, displayName: name, totalMentions, posPct, negPct, netScore, satisfaction: d.overall.satisfaction || 0 };
-                });
-                
-                const maxNetScore = Math.max(...itemStats.map(s => s.netScore));
-                
-                // Helper function to get size class based on name length
-                const getNameSizeClass = (name) => {
-                    if (name.length <= 12) return 'short';
-                    if (name.length <= 25) return 'medium';
-                    return 'long';
-                };
-                
-                // Colors for items
-                const itemColors = ['#f59e0b', '#8b5cf6', '#10b981', '#3b82f6'];
-                
-                // Generate smart header HTML (use displayName)
-                const getItemHeader = (stat, idx) => `
-                    <th class="item-col">
-                        <div class="item-header">
-                            <div class="dot" style="background: ${itemColors[idx]}"></div>
-                            <div class="name ${getNameSizeClass(stat.displayName)}">${stat.displayName}</div>
-                        </div>
-                    </th>
-                `;
-                
-                // Legend HTML
-                const legendHtml = `
-                    <div class="legend">
-                        <span class="legend-text">Low</span>
-                        <div class="legend-box" style="background: rgba(127, 29, 29, 0.5);"></div>
-                        <div class="legend-box" style="background: rgba(161, 98, 7, 0.35);"></div>
-                        <div class="legend-box" style="background: rgba(21, 128, 61, 0.3);"></div>
-                        <div class="legend-box" style="background: rgba(13, 148, 136, 0.4);"></div>
-                        <div class="legend-box" style="background: rgba(13, 148, 136, 0.6);"></div>
-                        <span class="legend-text">High</span>
-                    </div>
-                `;
-                
-                // Satisfaction Score Section
-                let html = `
-                    <div class="mb-8">
-                        <div class="flex justify-between items-center mb-4">
-                            <h4 class="text-md font-semibold text-purple-400">Satisfaction Score</h4>
-                            ${legendHtml}
-                        </div>
-                        <table class="data-table">
-                            <thead>
-                                <tr>
-                                    <th></th>
-                                    ${itemStats.map((s, i) => getItemHeader(s, i)).join('')}
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr>
-                                    <td class="text-gray-300 font-medium">Review Count</td>
-                                    ${itemStats.map(s => `<td><span class="heat-cell heat-high">${formatNumber(s.totalMentions)}</span></td>`).join('')}
-                                </tr>
-                                <tr>
-                                    <td class="text-gray-300 font-medium">+ve Sentiment %</td>
-                                    ${itemStats.map(s => `<td><span class="heat-cell ${getHeatClass(s.posPct)}">${s.posPct}%</span></td>`).join('')}
-                                </tr>
-                                <tr>
-                                    <td class="text-gray-300 font-medium">-ve Sentiment %</td>
-                                    ${itemStats.map(s => `<td><span class="heat-cell ${getHeatClassInverse(s.negPct)}">${s.negPct}%</span></td>`).join('')}
-                                </tr>
-                                <tr>
-                                    <td class="text-gray-300 font-medium">Net Sentiment Score</td>
-                                    ${itemStats.map(s => `<td><span class="heat-cell ${s.netScore === maxNetScore ? 'heat-vhigh' : getHeatClass(s.netScore + 50)}">${s.netScore}%</span></td>`).join('')}
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                `;
-                
-                // Driver Analysis Section
-                html += `
-                    <div class="mb-8">
-                        <div class="flex justify-between items-center mb-4">
-                            <h4 class="text-md font-semibold text-purple-400">Driver Analysis</h4>
-                            ${legendHtml}
-                        </div>
-                        <table class="data-table">
-                            <thead>
-                                <tr>
-                                    <th></th>
-                                    ${itemStats.map((s, i) => getItemHeader(s, i)).join('')}
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr>
-                                    <td class="text-gray-300 font-medium">AVG. RATING ON 5</td>
-                                    ${items.map(item => {
-                                        const sat = data[item]?.overall?.satisfaction || 0;
-                                        const rating = (sat / 20).toFixed(1);
-                                        return `<td><span class="heat-cell ${getHeatClass(sat)}">★ ${rating}</span></td>`;
-                                    }).join('')}
-                                </tr>
-                `;
-                
-                // Calculate total mentions per item once
-                const totalMentionsPerItem = items.map(item => {
-                    return data[item]?.aspects?.reduce((s, a) => s + (a.total_mentions || 0), 0) || 1;
-                });
-                
-                for (const aspect of aspects) {
-                    // Calculate avg SoV across all items for this aspect
-                    let totalSov = 0;
-                    items.forEach((item, idx) => {
-                        const aspectData = data[item]?.aspects?.find(a => a.aspect_name === aspect);
-                        const mentions = aspectData?.total_mentions || 0;
-                        totalSov += Math.round(mentions * 100 / totalMentionsPerItem[idx]);
-                    });
-                    const avgSov = totalSov / items.length;
-                    
-                    // Skip aspects with avg SoV < 5%
-                    if (avgSov < 5) continue;
-                    
-                    html += `<tr><td class="text-gray-300">${aspect}</td>`;
-                    items.forEach((item, idx) => {
-                        const aspectData = data[item]?.aspects?.find(a => a.aspect_name === aspect);
-                        const mentions = aspectData?.total_mentions || 0;
-                        const sov = Math.round(mentions * 100 / totalMentionsPerItem[idx]);
-                        // Color based on SoV value for Driver Analysis
-                        html += `<td><span class="heat-cell ${getSovHeatClass(sov)}">${sov}%</span></td>`;
-                    });
-                    html += `</tr>`;
-                }
-                
-                html += `</tbody></table></div>`;
-                
-                // Aspect-wise Comparison Section (satisfaction scores with winner)
-                html += `
-                    <div class="mb-8">
-                        <div class="flex justify-between items-center mb-4">
-                            <h4 class="text-md font-semibold text-purple-400">Aspect-wise Comparison</h4>
-                        </div>
-                        <table class="data-table">
-                            <thead>
-                                <tr>
-                                    <th>Aspect</th>
-                                    ${itemStats.map((s, i) => getItemHeader(s, i)).join('')}
-                                    <th class="text-center" style="width: 100px;">Winner</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                `;
-                
-                for (const aspect of aspects) {
-                    const scores = items.map(item => {
-                        const aspectData = data[item]?.aspects?.find(a => a.aspect_name === aspect);
-                        return aspectData?.satisfaction || 0;
-                    });
-                    
-                    // Skip if all scores are 0 or max score < 5%
-                    const maxScore = Math.max(...scores);
-                    if (maxScore < 5) continue;
-                    
-                    const winnerIdx = scores.indexOf(maxScore);
-                    const winnerName = maxScore > 0 ? itemStats[winnerIdx].displayName : '-';
-                    
-                    html += `<tr><td class="text-gray-300 font-medium">${aspect}</td>`;
-                    scores.forEach((score, idx) => {
-                        const isWinner = score === maxScore && score > 0;
-                        html += `<td><span class="heat-cell ${isWinner ? 'winner-cell' : getHeatClass(score)}">${score}%</span></td>`;
-                    });
-                    html += `<td class="text-purple-400 font-medium">${winnerName}</td></tr>`;
-                }
-                
-                html += `</tbody></table></div>`;
-                
-                // Attribute Wins Section (also filter < 5%)
-                // Create map from item (product_id) to displayName
-                const itemToDisplayName = {};
-                itemStats.forEach(s => { itemToDisplayName[s.item] = s.displayName; });
-                
-                const wins = {};
-                items.forEach(item => { wins[item] = []; });
-                
-                for (const aspect of aspects) {
-                    const scores = items.map(item => {
-                        const aspectData = data[item]?.aspects?.find(a => a.aspect_name === aspect);
-                        return { item, satisfaction: aspectData?.satisfaction || 0 };
-                    });
-                    const maxScore = Math.max(...scores.map(s => s.satisfaction));
-                    
-                    // Skip if max score < 5%
-                    if (maxScore < 5) continue;
-                    if (maxScore > 0) {
-                        const winner = scores.find(s => s.satisfaction === maxScore);
-                        if (winner) wins[winner.item].push({ aspect, score: winner.satisfaction });
-                    }
-                }
-                
-                html += `
-                    <div>
-                        <h4 class="text-md font-semibold text-purple-400 mb-2">Attribute Wins by Brand 🏆</h4>
-                        <p class="text-xs text-gray-500 mb-4">Attributes listed under the brand that scores highest on them.</p>
-                        <div class="grid grid-cols-${items.length} gap-4">
-                `;
-                
-                items.forEach((item, i) => {
-                    const displayName = itemStats[i].displayName;
-                    const itemWins = wins[item] || [];
-                    const nameClass = getNameSizeClass(displayName);
-                    html += `
-                        <div class="wins-column">
-                            <h4 class="flex items-center gap-2">
-                                <span class="inline-block w-3 h-3 rounded-full flex-shrink-0" style="background: ${itemColors[i]}"></span>
-                                <span class="truncate ${nameClass === 'long' ? 'text-xs' : nameClass === 'medium' ? 'text-sm' : ''}" title="${displayName}">${displayName}</span>
-                                <span class="text-gray-500 flex-shrink-0">(${itemWins.length})</span>
-                            </h4>
-                            ${itemWins.length > 0 
-                                ? itemWins.map(w => `<div class="win-item"><span class="aspect">${w.aspect}</span><span class="score">${w.score}%</span></div>`).join('')
-                                : '<p class="text-xs text-gray-500">No winning attributes</p>'
-                            }
-                        </div>
-                    `;
-                });
-                
-                html += `</div></div>`;
-                document.getElementById('comparisonContent').innerHTML = html;
-                
-            } catch (e) {
-                console.error('Comparison error:', e);
-                document.getElementById('comparisonContent').innerHTML = '<p class="text-red-400">Error loading comparison</p>';
-            }
-        }
-        
-        function getHeatClass(value) {
-            if (value >= 80) return 'heat-vhigh';
-            if (value >= 65) return 'heat-high';
-            if (value >= 45) return 'heat-med';
-            if (value >= 30) return 'heat-low';
-            return 'heat-vlow';
-        }
-        
-        function getSovHeatClass(value) {
-            // For Share of Voice: higher % = more discussion = darker teal
-            if (value >= 25) return 'heat-vhigh';
-            if (value >= 15) return 'heat-high';
-            if (value >= 8) return 'heat-med';
-            if (value >= 3) return 'heat-low';
-            return 'heat-vlow';
-        }
-        
-        function getHeatClassInverse(value) {
-            if (value <= 20) return 'heat-vhigh';
-            if (value <= 30) return 'heat-high';
-            if (value <= 40) return 'heat-med';
-            return 'heat-low';
-        }
-        
-        function formatNumber(num) {
-            if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
-            if (num >= 1000) return (num / 1000).toFixed(0) + 'k';
-            return num.toLocaleString();
-        }
-
-        // ═══════════════════════════════════════════
-        // STAY PURPOSE & TRAVELER TYPE PREFERENCES
-        // ═══════════════════════════════════════════
-        const MIN_MENTIONS = 5; // Minimum mentions to show score
-        
-        async function loadStayPurposePreferences() {
-            if ((viewMode === 'hotel' && !currentHotel) || (viewMode === 'brand' && !currentBrand)) return;
-            const params = buildParams();
-            
-            try {
-                const response = await fetch(`/api/stay_purpose_preferences?${params}`);
-                const data = await response.json();
-                
-                if (!Array.isArray(data) || data.length === 0) {
-                    document.getElementById('stayPurposeContent').innerHTML = '<p class="text-gray-500">No stay purpose data available</p>';
-                    return;
-                }
-                
-                // Filter out aspects with insufficient data across all rows
-                const allAspects = ['Dining', 'Cleanliness', 'Amenities', 'Staff', 'Room', 'Location', 'Value for Money', 'General'];
-                const aspects = allAspects.filter(a => {
-                    return data.some(row => row.aspects[a]?.mentions >= MIN_MENTIONS);
-                });
-                
-                let html = `<table class="data-table"><thead><tr><th>Stay Purpose</th>`;
-                aspects.forEach(a => { html += `<th class="text-center">${a}</th>`; });
-                html += `</tr></thead><tbody>`;
-                
-                data.forEach(row => {
-                    html += `<tr><td class="text-gray-300 font-medium">${row.stay_purpose}</td>`;
-                    aspects.forEach(a => {
-                        const aspectData = row.aspects[a];
-                        if (!aspectData || aspectData.mentions < MIN_MENTIONS) {
-                            html += `<td><span class="text-gray-600">-</span></td>`;
-                        } else {
-                            const val = aspectData.satisfaction || 0;
-                            html += `<td><span class="heat-cell ${getHeatClass(val)}">${val}%</span></td>`;
-                        }
-                    });
-                    html += `</tr>`;
-                });
-                
-                html += `</tbody></table>`;
-                document.getElementById('stayPurposeContent').innerHTML = html;
-            } catch (e) {
-                console.error('Stay purpose preferences error:', e);
-            }
-        }
-
-        async function loadTravelerTypePreferences() {
-            if ((viewMode === 'hotel' && !currentHotel) || (viewMode === 'brand' && !currentBrand)) return;
-            const params = buildParams();
-            
-            try {
-                const response = await fetch(`/api/traveler_preferences?${params}`);
-                const data = await response.json();
-                
-                if (!Array.isArray(data) || data.length === 0) {
-                    document.getElementById('travelerTypeContent').innerHTML = '<p class="text-gray-500">No traveler type data available</p>';
-                    return;
-                }
-                
-                // Filter out aspects with insufficient data across all rows
-                const allAspects = ['Dining', 'Cleanliness', 'Amenities', 'Staff', 'Room', 'Location', 'Value for Money', 'General'];
-                const aspects = allAspects.filter(a => {
-                    return data.some(row => row.aspects[a]?.mentions >= MIN_MENTIONS);
-                });
-                
-                let html = `<table class="data-table"><thead><tr><th>Traveler Type</th>`;
-                aspects.forEach(a => { html += `<th class="text-center">${a}</th>`; });
-                html += `</tr></thead><tbody>`;
-                
-                data.forEach(row => {
-                    html += `<tr><td class="text-gray-300 font-medium">${row.traveler_type}</td>`;
-                    aspects.forEach(a => {
-                        const aspectData = row.aspects[a];
-                        if (!aspectData || aspectData.mentions < MIN_MENTIONS) {
-                            html += `<td><span class="text-gray-600">-</span></td>`;
-                        } else {
-                            const val = aspectData.satisfaction || 0;
-                            html += `<td><span class="heat-cell ${getHeatClass(val)}">${val}%</span></td>`;
-                        }
-                    });
-                    html += `</tr>`;
-                });
-                
-                html += `</tbody></table>`;
-                document.getElementById('travelerTypeContent').innerHTML = html;
-            } catch (e) {
-                console.error('Traveler type preferences error:', e);
-            }
-        }
-
-        // ═══════════════════════════════════════════
-        // CHAT
-        // ═══════════════════════════════════════════
-        async function sendMessage(msg) {
-            const message = (msg || '').trim();
-            if (!message) return;
-            
-            document.getElementById('chatInput').value = '';
-            const messagesDiv = document.getElementById('chatMessages');
-            
-            // Add user message
-            messagesDiv.innerHTML += `
-                <div class="flex gap-3 justify-end">
-                    <div class="glass rounded-2xl rounded-tr-none p-4 max-w-[80%] bg-purple-900/30">
-                        <p class="text-sm">${escapeHtml(message)}</p>
-                    </div>
-                </div>
-            `;
-            
-            // Add typing indicator
-            const typingId = 'typing-' + Date.now();
-            messagesDiv.innerHTML += `
-                <div id="${typingId}" class="flex gap-3">
-                    <div class="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center flex-shrink-0">🤖</div>
-                    <div class="glass rounded-2xl rounded-tl-none p-4">
-                        <div class="typing-indicator flex gap-1">
-                            <span class="w-2 h-2 bg-purple-400 rounded-full"></span>
-                            <span class="w-2 h-2 bg-purple-400 rounded-full"></span>
-                            <span class="w-2 h-2 bg-purple-400 rounded-full"></span>
-                        </div>
-                    </div>
-                </div>
-            `;
-            
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
-            
-            try {
-                const response = await fetch('/api/chat', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        message,
-                        product_id: viewMode === 'hotel' ? currentProductId : null,
-                        brand_id: viewMode === 'brand' ? currentBrand : null,
-                        category: 'hotels'
-                    })
-                });
-                
-                const data = await response.json();
-                document.getElementById(typingId)?.remove();
-                
-                // Parse markdown response
-                const formattedResponse = marked.parse(data.response || 'No response');
-                
-                messagesDiv.innerHTML += `
-                    <div class="flex gap-3">
-                        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center flex-shrink-0">🤖</div>
-                        <div class="glass rounded-2xl rounded-tl-none p-4 max-w-[90%]">
-                            <div class="text-sm message-content">${formattedResponse}</div>
-                        </div>
-                    </div>
-                `;
-                
-                messagesDiv.scrollTop = messagesDiv.scrollHeight;
-            } catch (e) {
-                document.getElementById(typingId)?.remove();
-                messagesDiv.innerHTML += `
-                    <div class="flex gap-3">
-                        <div class="w-8 h-8 rounded-full bg-red-500/50 flex items-center justify-center flex-shrink-0">⚠️</div>
-                        <div class="glass rounded-2xl rounded-tl-none p-4 max-w-[85%]">
-                            <p class="text-sm text-red-400">Error: ${e.message}</p>
-                        </div>
-                    </div>
-                `;
-            }
-        }
-        
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
-
-        // ═══════════════════════════════════════════
-        // NEW: EMOTIONS, PAIN POINTS, DELIGHTS, R&D
-        // ═══════════════════════════════════════════
-        
-        const EMOTION_COLORS = {
-            'joy': { bg: 'bg-green-900/50', text: 'text-green-300', icon: '😄' },
-            'trust': { bg: 'bg-blue-900/50', text: 'text-blue-300', icon: '🤝' },
-            'anticipation': { bg: 'bg-purple-900/50', text: 'text-purple-300', icon: '✨' },
-            'anger': { bg: 'bg-red-900/50', text: 'text-red-300', icon: '😠' },
-            'sadness': { bg: 'bg-gray-700/50', text: 'text-gray-300', icon: '😢' },
-            'fear': { bg: 'bg-indigo-900/50', text: 'text-indigo-300', icon: '😨' },
-            'surprise': { bg: 'bg-yellow-900/50', text: 'text-yellow-300', icon: '😲' },
-            'disgust': { bg: 'bg-lime-900/50', text: 'text-lime-300', icon: '🤢' }
-        };
-        
-        function renderEmotions(emotions) {
-            if (!emotions || emotions.length === 0) {
-                document.getElementById('emotionsRow').classList.add('hidden');
-                return;
-            }
-            
-            document.getElementById('emotionsRow').classList.remove('hidden');
-            const container = document.getElementById('emotionsBar');
-            
-            container.innerHTML = emotions.slice(0, 6).map(e => {
-                const color = EMOTION_COLORS[e.emotion] || { bg: 'bg-gray-700/50', text: 'text-gray-300', icon: '😐' };
-                return `<span class="${color.bg} ${color.text} px-3 py-1.5 rounded-full text-xs font-medium">
-                    ${color.icon} ${e.emotion} ${e.percentage || 0}%
-                </span>`;
-            }).join('');
-        }
-        
-        function renderPainPoints(painPoints) {
-            if (!painPoints || painPoints.length === 0) return;
-            
-            const container = document.getElementById('painPointsList');
-            container.innerHTML = painPoints.slice(0, 5).map(p => `
-                <div class="flex justify-between items-center p-2 glass-dark rounded-lg cursor-pointer hover:bg-white/5 transition border-l-2 border-red-500"
-                     onclick="openDrilldown(${currentProductId}, '${escapeHtml(p.phrase)}', 'pain_point')">
-                    <span class="text-red-300 text-xs">${escapeHtml(p.phrase)}</span>
-                    <span class="text-gray-500 text-xs">${p.mention_count} →</span>
-                </div>
-            `).join('');
-        }
-        
-        function renderDelights(delights) {
-            if (!delights || delights.length === 0) return;
-            
-            const container = document.getElementById('delightsList');
-            container.innerHTML = delights.slice(0, 5).map(d => `
-                <div class="flex justify-between items-center p-2 glass-dark rounded-lg cursor-pointer hover:bg-white/5 transition border-l-2 border-green-500"
-                     onclick="openDrilldown(${currentProductId}, '${escapeHtml(d.phrase)}', 'delight')">
-                    <span class="text-green-300 text-xs">${escapeHtml(d.phrase)}</span>
-                    <span class="text-gray-500 text-xs">${d.mention_count} →</span>
-                </div>
-            `).join('');
-        }
-        
-        function renderRdSignals(rdSignals) {
-            if (!rdSignals) return;
-            
-            const renderList = (items, containerId) => {
-                const container = document.getElementById(containerId);
-                if (!items || items.length === 0) {
-                    container.innerHTML = '<span class="text-gray-600">No data</span>';
-                    return;
-                }
-                container.innerHTML = items.slice(0, 4).map(item => `
-                    <div class="text-gray-400 cursor-pointer hover:text-white transition py-1"
-                         onclick="openDrilldown(${currentProductId}, '${escapeHtml(item.phrase)}', 'rd_signal')">
-                        • ${escapeHtml(item.phrase)} <span class="text-gray-600">→</span>
-                    </div>
-                `).join('');
-            };
-            
-            renderList(rdSignals.feature_request, 'featureRequestsList');
-            renderList(rdSignals.price_feedback, 'priceFeedbackList');
-            renderList(rdSignals.expectation_gap, 'expectationGapList');
-        }
-        
-        function showNewFeatures(show) {
-            const rows = ['emotionsRow', 'painDelightsRow', 'rdSignalsRow'];
-            rows.forEach(id => {
-                document.getElementById(id).classList.toggle('hidden', !show);
-            });
-        }
-        
-        // ═══════════════════════════════════════════
-        // DRILL-DOWN MODAL
-        // ═══════════════════════════════════════════
-        
-        let currentProductId = null;
-        
-        let drilldownState = { productId: null, phrase: null, signalType: null, allReviews: [], showing: 3 };
-
-        function renderDrilldownReviews() {
-            const content = document.getElementById('drilldownContent');
-            const countText = document.getElementById('drilldownCount');
-            const { allReviews, showing, phrase } = drilldownState;
-            const visible = allReviews.slice(0, showing);
-            countText.textContent = `Showing ${visible.length} of ${allReviews.length} reviews`;
-            const reviewsHtml = visible.map(r => {
-                const stars = '⭐'.repeat(Math.round(r.star_rating || 0));
-                const reviewText = highlightSentiment(r.review_text || '', r.sentiment_text || '');
-                return `
-                    <div style="background:#252035;border-radius:8px;padding:14px;margin-bottom:10px;">
-                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-                            <div style="display:flex;align-items:center;gap:8px;">
-                                <span style="color:#fbbf24;font-size:12px;">${stars}</span>
-                                <span style="color:#e5e7eb;font-size:13px;font-weight:500;">${escapeHtml(r.reviewer_name || 'Guest')}</span>
-                                <span style="color:#6b7280;font-size:11px;">${formatDate(r.review_date)}</span>
-                            </div>
-                            ${r.traveler_type ? `<span style="background:#374151;color:#9ca3af;padding:2px 8px;border-radius:4px;font-size:11px;">${escapeHtml(r.traveler_type)}</span>` : ''}
-                        </div>
-                        <p style="color:#d1d5db;font-size:13px;line-height:1.6;margin:0;">${reviewText}</p>
-                    </div>`;
-            }).join('');
-            const loadMoreBtn = allReviews.length > showing
-                ? `<div style="text-align:center;padding:8px 0;">
-                     <button onclick="loadMoreDrilldown()" style="background:#374151;color:#e5e7eb;border:none;padding:8px 20px;border-radius:6px;font-size:13px;cursor:pointer;">
-                       Load More Reviews (${allReviews.length - showing} remaining)
-                     </button>
-                   </div>`
-                : '';
-            content.innerHTML = reviewsHtml + loadMoreBtn;
-        }
-
-        function loadMoreDrilldown() {
-            drilldownState.showing += 3;
-            renderDrilldownReviews();
-        }
-
-        async function openDrilldown(productId, phrase, signalType) {
-            const modal = document.getElementById('drilldownModal');
-            const title = document.getElementById('drilldownTitle');
-            const content = document.getElementById('drilldownContent');
-            const countText = document.getElementById('drilldownCount');
-            
-            const typeLabels = { 'pain_point': '❌ Pain Point', 'delight': '✅ Delight', 'rd_signal': '🔬 R&D Signal' };
-            title.innerHTML = `${typeLabels[signalType] || 'Reviews'}: "${phrase}"`;
-            content.innerHTML = '<div style="text-align:center;padding:2rem;color:#9ca3af;">Loading reviews...</div>';
-            countText.textContent = '';
-            modal.classList.remove('hidden');
-            
-            try {
-                const response = await fetch('/api/drilldown', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ product_id: productId, phrase, signal_type: signalType, limit: 50 })
-                });
-                const data = await response.json();
-                if (!data.reviews || data.reviews.length === 0) {
-                    content.innerHTML = '<div style="text-align:center;padding:2rem;color:#6b7280;">No reviews found for this phrase.</div>';
-                    return;
-                }
-                drilldownState = { productId, phrase, signalType, allReviews: data.reviews, showing: 3 };
-                renderDrilldownReviews();
-            } catch (e) {
-                content.innerHTML = `<div style="text-align:center;padding:2rem;color:#ef4444;">Error: ${e.message}</div>`;
-            }
-        }
-        
-        function closeDrilldown() {
-            document.getElementById('drilldownModal').classList.add('hidden');
-        }
-        
-        function highlightSentiment(reviewText, sentimentText) {
-            if (!sentimentText || !reviewText) return escapeHtml(reviewText);
-            const escapedReview = escapeHtml(reviewText);
-            const escapedSentiment = escapeHtml(sentimentText);
-            const regex = new RegExp(`(${escapedSentiment.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
-            return escapedReview.replace(regex, '<mark style="background:#fef08a;color:#1a1625;padding:1px 4px;border-radius:2px;">$1</mark>');
-        }
-        
-        function formatDate(dateStr) {
-            if (!dateStr) return '';
-            try {
-                const date = new Date(dateStr);
-                return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-            } catch {
-                return dateStr;
-            }
-        }
-        
-        async function loadHotelDataV2(productId) {
-            if (!productId) return;
-            currentProductId = productId;
-
-            try {
-                const response = await fetch(`/api/hotel/${productId}/summary`);
-                const data = await response.json();
-
-                // ── Context header ──────────────────────────────
-                document.getElementById('contextIcon').textContent = '🏨';
-                document.getElementById('contextTitle').textContent = data.hotel_name || currentHotelName || productId;
-                const stars = data.star_category ? '⭐'.repeat(data.star_category) : '';
-                document.getElementById('contextSubtitle').textContent =
-                    `${data.brand_name || ''} • ${data.city || ''} ${stars ? '• ' + stars : ''}`.trim().replace(/^•|•$/g,'').trim();
-                document.getElementById('contextRating').textContent = data.google_rating ? `★ ${Number(data.google_rating).toFixed(1)}` : '--';
-                document.getElementById('contextReviews').textContent = data.review_count ? Number(data.review_count).toLocaleString() : '--';
-                document.getElementById('contextAddress').textContent = data.address || '';
-                document.getElementById('contextMeta').classList.remove('hidden');
-                if (data.about_us) {
-                    document.getElementById('contextDescription').textContent = data.about_us;
-                    document.getElementById('contextDescription').classList.remove('hidden');
-                } else {
-                    document.getElementById('contextDescription').classList.add('hidden');
-                }
-
-                // ── Stats cards ─────────────────────────────────
-                const sat = data.overall_satisfaction || 0;
-                document.getElementById('statOverall').textContent = sat + '%';
-
-                const aspects = data.aspects || [];
-                const mentions = aspects.reduce((s,a) => s + (a.total_mentions||0), 0);
-                document.getElementById('statMentions').textContent = `Based on ${mentions.toLocaleString()} mentions`;
-
-                const sortedA = [...aspects].sort((a,b) => (b.satisfaction_pct||0) - (a.satisfaction_pct||0));
-                if (sortedA.length > 0) {
-                    document.getElementById('statStrength').textContent = sortedA[0].aspect_name;
-                    document.getElementById('statStrengthScore').textContent = (sortedA[0].satisfaction_pct||0) + '% satisfaction';
-                    const weakest = sortedA[sortedA.length-1];
-                    document.getElementById('statWeakness').textContent = weakest.aspect_name;
-                    document.getElementById('statWeaknessScore').textContent = (weakest.satisfaction_pct||0) + '% satisfaction';
-                }
-
-                // Guest type (filter unknown)
-                const demo = data.demographics || {};
-                const knownTypes = (demo.traveler_type||[]).filter(t => t.dimension_value && t.dimension_value.toLowerCase() !== 'unknown');
-                if (knownTypes.length > 0) {
-                    const knownTotal = knownTypes.reduce((s,t) => s + t.count, 0);
-                    document.getElementById('statGuestType').textContent = knownTypes[0].dimension_value;
-                    document.getElementById('statGuestPct').textContent = Math.round(knownTypes[0].count * 100 / knownTotal) + '% of guests';
-                } else {
-                    document.getElementById('statGuestType').textContent = '--';
-                    document.getElementById('statGuestPct').textContent = '--';
-                }
-
-                // ── Emotions ────────────────────────────────────
-                renderEmotions(data.emotions || []);
-
-                // ── Pain points & delights ──────────────────────
-                const pains = data.pain_points || [];
-                const delights = data.delights || [];
-                document.getElementById('painDelightsRow').classList.remove('hidden');
-                if (pains.length > 0) {
-                    renderPainPoints(pains);
-                } else {
-                    document.getElementById('painPointsList').innerHTML = '<p class="text-gray-600 text-xs">No pain points found</p>';
-                }
-                if (delights.length > 0) {
-                    renderDelights(delights);
-                } else {
-                    document.getElementById('delightsList').innerHTML = '<p class="text-gray-600 text-xs">No delights found</p>';
-                }
-
-                // ── R&D Signals ─────────────────────────────────
-                const rd = data.rd_signals || {};
-                document.getElementById('rdSignalsRow').classList.remove('hidden');
-                renderRdSignals(rd);
-
-                // ── Charts row ─────────────────────────────────
-                if (aspects.length > 0) {
-                    document.getElementById('chartsRow').classList.remove('hidden');
-                    const ICONS = {1:'🍽️',2:'🧹',3:'🏊',4:'👨‍💼',5:'🛏️',6:'📍',7:'💰',8:'⭐'};
-                    const sortedSov = [...aspects].sort((a,b) => (b.share_of_voice_pct||0) - (a.share_of_voice_pct||0));
-
-                    // SoV bar chart
-                    if (charts.sov) charts.sov.destroy();
-                    charts.sov = new ApexCharts(document.getElementById('sovChart'), {
-                        series: [{ name: 'Share of Voice', data: sortedSov.map(d => d.share_of_voice_pct||0) }],
-                        chart: { type: 'bar', height: 300, background: 'transparent', toolbar: { show: false } },
-                        plotOptions: { bar: { horizontal: true, borderRadius: 4, barHeight: '65%' } },
-                        colors: ['#0d9488'],
-                        xaxis: { categories: sortedSov.map(d => `${ICONS[d.aspect_id]||''} ${d.aspect_name}`), labels: { style: { colors: '#9ca3af' }, formatter: v => v + '%' } },
-                        yaxis: { labels: { style: { colors: '#e2e8f0', fontSize: '12px' } } },
-                        dataLabels: { enabled: true, formatter: v => v + '%', style: { colors: ['#fff'], fontSize: '11px' } },
-                        grid: { borderColor: 'rgba(255,255,255,0.06)' },
-                        tooltip: { theme: 'dark' }
-                    });
-                    charts.sov.render();
-
-                    // Satisfaction horizontal bars (inline HTML, not chart library)
-                    const satSorted = [...aspects].sort((a,b) => (b.satisfaction_pct||0) - (a.satisfaction_pct||0));
-                    document.getElementById('satisfactionBarsDiv').innerHTML = satSorted.map(a => {
-                        const pct = a.satisfaction_pct || 0;
-                        const color = pct >= 80 ? '#22c55e' : pct >= 60 ? '#f59e0b' : '#ef4444';
-                        const icon = ICONS[a.aspect_id] || '⭐';
-                        return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-                            <span style="width:80px;color:#9ca3af;font-size:12px;flex-shrink:0;">${icon} ${a.aspect_name}</span>
-                            <div style="flex:1;height:8px;background:#374151;border-radius:4px;overflow:hidden;">
-                                <div style="width:${pct}%;height:100%;background:${color};border-radius:4px;"></div>
-                            </div>
-                            <span style="color:${color};font-size:12px;width:32px;text-align:right;">${pct}%</span>
-                        </div>`;
-                    }).join('');
-                }
-
-                return data;
-            } catch (e) {
-                console.error('Error loading hotel data:', e);
-            }
-        }
-        
-        function renderAspectCharts(aspects) {
-            if (!aspects || aspects.length === 0) return;
-            
-            // Find top strength and weakness
-            const sorted = [...aspects].sort((a, b) => (b.satisfaction_pct || 0) - (a.satisfaction_pct || 0));
-            if (sorted.length > 0) {
-                document.getElementById('statStrength').textContent = sorted[0].aspect_name;
-                document.getElementById('statStrengthScore').textContent = (sorted[0].satisfaction_pct || 0) + '%';
-            }
-            if (sorted.length > 1) {
-                const weakest = sorted[sorted.length - 1];
-                document.getElementById('statWeakness').textContent = weakest.aspect_name;
-                document.getElementById('statWeaknessScore').textContent = (weakest.satisfaction_pct || 0) + '%';
-            }
-        }
-    </script>
-    
-    <!-- DRILL-DOWN MODAL -->
-    <div id="drilldownModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4" style="background: rgba(0,0,0,0.7); backdrop-filter: blur(4px);">
-        <div class="glass rounded-2xl max-w-2xl w-full max-h-[80vh] flex flex-col" style="background: rgba(26, 26, 62, 0.98);">
-            <div class="flex justify-between items-center p-4 border-b border-white/10">
-                <div>
-                    <h3 id="drilldownTitle" class="text-lg font-semibold text-white">Reviews</h3>
-                    <p id="drilldownCount" class="text-xs text-gray-500 mt-1"></p>
-                </div>
-                <button onclick="closeDrilldown()" class="text-gray-400 hover:text-white text-2xl">&times;</button>
-            </div>
-            <div id="drilldownContent" class="p-4 overflow-y-auto flex-1">
-                <!-- Populated by JS -->
-            </div>
-            <div class="p-4 border-t border-white/10 text-center">
-                <button onclick="closeDrilldown()" class="glass px-6 py-2 rounded-lg text-sm hover:bg-white/10 transition">Close</button>
-            </div>
-        </div>
+  <!-- Stats row -->
+  <div id="statsRow" class="hidden">
+    <div class="stat-card">
+      <div class="stat-lbl">Overall Satisfaction <span>&#128202;</span></div>
+      <div id="statOverall" class="stat-val" style="color:#a855f7">--</div>
+      <div id="statMentions" class="stat-sub">Based on mentions</div>
     </div>
+    <div class="stat-card">
+      <div class="stat-lbl">Top Strength <span>&#128170;</span></div>
+      <div id="statStrength" class="stat-val" style="color:#22c55e">--</div>
+      <div id="statStrengthScore" class="stat-sub">--</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-lbl">Top Weakness <span>&#128295;</span></div>
+      <div id="statWeakness" class="stat-val" style="color:#ef4444">--</div>
+      <div id="statWeaknessScore" class="stat-sub">--</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-lbl">Top Guest Type <span>&#128101;</span></div>
+      <div id="statGuestType" class="stat-val" style="color:#a855f7">--</div>
+      <div id="statGuestPct" class="stat-sub">--</div>
+    </div>
+  </div>
+
+  <!-- Emotions -->
+  <div id="emotionsRow" class="hidden">
+    <div class="sec-lbl">TOP EMOTIONS</div>
+    <div id="emotionsBar"></div>
+  </div>
+
+  <!-- Charts row (drivers tab) -->
+  <div id="chartsRow" class="hidden">
+    <div class="card">
+      <div class="card-title">Share of Voice</div>
+      <div id="sovChart"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Satisfaction by Aspect</div>
+      <div id="satisfactionBarsDiv"></div>
+    </div>
+  </div>
+
+  <!-- Pain points & delights -->
+  <div id="painDelightsRow" class="hidden">
+    <div class="sig-card">
+      <div class="sig-title" style="color:#ef4444">&#10060; Pain Points <span style="color:#6b7280;font-size:10px;font-weight:400">click to see reviews</span></div>
+      <div id="painPointsList"></div>
+    </div>
+    <div class="sig-card">
+      <div class="sig-title" style="color:#22c55e">&#10003; Delights <span style="color:#6b7280;font-size:10px;font-weight:400">click to see reviews</span></div>
+      <div id="delightsList"></div>
+    </div>
+  </div>
+
+  <!-- R&D Signals -->
+  <div id="rdSignalsRow" class="hidden">
+    <div class="card-title" style="margin-bottom:10px">&#128300; R&D Signals <span style="color:#6b7280;font-size:10px;font-weight:400">click to see reviews</span></div>
+    <div class="rd-grid">
+      <div class="rd-col"><div class="rd-col-title" style="color:#fbbf24">&#128161; Feature Requests</div><div id="featureRequestsList"></div></div>
+      <div class="rd-col"><div class="rd-col-title" style="color:#f87171">&#128176; Price Feedback</div><div id="priceFeedbackList"></div></div>
+      <div class="rd-col"><div class="rd-col-title" style="color:#fb923c">&#9888; Expectation Gap</div><div id="expectationGapList"></div></div>
+    </div>
+  </div>
+
+  <!-- Subtabs -->
+  <div id="subTabsRow" class="hidden">
+    <button class="sub-tab active" data-tab="drivers" onclick="showSubTab('drivers')">&#128202; Drivers</button>
+    <button class="sub-tab" data-tab="satisfaction" onclick="showSubTab('satisfaction')">&#128196; Satisfaction</button>
+    <button class="sub-tab" data-tab="demographics" onclick="showSubTab('demographics')">&#128101; Demographics</button>
+    <button class="sub-tab" data-tab="stayPurpose" onclick="showSubTab('stayPurpose')">&#127987; Stay Purpose</button>
+    <button class="sub-tab" data-tab="travelerType" onclick="showSubTab('travelerType')">&#9992; Traveler Type</button>
+  </div>
+
+  <!-- Tab panels -->
+  <div id="driversTab" class="tab-panel"></div>
+
+  <div id="satisfactionTab" class="tab-panel hidden">
+    <div class="card"><div class="card-title">Satisfaction by Aspect</div><div id="satisfactionChart"></div></div>
+  </div>
+
+  <div id="demographicsTab" class="tab-panel hidden">
+    <div class="demo-grid">
+      <div class="demo-card"><div class="demo-title">Gender</div><div id="genderChart"></div></div>
+      <div class="demo-card"><div class="demo-title">Traveler Type</div><div id="travelerChart"></div></div>
+      <div class="demo-card"><div class="demo-title">Stay Purpose</div><div id="purposeChart"></div></div>
+    </div>
+  </div>
+
+  <div id="stayPurposeTab" class="tab-panel hidden">
+    <div class="card"><div class="card-title">Stay Purpose × Aspect Satisfaction</div><div id="stayPurposeContent" style="overflow-x:auto"></div></div>
+  </div>
+
+  <div id="travelerTypeTab" class="tab-panel hidden">
+    <div class="card"><div class="card-title">Traveler Type × Aspect Satisfaction</div><div id="travelerTypeContent" style="overflow-x:auto"></div></div>
+  </div>
+
+  <div id="comparisonTab" class="tab-panel hidden">
+    <div class="card"><div id="comparisonContent" style="color:#4b5563;text-align:center;padding:2rem">Select items and click Compare</div></div>
+  </div>
+
+</div>
+
+<!-- FOOTER -->
+<div class="footer">
+  <span>&#169; 2026 Acquink. All rights reserved.</span>
+  <span>Powered by <span class="masi">MASI</span> Technology</span>
+</div>
+
+<!-- DRILLDOWN MODAL -->
+<div id="drilldownOverlay" onclick="if(event.target===this)closeDrilldown()">
+  <div id="drilldownModal">
+    <div class="modal-hdr">
+      <div>
+        <div id="drilldownTitle">Reviews</div>
+        <div id="drilldownCount"></div>
+      </div>
+      <button class="modal-close-btn" onclick="closeDrilldown()">&#10005;</button>
+    </div>
+    <div id="drilldownContent"></div>
+    <div class="modal-footer" id="drilldownFooter"></div>
+  </div>
+</div>
+
+<!-- CHAT PANEL -->
+<div id="chatOverlay" onclick="closeChat()"></div>
+<div id="chatPanel">
+  <div class="chat-header">
+    <div>
+      <div class="chat-title">&#128172; SmaartAnalyst</div>
+      <div id="chatContextLabel">Hotel Intelligence AI</div>
+    </div>
+    <div class="chat-hdr-btns">
+      <button class="chat-hdr-btn" onclick="closeChat()">&#10005;</button>
+    </div>
+  </div>
+  <div id="chatMessages">
+    <div class="msg-bot">Hi! I'm SmaartAnalyst. Select a hotel or brand and ask me anything about guest sentiment, pain points, or competitive insights.</div>
+  </div>
+  <div class="chat-input-row">
+    <input id="chatInput" type="text" placeholder="Ask about guest sentiment, pain points...">
+    <button id="chatSend">&#10148;</button>
+  </div>
+</div>
+
+<script>
+// ─── STATE ────────────────────────────────────────────────────
+let currentMode = 'brand', viewMode = 'brand';
+let currentBrand = null, currentHotel = null, currentHotelName = null;
+let currentCity = null, currentStar = null, currentProductId = null;
+let activeTab = 'drivers';
+let allHotelsCache = [], currentSearchResults = [], currentSearchQuery = '';
+let drilldownState = { allReviews: [], showing: 3 };
+
+const EMOTION_COLORS = {
+  joy:{bg:'#14532d',text:'#86efac',icon:'&#128516;'},
+  trust:{bg:'#1e3a8a',text:'#93c5fd',icon:'&#129309;'},
+  anticipation:{bg:'#581c87',text:'#d8b4fe',icon:'&#10024;'},
+  anger:{bg:'#7f1d1d',text:'#fca5a5',icon:'&#128545;'},
+  sadness:{bg:'#374151',text:'#d1d5db',icon:'&#128546;'},
+  fear:{bg:'#1e3a5f',text:'#bfdbfe',icon:'&#128561;'},
+  surprise:{bg:'#713f12',text:'#fde68a',icon:'&#128562;'},
+  disgust:{bg:'#1a2e05',text:'#bef264',icon:'&#129314;'}
+};
+
+// ─── LOADER ───────────────────────────────────────────────────
+function showLoader(){document.getElementById('loader').classList.add('show')}
+function hideLoader(){document.getElementById('loader').classList.remove('show')}
+
+// ─── INIT ─────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadHotelSearchCache();
+  setupHotelSearch();
+  await loadBrands();
+  switchMode('brand');
+  document.getElementById('chatSend').addEventListener('click', () => sendMessage(document.getElementById('chatInput').value));
+  document.getElementById('chatInput').addEventListener('keydown', e => { if(e.key==='Enter') sendMessage(document.getElementById('chatInput').value); });
+});
+
+// ─── SEARCH ───────────────────────────────────────────────────
+async function loadHotelSearchCache() {
+  try {
+    const r = await fetch('/api/hotels');
+    if(r.ok){ const d = await r.json(); allHotelsCache = d.hotels || []; }
+  } catch(e){}
+}
+
+function setupHotelSearch() {
+  const input = document.getElementById('hotelSearchInput');
+  const dropdown = document.getElementById('hotelSearchDropdown');
+  input.addEventListener('input', e => {
+    const q = e.target.value.trim().toLowerCase();
+    if(q.length < 2){ dropdown.classList.remove('show'); return; }
+    const results = allHotelsCache.filter(h =>
+      (h.hotel_name||'').toLowerCase().includes(q) ||
+      (h.brand_name||'').toLowerCase().includes(q) ||
+      (h.city||'').toLowerCase().includes(q)
+    ).slice(0, 10);
+    currentSearchResults = results;
+    renderSearchResults(results, q);
+  });
+  document.addEventListener('click', e => {
+    if(!document.getElementById('search-wrap')?.contains(e.target) && !input.contains(e.target) && !dropdown.contains(e.target))
+      dropdown.classList.remove('show');
+  });
+}
+
+function renderSearchResults(results, q) {
+  const dropdown = document.getElementById('hotelSearchDropdown');
+  if(!results.length){ dropdown.classList.remove('show'); return; }
+  dropdown.innerHTML = results.map(h => `
+    <div class="hotel-search-item" data-product-id="${h.product_id}" data-hotel-name="${escapeHtml(h.hotel_name)}" data-brand="${escapeHtml(h.brand_name||'')}" data-city="${escapeHtml(h.city||'')}">
+      <div class="hotel-search-name">${highlightMatch(escapeHtml(h.hotel_name),q)}</div>
+      <div class="hotel-search-meta">${escapeHtml(h.brand_name||'')} &bull; ${escapeHtml(h.city||'')} ${'⭐'.repeat(h.star_category||0)}</div>
+    </div>`).join('');
+  dropdown.querySelectorAll('.hotel-search-item').forEach(el => el.addEventListener('click', () => selectSearchResult(el)));
+  dropdown.classList.add('show');
+}
+
+function highlightMatch(text, q) {
+  return text.replace(new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')})`, 'gi'), '<mark style="background:#fef08a;color:#1a1625;border-radius:2px;padding:0 2px">$1</mark>');
+}
+
+async function selectSearchResult(el) {
+  const productId = el.dataset.productId;
+  const hotelName = el.dataset.hotelName;
+  const brand = el.dataset.brand;
+  const city = el.dataset.city;
+  document.getElementById('hotelSearchInput').value = '';
+  document.getElementById('hotelSearchDropdown').classList.remove('show');
+  switchMode('hotel');
+  currentHotel = productId; currentHotelName = hotelName; currentBrand = brand; viewMode = 'hotel';
+  document.getElementById('hotelBrandSelect').value = brand;
+  await loadCitiesFor('hotelView');
+  if(city) document.getElementById('hotelCitySelect').value = city;
+  await loadHotelsFor('hotelView');
+  document.getElementById('hotelSelect').value = productId;
+  showLoader();
+  document.getElementById('contextHeader').classList.remove('hidden');
+  document.getElementById('statsRow').classList.remove('hidden');
+  document.getElementById('subTabsRow').classList.remove('hidden');
+  showSubTab('drivers');
+  await loadHotelDataV2(productId);
+  hideLoader();
+}
+
+// ─── BRANDS / CITIES / HOTELS ─────────────────────────────────
+async function loadBrands() {
+  try {
+    const r = await fetch('/api/brands');
+    if(!r.ok) return;
+    const d = await r.json();
+    const brands = (d.brands||[]).map(b => b.brand_name);
+    const opts = brands.map(b => `<option value="${escapeHtml(b)}">${escapeHtml(b)}</option>`).join('');
+    ['brandSelect','hotelBrandSelect','compareBrandOnly1','compareBrandOnly2','compareBrandOnly3','compareBrand1','compareBrand2','compareBrand3'].forEach(id => {
+      const el = document.getElementById(id);
+      if(el) el.innerHTML = (el.id.includes('compare') && !el.id.includes('Only') ? '<option value="">Brand</option>' : '<option value="">Select Brand</option>') + opts;
+    });
+  } catch(e){}
+}
+
+async function loadCitiesFor(view) {
+  const brand = document.getElementById(view==='brandView'?'brandSelect':'hotelBrandSelect').value;
+  const cityId = view==='brandView'?'citySelect':'hotelCitySelect';
+  try {
+    const r = await fetch(`/api/cities?brand=${encodeURIComponent(brand)}`);
+    const d = await r.json();
+    const cities = d.cities||[];
+    document.getElementById(cityId).innerHTML = '<option value="">All Cities</option>' + cities.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+  } catch(e){}
+}
+
+async function loadStarCategoriesFor(view) {
+  const brandEl = view==='brandView'?'brandSelect':'hotelBrandSelect';
+  const cityEl = view==='brandView'?'citySelect':'hotelCitySelect';
+  const starEl = view==='brandView'?'starSelect':'hotelStarSelect';
+  const brand = document.getElementById(brandEl).value;
+  const city = document.getElementById(cityEl).value;
+  try {
+    let url = `/api/star_categories?brand=${encodeURIComponent(brand)}`;
+    if(city) url += `&city=${encodeURIComponent(city)}`;
+    const r = await fetch(url);
+    const stars = await r.json();
+    document.getElementById(starEl).innerHTML = '<option value="">All Stars</option>' + (stars||[]).map(s=>`<option value="${s}">${'⭐'.repeat(s)} ${s} Star</option>`).join('');
+  } catch(e){}
+}
+
+async function loadHotelsFor(view) {
+  const brand = document.getElementById('hotelBrandSelect').value;
+  const city = document.getElementById('hotelCitySelect').value;
+  const star = document.getElementById('hotelStarSelect')?.value||'';
+  try {
+    let url = `/api/hotels?brand=${encodeURIComponent(brand)}`;
+    if(city) url += `&city=${encodeURIComponent(city)}`;
+    if(star) url += `&star_category=${star}`;
+    const r = await fetch(url);
+    const d = await r.json();
+    const hotels = d.hotels||[];
+    document.getElementById('hotelSelect').innerHTML = '<option value="">Select Hotel</option>' + hotels.map(h=>`<option value="${h.product_id}" data-name="${escapeHtml(h.hotel_name)}">${escapeHtml(h.hotel_name)}</option>`).join('');
+  } catch(e){}
+}
+
+async function loadCitiesForCompareSlot(idx) {
+  const brand = document.getElementById(`compareBrand${idx}`).value;
+  document.getElementById(`compareCity${idx}`).innerHTML = '<option value="">City</option>';
+  document.getElementById(`compareHotel${idx}`).innerHTML = '<option value="">Hotel</option>';
+  if(!brand) return;
+  try {
+    const r = await fetch(`/api/cities?brand=${encodeURIComponent(brand)}`);
+    const d = await r.json();
+    document.getElementById(`compareCity${idx}`).innerHTML = '<option value="">City</option>' + (d.cities||[]).map(c=>`<option>${escapeHtml(c)}</option>`).join('');
+  } catch(e){}
+}
+
+async function loadHotelsForCompareSlot(idx) {
+  const brand = document.getElementById(`compareBrand${idx}`).value;
+  const city = document.getElementById(`compareCity${idx}`).value;
+  const hotelSel = document.getElementById(`compareHotel${idx}`);
+  hotelSel.innerHTML = '<option value="">Hotel</option>';
+  hotelSel.dataset.productId = '';
+  if(!brand||!city) return;
+  try {
+    const r = await fetch(`/api/hotels?brand=${encodeURIComponent(brand)}&city=${encodeURIComponent(city)}`);
+    const d = await r.json();
+    hotelSel.innerHTML = '<option value="">Hotel</option>' + (d.hotels||[]).map(h=>`<option value="${h.product_id}" data-name="${escapeHtml(h.hotel_name)}">${escapeHtml(h.hotel_name)}</option>`).join('');
+  } catch(e){}
+}
+
+function storeProductId(idx) {
+  const sel = document.getElementById(`compareHotel${idx}`);
+  sel.dataset.productId = sel.value;
+}
+
+function populateCompareSelects(){}
+
+// ─── SWITCH MODE ──────────────────────────────────────────────
+function switchMode(mode) {
+  currentMode = mode; viewMode = mode;
+  document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active-tab'));
+  const tabMap = {brand:'brandViewTab',hotel:'hotelViewTab',compareBrands:'compareBrandsTab',compareHotels:'compareHotelsTab'};
+  document.getElementById(tabMap[mode])?.classList.add('active-tab');
+  ['brandViewSelectors','hotelViewSelectors','compareBrandsSelectors','compareHotelsSelectors'].forEach(id => document.getElementById(id).classList.add('hidden'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
+  if(mode==='brand') {
+    document.getElementById('brandViewSelectors').classList.remove('hidden');
+    if(currentBrand) { showContentAreas(); document.getElementById((activeTab||'drivers')+'Tab').classList.remove('hidden'); document.getElementById('chartsRow').classList.remove('hidden'); }
+    else hideContentAreas();
+  } else if(mode==='hotel') {
+    document.getElementById('hotelViewSelectors').classList.remove('hidden');
+    if(currentHotel) { showContentAreas(); document.getElementById((activeTab||'drivers')+'Tab').classList.remove('hidden'); document.getElementById('chartsRow').classList.remove('hidden'); }
+    else hideContentAreas();
+  } else if(mode==='compareBrands'||mode==='compareHotels') {
+    document.getElementById(mode==='compareBrands'?'compareBrandsSelectors':'compareHotelsSelectors').classList.remove('hidden');
+    document.getElementById('comparisonTab').classList.remove('hidden');
+    hideContentAreas();
+  }
+  updateChatContext();
+}
+
+function showContentAreas() {
+  ['contextHeader','statsRow','emotionsRow','painDelightsRow','rdSignalsRow','subTabsRow'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el && !el.dataset.empty) el.classList.remove('hidden');
+  });
+}
+function hideContentAreas() {
+  ['contextHeader','statsRow','emotionsRow','painDelightsRow','rdSignalsRow','subTabsRow','chartsRow'].forEach(id => document.getElementById(id)?.classList.add('hidden'));
+}
+
+function showSubTab(name) {
+  document.querySelectorAll('.sub-tab').forEach(b => b.classList.remove('active'));
+  document.querySelector(`.sub-tab[data-tab="${name}"]`)?.classList.add('active');
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
+  activeTab = name;
+  if(name==='drivers') { document.getElementById('chartsRow').classList.remove('hidden'); }
+  else { document.getElementById('chartsRow').classList.add('hidden'); document.getElementById(name+'Tab')?.classList.remove('hidden'); }
+  if(name==='satisfaction') loadSatisfactionTab();
+  else if(name==='demographics') loadDemographics();
+  else if(name==='stayPurpose') loadStayPurposePreferences();
+  else if(name==='travelerType') loadTravelerTypePreferences();
+}
+
+// ─── APPLY ────────────────────────────────────────────────────
+async function applyBrandView() {
+  currentBrand = document.getElementById('brandSelect').value;
+  currentCity = document.getElementById('citySelect').value||null;
+  currentStar = document.getElementById('starSelect').value||null;
+  currentHotel = null; viewMode = 'brand';
+  if(!currentBrand){ alert('Please select a brand'); return; }
+  showLoader();
+  document.getElementById('contextHeader').classList.remove('hidden');
+  document.getElementById('statsRow').classList.remove('hidden');
+  document.getElementById('subTabsRow').classList.remove('hidden');
+  showSubTab('drivers');
+  await loadDashboard();
+  hideLoader();
+}
+
+async function applyHotelView() {
+  const sel = document.getElementById('hotelSelect');
+  currentHotel = sel.value;
+  currentHotelName = sel.selectedOptions[0]?.dataset.name || sel.selectedOptions[0]?.textContent || '';
+  currentBrand = document.getElementById('hotelBrandSelect').value;
+  viewMode = 'hotel';
+  if(!currentHotel){ alert('Please select a hotel'); return; }
+  showLoader();
+  document.getElementById('contextHeader').classList.remove('hidden');
+  document.getElementById('statsRow').classList.remove('hidden');
+  document.getElementById('subTabsRow').classList.remove('hidden');
+  showSubTab('drivers');
+  await loadHotelDataV2(currentHotel);
+  hideLoader();
+}
+
+async function runBrandComparison() {
+  const items = [1,2,3].map(i => document.getElementById(`compareBrandOnly${i}`).value).filter(v=>v);
+  if(items.length<2){ alert('Select at least 2 brands'); return; }
+  showLoader(); await loadComparison(items,'brand'); hideLoader();
+}
+
+async function runHotelComparison() {
+  const items = [1,2,3].map(i => document.getElementById(`compareHotel${i}`).dataset.productId).filter(v=>v);
+  if(items.length<2){ alert('Select at least 2 hotels'); return; }
+  showLoader(); await loadComparison(items,'hotel'); hideLoader();
+}
+
+// ─── BUILD PARAMS ─────────────────────────────────────────────
+function buildParams() {
+  let p = viewMode==='hotel' ? `product_id=${encodeURIComponent(currentHotel)}` : `brand=${encodeURIComponent(currentBrand)}`;
+  if(viewMode==='brand') { if(currentCity) p+=`&city=${encodeURIComponent(currentCity)}`; if(currentStar) p+=`&star=${encodeURIComponent(currentStar)}`; }
+  return p;
+}
+
+// ─── LOAD DASHBOARD (brand view) ──────────────────────────────
+async function loadDashboard() {
+  if(viewMode==='brand' && !currentBrand) return;
+  await Promise.all([loadContextHeader(), loadStats(), loadDrivers()]);
+  refreshActiveTab();
+}
+
+function refreshActiveTab() {
+  if(activeTab==='satisfaction') loadSatisfactionTab();
+  else if(activeTab==='demographics') loadDemographics();
+  else if(activeTab==='stayPurpose') loadStayPurposePreferences();
+  else if(activeTab==='travelerType') loadTravelerTypePreferences();
+}
+
+async function loadContextHeader() {
+  try {
+    const r = await fetch(`/api/hotel_details?${buildParams()}`);
+    const data = await r.json();
+    if(viewMode==='hotel') {
+      document.getElementById('contextIcon').textContent = '🏨';
+      document.getElementById('contextTitle').textContent = data.hotel_name||currentHotelName||currentHotel;
+      const stars = data.star_category ? '⭐'.repeat(data.star_category) : '';
+      document.getElementById('contextSubtitle').textContent = `${data.brand_name||''} • ${data.city||''} ${stars}`.trim();
+      document.getElementById('contextRating').textContent = data.google_rating ? `★ ${Number(data.google_rating).toFixed(1)}` : '--';
+      document.getElementById('contextReviews').textContent = data.review_count ? Number(data.review_count).toLocaleString() : '--';
+      document.getElementById('contextAddress').textContent = data.address||'';
+    } else {
+      document.getElementById('contextIcon').textContent = '🏢';
+      document.getElementById('contextTitle').textContent = data.brand_name||currentBrand;
+      document.getElementById('contextSubtitle').textContent = `${data.hotel_count||0} hotels in portfolio`;
+      document.getElementById('contextRating').textContent = data.overall_satisfaction ? `${data.overall_satisfaction}%` : '--';
+      document.getElementById('contextReviews').textContent = data.review_count ? Number(data.review_count).toLocaleString() : '--';
+    }
+  } catch(e){}
+}
+
+async function loadStats() {
+  try {
+    const [satR, demoR] = await Promise.all([fetch(`/api/satisfaction?${buildParams()}`), fetch(`/api/demographics?${buildParams()}`)]);
+    const sat = await satR.json(); const demo = await demoR.json();
+    const pos = (sat||[]).reduce((s,a)=>s+(a.positive_count||0),0);
+    const neg = (sat||[]).reduce((s,a)=>s+(a.negative_count||0),0);
+    const total = pos+neg;
+    document.getElementById('statOverall').textContent = total>0 ? Math.round(pos*100/total)+'%' : '--';
+    document.getElementById('statMentions').textContent = `Based on ${total.toLocaleString()} mentions`;
+    const sorted = [...(sat||[])].sort((a,b)=>(b.satisfaction||0)-(a.satisfaction||0));
+    if(sorted.length>0){ document.getElementById('statStrength').textContent=sorted[0].aspect_name; document.getElementById('statStrengthScore').textContent=(sorted[0].satisfaction||0)+'% satisfaction'; }
+    if(sorted.length>1){ const w=sorted[sorted.length-1]; document.getElementById('statWeakness').textContent=w.aspect_name; document.getElementById('statWeaknessScore').textContent=(w.satisfaction||0)+'% satisfaction'; }
+    const known = (demo.traveler_type||[]).filter(t=>t.traveler_type&&t.traveler_type.toLowerCase()!=='unknown');
+    if(known.length>0){ const knownTotal=known.reduce((s,t)=>s+t.review_count,0); document.getElementById('statGuestType').textContent=known[0].traveler_type; document.getElementById('statGuestPct').textContent=Math.round(known[0].review_count*100/knownTotal)+'% of guests'; }
+  } catch(e){}
+}
+
+async function loadDrivers() {
+  try {
+    const r = await fetch(`/api/drivers?${buildParams()}`);
+    const data = await r.json();
+    if(!data||!data.length) return;
+    const ICONS = {1:'🍽️',2:'🧹',3:'🏊',4:'👨‍💼',5:'🛏️',6:'📍',7:'💰',8:'⭐'};
+    const sortedSov = [...data].sort((a,b)=>(b.share_of_voice||0)-(a.share_of_voice||0));
+    document.getElementById('sovChart').innerHTML = sortedSov.map(d => {
+      const pct = d.share_of_voice||0;
+      return `<div class="css-bar-row"><div class="css-bar-lbl">${ICONS[d.aspect_id]||''} ${d.aspect_name}</div><div class="css-bar-track"><div class="css-bar-fill" style="width:${Math.min(pct,100)}%;background:#0d9488"></div></div><div class="css-bar-val" style="color:#9ca3af">${pct}%</div></div>`;
+    }).join('');
+    const sortedSat = [...data].sort((a,b)=>(a.satisfaction||0)-(b.satisfaction||0));
+    document.getElementById('satisfactionBarsDiv').innerHTML = sortedSat.map(d => {
+      const pct = d.satisfaction||0;
+      const col = pct>=80?'#22c55e':pct>=60?'#f59e0b':'#ef4444';
+      return `<div class="css-bar-row"><div class="css-bar-lbl">${ICONS[d.aspect_id]||''} ${d.aspect_name}</div><div class="css-bar-track"><div class="css-bar-fill" style="width:${Math.min(pct,100)}%;background:${col}"></div></div><div class="css-bar-val" style="color:${col}">${pct}%</div></div>`;
+    }).join('');
+  } catch(e){}
+}
+
+async function loadSatisfactionTab() {
+  try {
+    const r = await fetch(`/api/satisfaction?${buildParams()}`);
+    const data = await r.json();
+    if(!data||!data.length) return;
+    const ICONS = {1:'🍽️',2:'🧹',3:'🏊',4:'👨‍💼',5:'🛏️',6:'📍',7:'💰',8:'⭐'};
+    const sorted = [...data].sort((a,b)=>(a.satisfaction||0)-(b.satisfaction||0));
+    document.getElementById('satisfactionChart').innerHTML = sorted.map(d => {
+      const pct = d.satisfaction||0; const col = pct>=80?'#22c55e':pct>=60?'#f59e0b':'#ef4444';
+      return `<div class="css-bar-row" style="margin-bottom:10px"><div class="css-bar-lbl" style="width:110px">${ICONS[d.aspect_id]||''} ${d.aspect_name}</div><div class="css-bar-track" style="height:12px"><div class="css-bar-fill" style="width:${pct}%;background:${col}"></div></div><div class="css-bar-val" style="color:${col};font-size:13px;font-weight:500">${pct}%</div></div>`;
+    }).join('');
+  } catch(e){}
+}
+
+async function loadDemographics() {
+  try {
+    const r = await fetch(`/api/demographics?${buildParams()}`);
+    const data = await r.json();
+    const renderDonut = (containerId, items, labelKey, colorArr) => {
+      const known = (items||[]).filter(t=>(t[labelKey]||'').toLowerCase()!=='unknown');
+      if(!known.length){ document.getElementById(containerId).innerHTML='<div class="no-data">No data available</div>'; return; }
+      const total = known.reduce((s,t)=>s+t.review_count,0);
+      document.getElementById(containerId).innerHTML = known.slice(0,6).map((t,i) => {
+        const pct = Math.round(t.review_count*100/total);
+        return `<div class="css-bar-row" style="margin-bottom:8px"><div class="css-bar-lbl" style="width:100px">${t[labelKey]}</div><div class="css-bar-track"><div class="css-bar-fill" style="width:${pct}%;background:${colorArr[i%colorArr.length]}"></div></div><div class="css-bar-val" style="color:#9ca3af">${pct}%</div></div>`;
+      }).join('');
+    };
+    renderDonut('genderChart', data.gender, 'gender', ['#0072B2','#D55E00']);
+    const knownTravelers = (data.traveler_type||[]).filter(t=>t.traveler_type&&t.traveler_type.toLowerCase()!=='unknown');
+    renderDonut('travelerChart', knownTravelers.map(t=>({...t,traveler_type:t.traveler_type})), 'traveler_type', ['#a855f7','#3b82f6','#22c55e','#f59e0b','#ef4444','#06b6d4']);
+    renderDonut('purposeChart', data.stay_purpose, 'stay_purpose', ['#14b8a6','#8b5cf6','#f97316','#ec4899','#6366f1']);
+  } catch(e){}
+}
+
+async function loadStayPurposePreferences() {
+  try {
+    const r = await fetch(`/api/stay_purpose_preferences?${buildParams()}`);
+    const data = await r.json();
+    if(!Array.isArray(data)||!data.length){ document.getElementById('stayPurposeContent').innerHTML='<div class="no-data">No stay purpose data available</div>'; return; }
+    const aspects = ['Dining','Cleanliness','Amenities','Staff','Room','Location','Value for Money','General'];
+    let html = `<table class="data-table"><thead><tr><th>Stay Purpose</th>${aspects.map(a=>`<th class="item-col">${a}</th>`).join('')}</tr></thead><tbody>`;
+    data.forEach(row => {
+      html += `<tr><td style="color:#d1d5db;font-weight:500">${row.stay_purpose}</td>`;
+      aspects.forEach(a => {
+        const d = row.aspects?.[a];
+        if(!d||d.mentions<5) html += `<td><span style="color:#4b5563">-</span></td>`;
+        else html += `<td><span class="heat-cell ${getHeatClass(d.satisfaction)}">${d.satisfaction}%</span></td>`;
+      });
+      html += `</tr>`;
+    });
+    document.getElementById('stayPurposeContent').innerHTML = html + '</tbody></table>';
+  } catch(e){}
+}
+
+async function loadTravelerTypePreferences() {
+  try {
+    const r = await fetch(`/api/traveler_preferences?${buildParams()}`);
+    const data = await r.json();
+    if(!Array.isArray(data)||!data.length){ document.getElementById('travelerTypeContent').innerHTML='<div class="no-data">No traveler type data available</div>'; return; }
+    const aspects = ['Dining','Cleanliness','Amenities','Staff','Room','Location','Value for Money','General'];
+    let html = `<table class="data-table"><thead><tr><th>Traveler Type</th>${aspects.map(a=>`<th class="item-col">${a}</th>`).join('')}</tr></thead><tbody>`;
+    data.forEach(row => {
+      html += `<tr><td style="color:#d1d5db;font-weight:500">${row.traveler_type}</td>`;
+      aspects.forEach(a => {
+        const d = row.aspects?.[a];
+        if(!d||d.mentions<5) html += `<td><span style="color:#4b5563">-</span></td>`;
+        else html += `<td><span class="heat-cell ${getHeatClass(d.satisfaction)}">${d.satisfaction}%</span></td>`;
+      });
+      html += `</tr>`;
+    });
+    document.getElementById('travelerTypeContent').innerHTML = html + '</tbody></table>';
+  } catch(e){}
+}
+
+// ─── COMPARISON ───────────────────────────────────────────────
+async function loadComparison(items, compareBy) {
+  try {
+    const r = await fetch(`/api/comparison?items=${encodeURIComponent(items.join('|||'))}&compare_by=${compareBy}`);
+    const data = await r.json();
+    const COLORS = ['#f59e0b','#8b5cf6','#10b981'];
+    const aspects = ['Dining','Cleanliness','Amenities','Staff','Room','Location','Value for Money','General'];
+    const itemStats = items.map((item,i) => {
+      const d = data[item]||{display_name:item,aspects:[],overall:{}};
+      const pos = d.overall.positive||0; const neg = d.overall.negative||0; const tot = d.overall.total_mentions||0;
+      return {item,name:d.display_name||item,pos:tot>0?Math.round(pos*100/tot):0,neg:tot>0?Math.round(neg*100/tot):0,sat:d.overall.satisfaction||0,tot,aspects:d.aspects||[],color:COLORS[i]};
+    });
+    let html = `<div style="margin-bottom:20px"><div style="display:flex;gap:12px;margin-bottom:12px">`;
+    itemStats.forEach(s => html += `<div style="display:flex;align-items:center;gap:6px"><div style="width:10px;height:10px;border-radius:50%;background:${s.color}"></div><span style="color:#e2e8f0;font-size:13px;font-weight:500">${s.name}</span></div>`);
+    html += `</div><table class="data-table"><thead><tr><th>Metric</th>${itemStats.map(s=>`<th class="item-col"><div class="item-header"><div class="dot" style="background:${s.color}"></div><div class="name">${s.name}</div></div></th>`).join('')}</tr></thead><tbody>`;
+    html += `<tr><td style="color:#9ca3af">Review Count</td>${itemStats.map(s=>`<td><span class="heat-cell heat-high">${s.tot.toLocaleString()}</span></td>`).join('')}</tr>`;
+    html += `<tr><td style="color:#9ca3af">+ve Sentiment</td>${itemStats.map(s=>`<td><span class="heat-cell ${getHeatClass(s.pos)}">${s.pos}%</span></td>`).join('')}</tr>`;
+    html += `<tr><td style="color:#9ca3af">-ve Sentiment</td>${itemStats.map(s=>`<td><span class="heat-cell ${getHeatClassInverse(s.neg)}">${s.neg}%</span></td>`).join('')}</tr>`;
+    html += `</tbody></table></div>`;
+    html += `<table class="data-table"><thead><tr><th>Aspect</th>${itemStats.map(s=>`<th class="item-col"><div class="item-header"><div class="dot" style="background:${s.color}"></div><div class="name">${s.name}</div></div></th>`).join('')}</tr></thead><tbody>`;
+    aspects.forEach(asp => {
+      html += `<tr><td style="color:#d1d5db">${asp}</td>`;
+      itemStats.forEach(s => {
+        const a = (s.aspects||[]).find(x=>x.aspect_name===asp);
+        const val = a?(a.satisfaction_pct||a.satisfaction||0):0;
+        html += `<td>${val?`<span class="heat-cell ${getHeatClass(val)}">${val}%</span>`:`<span style="color:#4b5563">-</span>`}</td>`;
+      });
+      html += `</tr>`;
+    });
+    html += `</tbody></table>`;
+    document.getElementById('comparisonContent').innerHTML = html;
+  } catch(e){ document.getElementById('comparisonContent').innerHTML='<div class="no-data">Error loading comparison</div>'; }
+}
+
+// ─── HOTEL DATA V2 (single call) ─────────────────────────────
+async function loadHotelDataV2(productId) {
+  if(!productId) return;
+  currentProductId = productId;
+  try {
+    const r = await fetch(`/api/hotel/${productId}/summary`);
+    const data = await r.json();
+    // Context header
+    document.getElementById('contextIcon').textContent = '🏨';
+    document.getElementById('contextTitle').textContent = data.hotel_name||currentHotelName||productId;
+    const stars = data.star_category?'⭐'.repeat(data.star_category):'';
+    document.getElementById('contextSubtitle').textContent = `${data.brand_name||''} • ${data.city||''} ${stars}`.trim();
+    document.getElementById('contextRating').textContent = data.google_rating?`★ ${Number(data.google_rating).toFixed(1)}`:'--';
+    document.getElementById('contextReviews').textContent = data.review_count?Number(data.review_count).toLocaleString():'--';
+    document.getElementById('contextAddress').textContent = data.address||'';
+    document.getElementById('contextMeta').classList.remove('hidden');
+    // Stats
+    const aspects = data.aspects||[];
+    const mentions = aspects.reduce((s,a)=>s+(a.total_mentions||0),0);
+    document.getElementById('statOverall').textContent = (data.overall_satisfaction||0)+'%';
+    document.getElementById('statMentions').textContent = `Based on ${mentions.toLocaleString()} mentions`;
+    const sortedA = [...aspects].sort((a,b)=>(b.satisfaction_pct||0)-(a.satisfaction_pct||0));
+    if(sortedA.length>0){ document.getElementById('statStrength').textContent=sortedA[0].aspect_name; document.getElementById('statStrengthScore').textContent=(sortedA[0].satisfaction_pct||0)+'% satisfaction'; }
+    if(sortedA.length>1){ const w=sortedA[sortedA.length-1]; document.getElementById('statWeakness').textContent=w.aspect_name; document.getElementById('statWeaknessScore').textContent=(w.satisfaction_pct||0)+'% satisfaction'; }
+    const demo = data.demographics||{};
+    const knownTypes = (demo.traveler_type||[]).filter(t=>t.dimension_value&&t.dimension_value.toLowerCase()!=='unknown');
+    if(knownTypes.length>0){ const kt=knownTypes.reduce((s,t)=>s+t.count,0); document.getElementById('statGuestType').textContent=knownTypes[0].dimension_value; document.getElementById('statGuestPct').textContent=Math.round(knownTypes[0].count*100/kt)+'% of guests'; }
+    else { document.getElementById('statGuestType').textContent='--'; document.getElementById('statGuestPct').textContent='--'; }
+    // Emotions
+    renderEmotions(data.emotions||[]);
+    // Aspect charts
+    if(aspects.length>0) {
+      const ICONS={1:'🍽️',2:'🧹',3:'🏊',4:'👨‍💼',5:'🛏️',6:'📍',7:'💰',8:'⭐'};
+      const sortedSov=[...aspects].sort((a,b)=>(b.share_of_voice_pct||0)-(a.share_of_voice_pct||0));
+      document.getElementById('sovChart').innerHTML = sortedSov.map(d=>{const p=d.share_of_voice_pct||0;return `<div class="css-bar-row"><div class="css-bar-lbl">${ICONS[d.aspect_id]||''} ${d.aspect_name}</div><div class="css-bar-track"><div class="css-bar-fill" style="width:${Math.min(p,100)}%;background:#0d9488"></div></div><div class="css-bar-val" style="color:#9ca3af">${p}%</div></div>`;}).join('');
+      const sortedSat=[...aspects].sort((a,b)=>(a.satisfaction_pct||0)-(b.satisfaction_pct||0));
+      document.getElementById('satisfactionBarsDiv').innerHTML = sortedSat.map(d=>{const p=d.satisfaction_pct||0;const col=p>=80?'#22c55e':p>=60?'#f59e0b':'#ef4444';return `<div class="css-bar-row"><div class="css-bar-lbl">${ICONS[d.aspect_id]||''} ${d.aspect_name}</div><div class="css-bar-track"><div class="css-bar-fill" style="width:${Math.min(p,100)}%;background:${col}"></div></div><div class="css-bar-val" style="color:${col}">${p}%</div></div>`;}).join('');
+      document.getElementById('chartsRow').classList.remove('hidden');
+    }
+    // Pain points & delights
+    document.getElementById('painDelightsRow').classList.remove('hidden');
+    renderPainPoints(data.pain_points||[]);
+    renderDelights(data.delights||[]);
+    // RD signals
+    document.getElementById('rdSignalsRow').classList.remove('hidden');
+    renderRdSignals(data.rd_signals||{});
+    return data;
+  } catch(e){ console.error('loadHotelDataV2 error:',e); }
+}
+
+// ─── RENDER HELPERS ───────────────────────────────────────────
+function renderEmotions(emotions) {
+  const row = document.getElementById('emotionsRow');
+  if(!emotions||!emotions.length){ row.classList.add('hidden'); return; }
+  row.classList.remove('hidden');
+  document.getElementById('emotionsBar').innerHTML = emotions.slice(0,6).map(e=>{
+    const c=EMOTION_COLORS[e.emotion]||{bg:'#374151',text:'#d1d5db',icon:'😐'};
+    return `<span class="emotion-pill" style="background:${c.bg};color:${c.text}">${c.icon} ${e.emotion} ${e.percentage||e.pct_of_total||0}%</span>`;
+  }).join('');
+}
+
+function renderPainPoints(pains) {
+  document.getElementById('painPointsList').innerHTML = pains.length
+    ? pains.slice(0,5).map(p=>`<div class="sig-item pain" onclick="openDrilldown(${currentProductId},'${escapeHtml(p.phrase)}','pain_point')"><span class="sig-txt-r">${escapeHtml(p.phrase)}</span><span class="sig-cnt">${p.mention_count} →</span></div>`).join('')
+    : '<div class="no-data">No pain points found</div>';
+}
+
+function renderDelights(delights) {
+  document.getElementById('delightsList').innerHTML = delights.length
+    ? delights.slice(0,5).map(d=>`<div class="sig-item delight" onclick="openDrilldown(${currentProductId},'${escapeHtml(d.phrase)}','delight')"><span class="sig-txt-g">${escapeHtml(d.phrase)}</span><span class="sig-cnt">${d.mention_count} →</span></div>`).join('')
+    : '<div class="no-data">No delights found</div>';
+}
+
+function renderRdSignals(rd) {
+  const renderList = (items, containerId) => {
+    document.getElementById(containerId).innerHTML = (items&&items.length)
+      ? items.slice(0,4).map(i=>`<div class="rd-item" onclick="openDrilldown(${currentProductId},'${escapeHtml(i.phrase)}','rd_signal')">• ${escapeHtml(i.phrase)} <span style="color:#6b7280">→</span></div>`).join('')
+      : '<div class="no-data">No data</div>';
+  };
+  renderList(rd.feature_request,'featureRequestsList');
+  renderList(rd.price_feedback,'priceFeedbackList');
+  renderList(rd.expectation_gap,'expectationGapList');
+}
+
+// ─── DRILLDOWN ────────────────────────────────────────────────
+function renderDrilldownReviews() {
+  const {allReviews,showing,signalType} = drilldownState;
+  const visible = allReviews.slice(0,showing);
+  const LABELS = {pain_point:'❌ Pain Point',delight:'✅ Delight',rd_signal:'🔬 R&D Signal'};
+  document.getElementById('drilldownCount').textContent = `Showing ${visible.length} of ${allReviews.length} reviews`;
+  document.getElementById('drilldownContent').innerHTML = visible.map(r=>{
+    const stars = '⭐'.repeat(Math.round(r.star_rating||0));
+    const text = highlightSentiment(r.review_text||'', r.sentiment_text||'');
+    return `<div class="review-card"><div class="review-top"><div class="review-left"><span class="review-stars">${stars}</span><span class="review-name">${escapeHtml(r.reviewer_name||'Guest')}</span><span class="review-date">${formatDate(r.review_date)}</span></div>${r.traveler_type?`<span class="review-badge">${escapeHtml(r.traveler_type)}</span>`:''}</div><div class="review-text">${text}</div></div>`;
+  }).join('');
+  document.getElementById('drilldownFooter').innerHTML = allReviews.length>showing
+    ? `<button class="load-more-btn" onclick="loadMoreDrilldown()">Load More (${allReviews.length-showing} remaining)</button>` : '';
+}
+
+function loadMoreDrilldown(){ drilldownState.showing+=3; renderDrilldownReviews(); }
+
+async function openDrilldown(productId, phrase, signalType) {
+  const overlay = document.getElementById('drilldownOverlay');
+  const LABELS = {pain_point:'❌ Pain Point',delight:'✅ Delight',rd_signal:'🔬 R&D Signal'};
+  const COLORS = {pain_point:'#ef4444',delight:'#22c55e',rd_signal:'#93c5fd'};
+  document.getElementById('drilldownTitle').innerHTML = `<span style="color:${COLORS[signalType]||'#e5e7eb'}">${LABELS[signalType]}: "${phrase}"</span>`;
+  document.getElementById('drilldownCount').textContent = '';
+  document.getElementById('drilldownContent').innerHTML = '<div style="text-align:center;padding:2rem;color:#9ca3af">Loading reviews...</div>';
+  document.getElementById('drilldownFooter').innerHTML = '';
+  overlay.classList.add('open');
+  try {
+    const r = await fetch('/api/drilldown',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({product_id:productId,phrase,signal_type:signalType,limit:50})});
+    const data = await r.json();
+    if(!data.reviews||!data.reviews.length){ document.getElementById('drilldownContent').innerHTML='<div style="text-align:center;padding:2rem;color:#6b7280">No reviews found.</div>'; return; }
+    drilldownState = {allReviews:data.reviews,showing:3,signalType};
+    renderDrilldownReviews();
+  } catch(e){ document.getElementById('drilldownContent').innerHTML=`<div style="text-align:center;padding:2rem;color:#ef4444">Error: ${e.message}</div>`; }
+}
+
+function closeDrilldown(){ document.getElementById('drilldownOverlay').classList.remove('open'); }
+
+function highlightSentiment(text, sentiment) {
+  if(!sentiment||!text) return escapeHtml(text);
+  const escaped = escapeHtml(text);
+  const esc_s = escapeHtml(sentiment);
+  return escaped.replace(new RegExp(`(${esc_s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')})`, 'gi'), '<mark>$1</mark>');
+}
+
+// ─── CHAT ─────────────────────────────────────────────────────
+function openChat(){ document.getElementById('chatPanel').classList.add('open'); document.getElementById('chatOverlay').classList.add('show'); updateChatContext(); }
+function closeChat(){ document.getElementById('chatPanel').classList.remove('open'); document.getElementById('chatOverlay').classList.remove('show'); }
+function updateChatContext(){
+  const lbl = document.getElementById('chatContextLabel');
+  if(viewMode==='hotel'&&currentHotel) lbl.textContent=`Analyzing: ${currentHotelName||currentHotel}`;
+  else if(viewMode==='brand'&&currentBrand) lbl.textContent=`Analyzing: ${currentBrand}`;
+  else lbl.textContent='Hotel Intelligence AI';
+}
+
+async function sendMessage(msg) {
+  msg = (msg||'').trim(); if(!msg) return;
+  document.getElementById('chatInput').value='';
+  const msgs = document.getElementById('chatMessages');
+  msgs.innerHTML += `<div class="msg-user">${escapeHtml(msg)}</div>`;
+  const tid = 'typing-'+Date.now();
+  msgs.innerHTML += `<div id="${tid}" class="msg-bot"><div class="typing"><span></span><span></span><span></span></div></div>`;
+  msgs.scrollTop = msgs.scrollHeight;
+  try {
+    const r = await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg,product_id:viewMode==='hotel'?currentProductId:null,brand_id:viewMode==='brand'?currentBrand:null,category:'hotels'})});
+    const data = await r.json();
+    document.getElementById(tid)?.remove();
+    msgs.innerHTML += `<div class="msg-bot">${marked.parse?marked.parse(data.response||'No response'):data.response||'No response'}</div>`;
+    msgs.scrollTop = msgs.scrollHeight;
+  } catch(e){ document.getElementById(tid)?.remove(); msgs.innerHTML += `<div class="msg-bot" style="color:#ef4444">Error: ${e.message}</div>`; }
+}
+
+// ─── UTILS ────────────────────────────────────────────────────
+function escapeHtml(t){ const d=document.createElement('div'); d.textContent=t; return d.innerHTML; }
+function formatDate(s){ try{ return new Date(s).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); } catch{ return s||''; } }
+function getHeatClass(v){ if(v>=80) return 'heat-vhigh'; if(v>=65) return 'heat-high'; if(v>=50) return 'heat-mid'; if(v>=35) return 'heat-low'; return 'heat-vlow'; }
+function getHeatClassInverse(v){ if(v<=10) return 'heat-vhigh'; if(v<=20) return 'heat-high'; if(v<=35) return 'heat-mid'; if(v<=50) return 'heat-low'; return 'heat-vlow'; }
+function formatNumber(n){ return (n||0).toLocaleString(); }
+function showLoader(){ document.getElementById('loader').classList.add('show'); }
+function hideLoader(){ document.getElementById('loader').classList.remove('show'); }
+</script>
 </body>
 </html>
