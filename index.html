@@ -686,7 +686,8 @@
             try {
                 const response = await fetch('/api/hotels');
                 if (response.ok) {
-                    allHotelsCache = await response.json();
+                    const hotelsData = await response.json();
+                    allHotelsCache = hotelsData.hotels || [];
                     console.log(`Loaded ${allHotelsCache.length} hotels into search cache`);
                 }
             } catch (e) {
@@ -856,7 +857,8 @@
             try {
                 const response = await fetch('/api/brands');
                 if (!response.ok) return;
-                brands = await response.json();
+                const brandsData = await response.json();
+                brands = (brandsData.brands || []).map(b => b.brand_name);
                 
                 const brandOptions = brands.map(b => `<option value="${b}">${b}</option>`).join('');
                 
@@ -1154,7 +1156,8 @@
             
             try {
                 const response = await fetch(`/api/cities?brand=${encodeURIComponent(brand)}`);
-                const cities = await response.json();
+                const citiesData = await response.json();
+                const cities = citiesData.cities || [];
                 document.getElementById(citySelect).innerHTML = '<option value="">All Cities</option>' + cities.map(c => `<option value="${c}">${c}</option>`).join('');
             } catch (e) {
                 console.error('Failed to load cities:', e);
@@ -1190,7 +1193,8 @@
                 if (city) url += `&city=${encodeURIComponent(city)}`;
                 if (star) url += `&star_category=${star}`;
                 const response = await fetch(url);
-                const hotels = await response.json();
+                const hotelsResp = await response.json();
+                const hotels = hotelsResp.hotels || [];
                 document.getElementById('hotelSelect').innerHTML = '<option value="">Select Hotel</option>' + hotels.map(h => `<option value="${h.product_id}" data-name="${h.hotel_name}">${h.hotel_name}</option>`).join('');
             } catch (e) {
                 console.error('Failed to load hotels:', e);
@@ -1210,7 +1214,8 @@
             
             try {
                 const response = await fetch(`/api/cities?brand=${encodeURIComponent(brand)}`);
-                const cities = await response.json();
+                const citiesResp2 = await response.json();
+                const cities = citiesResp2.cities || [];
                 citySelect.innerHTML = '<option value="">City</option>' + cities.map(c => `<option value="${c}">${c}</option>`).join('');
             } catch (e) {
                 console.error('Failed to load cities:', e);
@@ -1229,7 +1234,8 @@
             
             try {
                 const response = await fetch(`/api/hotels?brand=${encodeURIComponent(brand)}&city=${encodeURIComponent(city)}`);
-                const hotels = await response.json();
+                const hotelsResp2 = await response.json();
+                const hotels = hotelsResp2.hotels || [];
                 hotelSelect.innerHTML = '<option value="">Hotel</option>' + hotels.map(h => 
                     `<option value="${h.product_id}" data-name="${h.hotel_name}">${h.hotel_name}</option>`
                 ).join('');
