@@ -428,12 +428,13 @@ async def get_brand_summary(brand_id: str):
     # Hotel count and review count
     hotels_query = f"""
     SELECT COUNT(*) as hotel_count, SUM(review_count) as total_reviews,
-           ROUND(AVG(overall_satisfaction)) as overall_satisfaction
+           ROUND(AVG(overall_satisfaction)) as overall_satisfaction,
+           ROUND(AVG(google_rating),1) as avg_rating
     FROM `{PROJECT}.{DATASET}.hotel_master`
-    WHERE brand_id = {brand_id}
+    WHERE brand_name = '{brand_id}'
     """
     hotels_df = client.query(hotels_query).to_dataframe()
-    stats = hotels_df.iloc[0].to_dict()
+    stats = hotels_df.iloc[0].to_dict() if not hotels_df.empty else {'hotel_count':0,'total_reviews':0,'overall_satisfaction':0,'avg_rating':0}
     
     # Aspects aggregated
     aspects_query = f"""
@@ -442,7 +443,7 @@ async def get_brand_summary(brand_id: str):
            SUM(negative_count) as negative_count,
            SUM(total_mentions) as total_mentions
     FROM `{PROJECT}.{DATASET}.product_aspect_summary`
-    WHERE brand_id = {brand_id}
+    WHERE brand_id IN (SELECT DISTINCT brand_id FROM `{PROJECT}.{DATASET}.hotel_master` WHERE brand_name = '{brand_id}')
     GROUP BY aspect_id, aspect_name
     ORDER BY total_mentions DESC
     """
@@ -468,7 +469,7 @@ async def get_brand_summary(brand_id: str):
     emotions_query = f"""
     SELECT emotion, SUM(mention_count) as count
     FROM `{PROJECT}.{DATASET}.product_emotions`
-    WHERE brand_id = {brand_id}
+    WHERE brand_id IN (SELECT DISTINCT brand_id FROM `{PROJECT}.{DATASET}.hotel_master` WHERE brand_name = '{brand_id}')
     GROUP BY emotion
     ORDER BY count DESC
     """
@@ -484,7 +485,7 @@ async def get_brand_summary(brand_id: str):
     demo_query = f"""
     SELECT dimension, dimension_value, SUM(review_count) as count
     FROM `{PROJECT}.{DATASET}.product_demographics`
-    WHERE brand_id = {brand_id}
+    WHERE brand_id IN (SELECT DISTINCT brand_id FROM `{PROJECT}.{DATASET}.hotel_master` WHERE brand_name = '{brand_id}')
     GROUP BY dimension, dimension_value
     ORDER BY dimension, count DESC
     """
@@ -502,14 +503,53 @@ async def get_brand_summary(brand_id: str):
                     "pct_of_total": round(row['count'] * 100 / total_dim) if total_dim > 0 else 0
                 })
     
+    # Pain points aggregated
+    pain_brand_query = f"""
+    SELECT p.phrase, p.aspect_name, SUM(p.mention_count) as mention_count, p.signal_type
+    FROM `{PROJECT}.{DATASET}.product_pain_delights` p
+    JOIN `{PROJECT}.{DATASET}.hotel_master` h ON p.product_id = h.product_id
+    WHERE h.brand_name = '{brand_id}'
+    GROUP BY p.phrase, p.aspect_name, p.signal_type
+    ORDER BY mention_count DESC
+    """
+    try:
+        pain_brand_df = client.query(pain_brand_query).to_dataframe()
+        brand_pain = [{"phrase":r["phrase"],"aspect_name":r["aspect_name"],"mention_count":int(r["mention_count"])} for _,r in pain_brand_df[pain_brand_df["signal_type"]=="pain_point"].head(10).iterrows()]
+        brand_delights = [{"phrase":r["phrase"],"aspect_name":r["aspect_name"],"mention_count":int(r["mention_count"])} for _,r in pain_brand_df[pain_brand_df["signal_type"]=="delight"].head(10).iterrows()]
+    except:
+        brand_pain, brand_delights = [], []
+
+    # RD signals aggregated
+    rd_brand_query = f"""
+    SELECT r.signal_type as rd_signal, r.phrase, SUM(r.mention_count) as mention_count
+    FROM `{PROJECT}.{DATASET}.product_rd_signals` r
+    JOIN `{PROJECT}.{DATASET}.hotel_master` h ON r.product_id = h.product_id
+    WHERE h.brand_name = '{brand_id}'
+    GROUP BY r.signal_type, r.phrase
+    ORDER BY mention_count DESC
+    """
+    try:
+        rd_brand_df = client.query(rd_brand_query).to_dataframe()
+        brand_rd = {"feature_request":[],"price_feedback":[],"expectation_gap":[]}
+        for _,row in rd_brand_df.iterrows():
+            sig = str(row["rd_signal"] or "")
+            if sig in brand_rd:
+                brand_rd[sig].append({"phrase":str(row["phrase"]),"mention_count":int(row["mention_count"])})
+    except:
+        brand_rd = {"feature_request":[],"price_feedback":[],"expectation_gap":[]}
+
     return {
         **brand_info,
         "hotel_count": int(stats['hotel_count'] or 0),
-        "total_reviews": int(stats['total_reviews'] or 0),
+        "review_count": int(stats['total_reviews'] or 0),
         "overall_satisfaction": int(stats['overall_satisfaction'] or 0),
+        "avg_rating": float(stats.get('avg_rating') or 0),
         "aspects": aspects,
         "emotions": emotions,
-        "demographics": demographics
+        "demographics": demographics,
+        "pain_points": brand_pain,
+        "delights": brand_delights,
+        "rd_signals": brand_rd
     }
 
 # ─────────────────────────────────────────
@@ -736,8 +776,8 @@ async def drilldown(request: DrilldownRequest):
     SELECT review_text, sentiment_text, star_rating, reviewer_name,
            review_date, traveler_type, stay_purpose, emotion
     FROM `{PROJECT}.{DATASET}.review_drilldown`
-    WHERE product_id = {request.product_id}
-      AND phrase = '{request.phrase.replace("'", "''")}'
+    WHERE CAST(product_id AS STRING) = CAST({request.product_id} AS STRING)
+      AND LOWER(phrase) = LOWER('{request.phrase.replace("'", "''")}') 
       AND {filter_clause}
     LIMIT {request.limit}
     """
@@ -750,8 +790,8 @@ async def drilldown(request: DrilldownRequest):
         count_query = f"""
         SELECT COUNT(*) as total
         FROM `{PROJECT}.{DATASET}.review_drilldown`
-        WHERE product_id = {request.product_id}
-          AND phrase = '{request.phrase.replace("'", "''")}'
+        WHERE CAST(product_id AS STRING) = CAST({request.product_id} AS STRING)
+          AND LOWER(phrase) = LOWER('{request.phrase.replace("'", "''")}')
           AND {filter_clause}
         """
         count_df = client.query(count_query).to_dataframe()
@@ -1047,7 +1087,28 @@ async def hotel_details_alias(product_id: Optional[int] = None, brand: Optional[
     if product_id:
         return await get_hotel_summary(product_id)
     elif brand:
-        return await get_brand_summary(brand)
+        try:
+            query = f"""
+            SELECT COUNT(*) as hotel_count, SUM(review_count) as total_reviews,
+                   ROUND(AVG(overall_satisfaction)) as overall_satisfaction,
+                   ROUND(AVG(google_rating),1) as avg_rating,
+                   '{brand}' as brand_name
+            FROM `{PROJECT}.{DATASET}.hotel_master`
+            WHERE brand_name = '{brand}'
+            """
+            df = client.query(query).to_dataframe()
+            if df.empty:
+                return {{"brand_name": brand, "hotel_count": 0, "review_count": 0}}
+            row = df.iloc[0]
+            return {{
+                "brand_name": brand,
+                "hotel_count": int(row['hotel_count'] or 0),
+                "review_count": int(row['total_reviews'] or 0),
+                "overall_satisfaction": int(row['overall_satisfaction'] or 0),
+                "avg_rating": float(row['avg_rating'] or 0)
+            }}
+        except Exception as e:
+            return {{"brand_name": brand, "hotel_count": 0, "review_count": 0}}
     return {}
 
 @app.get("/api/drivers")
@@ -1080,11 +1141,28 @@ async def drivers_alias(product_id: Optional[int] = None, brand: Optional[str] =
     else:
         return []
     df = client.query(query).to_dataframe()
-    results = df.to_dict(orient='records')
-    for r in results:
-        r['icon'] = ASPECT_ICONS.get(r.get('aspect_id'), '⭐')
-        for k, v in r.items():
-            if hasattr(v, 'item'): r[k] = v.item()
+    results = []
+    total_mentions = df['total_mentions'].sum() if not df.empty else 1
+    for _, row in df.iterrows():
+        pos = int(row.get('positive_count') or 0)
+        neg = int(row.get('negative_count') or 0)
+        total = int(row.get('total_mentions') or 0)
+        sat = int(row.get('satisfaction') or 0)
+        sov = int(row.get('share_of_voice') or 0)
+        if sat == 0 and (pos + neg) > 0:
+            sat = round(pos * 100 / (pos + neg))
+        if sov == 0 and total > 0 and total_mentions > 0:
+            sov = round(total * 100 / total_mentions)
+        results.append({
+            'aspect_id': int(row.get('aspect_id') or 0),
+            'aspect_name': str(row.get('aspect_name') or ''),
+            'satisfaction': sat,
+            'share_of_voice': sov,
+            'positive_count': pos,
+            'negative_count': neg,
+            'total_mentions': total,
+            'icon': ASPECT_ICONS.get(int(row.get('aspect_id') or 0), '⭐')
+        })
     return results
 
 @app.get("/api/satisfaction")

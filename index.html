@@ -671,12 +671,17 @@ function showSubTab(name) {
   document.querySelector(`.sub-tab[data-tab="${name}"]`)?.classList.add('active');
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
   activeTab = name;
-  if(name==='drivers') { document.getElementById('chartsRow').classList.remove('hidden'); }
-  else { document.getElementById('chartsRow').classList.add('hidden'); document.getElementById(name+'Tab')?.classList.remove('hidden'); }
-  if(name==='satisfaction') loadSatisfactionTab();
-  else if(name==='demographics') loadDemographics();
-  else if(name==='stayPurpose') loadStayPurposePreferences();
-  else if(name==='travelerType') loadTravelerTypePreferences();
+  if(name==='drivers') {
+    document.getElementById('chartsRow').classList.remove('hidden');
+    if(viewMode==='brand' && currentBrand) loadDrivers();
+  } else {
+    document.getElementById('chartsRow').classList.add('hidden');
+    document.getElementById(name+'Tab')?.classList.remove('hidden');
+    if(name==='satisfaction') loadSatisfactionTab();
+    else if(name==='demographics') loadDemographics();
+    else if(name==='stayPurpose') loadStayPurposePreferences();
+    else if(name==='travelerType') loadTravelerTypePreferences();
+  }
 }
 
 // ─── APPLY ────────────────────────────────────────────────────
@@ -692,6 +697,7 @@ async function applyBrandView() {
   document.getElementById('subTabsRow').classList.remove('hidden');
   showSubTab('drivers');
   await loadDashboard();
+  await loadBrandSignals(currentBrand);
   hideLoader();
 }
 
@@ -759,8 +765,9 @@ async function loadContextHeader() {
     } else {
       document.getElementById('contextIcon').textContent = '🏢';
       document.getElementById('contextTitle').textContent = data.brand_name||currentBrand;
-      document.getElementById('contextSubtitle').textContent = `${data.hotel_count||0} hotels in portfolio`;
-      document.getElementById('contextRating').textContent = data.overall_satisfaction ? `${data.overall_satisfaction}%` : '--';
+      const hcount = data.hotel_count||0;
+      document.getElementById('contextSubtitle').textContent = `${hcount} hotel${hcount!==1?'s':''} in portfolio`;
+      document.getElementById('contextRating').textContent = data.avg_rating ? `★ ${Number(data.avg_rating).toFixed(1)}` : '--';
       document.getElementById('contextReviews').textContent = data.review_count ? Number(data.review_count).toLocaleString() : '--';
     }
   } catch(e){}
@@ -822,11 +829,12 @@ async function loadDemographics() {
     const r = await fetch(`/api/demographics?${buildParams()}`);
     const data = await r.json();
     const renderDonut = (containerId, items, labelKey, colorArr) => {
-      const known = (items||[]).filter(t=>(t[labelKey]||'').toLowerCase()!=='unknown');
+      const known = (items||[]).filter(t=> t[labelKey] && (t[labelKey]||'').toLowerCase()!=='unknown' && (t.review_count||t.count||0)>=10);
       if(!known.length){ document.getElementById(containerId).innerHTML='<div class="no-data">No data available</div>'; return; }
-      const total = known.reduce((s,t)=>s+t.review_count,0);
+      const total = known.reduce((s,t)=>s+(t.review_count||t.count||0),0);
       document.getElementById(containerId).innerHTML = known.slice(0,6).map((t,i) => {
-        const pct = Math.round(t.review_count*100/total);
+        const cnt = t.review_count||t.count||0;
+        const pct = Math.round(cnt*100/total);
         return `<div class="css-bar-row" style="margin-bottom:8px"><div class="css-bar-lbl" style="width:100px">${t[labelKey]}</div><div class="css-bar-track"><div class="css-bar-fill" style="width:${pct}%;background:${colorArr[i%colorArr.length]}"></div></div><div class="css-bar-val" style="color:#9ca3af">${pct}%</div></div>`;
       }).join('');
     };
@@ -848,7 +856,7 @@ async function loadStayPurposePreferences() {
       html += `<tr><td style="color:#d1d5db;font-weight:500">${row.stay_purpose}</td>`;
       aspects.forEach(a => {
         const d = row.aspects?.[a];
-        if(!d||d.mentions<5) html += `<td><span style="color:#4b5563">-</span></td>`;
+        if(!d||d.mentions<10) html += `<td><span style="color:#4b5563">-</span></td>`;
         else html += `<td><span class="heat-cell ${getHeatClass(d.satisfaction)}">${d.satisfaction}%</span></td>`;
       });
       html += `</tr>`;
@@ -868,7 +876,7 @@ async function loadTravelerTypePreferences() {
       html += `<tr><td style="color:#d1d5db;font-weight:500">${row.traveler_type}</td>`;
       aspects.forEach(a => {
         const d = row.aspects?.[a];
-        if(!d||d.mentions<5) html += `<td><span style="color:#4b5563">-</span></td>`;
+        if(!d||d.mentions<10) html += `<td><span style="color:#4b5563">-</span></td>`;
         else html += `<td><span class="heat-cell ${getHeatClass(d.satisfaction)}">${d.satisfaction}%</span></td>`;
       });
       html += `</tr>`;
@@ -912,6 +920,24 @@ async function loadComparison(items, compareBy) {
 }
 
 // ─── HOTEL DATA V2 (single call) ─────────────────────────────
+
+async function loadBrandSignals(brand) {
+  if(!brand) return;
+  try {
+    const r = await fetch(`/api/brand/${encodeURIComponent(brand)}/summary`);
+    const data = await r.json();
+    renderEmotions(data.emotions||[]);
+    document.getElementById('painDelightsRow').classList.remove('hidden');
+    renderPainPoints(data.pain_points||[]);
+    renderDelights(data.delights||[]);
+    document.getElementById('rdSignalsRow').classList.remove('hidden');
+    renderRdSignals(data.rd_signals||{});
+    const demo = data.demographics||{};
+    const knownTypes = (demo.traveler_type||[]).filter(t=>t.dimension_value&&t.dimension_value.toLowerCase()!=='unknown'&&(t.count||0)>=10);
+    if(knownTypes.length>0){ const kt=knownTypes.reduce((s,t)=>s+t.count,0); document.getElementById('statGuestType').textContent=knownTypes[0].dimension_value; document.getElementById('statGuestPct').textContent=Math.round(knownTypes[0].count*100/kt)+'% of guests'; }
+  } catch(e){ console.error('loadBrandSignals error:',e); }
+}
+
 async function loadHotelDataV2(productId) {
   if(!productId) return;
   currentProductId = productId;
@@ -944,10 +970,20 @@ async function loadHotelDataV2(productId) {
     // Aspect charts
     if(aspects.length>0) {
       const ICONS={1:'🍽️',2:'🧹',3:'🏊',4:'👨‍💼',5:'🛏️',6:'📍',7:'💰',8:'⭐'};
+      const totalMentions = aspects.reduce((s,a)=>s+(a.total_mentions||0),0);
       const sortedSov=[...aspects].sort((a,b)=>(b.share_of_voice_pct||0)-(a.share_of_voice_pct||0));
-      document.getElementById('sovChart').innerHTML = sortedSov.map(d=>{const p=d.share_of_voice_pct||0;return `<div class="css-bar-row"><div class="css-bar-lbl">${ICONS[d.aspect_id]||''} ${d.aspect_name}</div><div class="css-bar-track"><div class="css-bar-fill" style="width:${Math.min(p,100)}%;background:#0d9488"></div></div><div class="css-bar-val" style="color:#9ca3af">${p}%</div></div>`;}).join('');
+      document.getElementById('sovChart').innerHTML = sortedSov.map(d=>{
+        let p=d.share_of_voice_pct||0;
+        if(p===0 && d.total_mentions && totalMentions) p=Math.round(d.total_mentions*100/totalMentions);
+        return `<div class="css-bar-row"><div class="css-bar-lbl">${ICONS[d.aspect_id]||''} ${d.aspect_name}</div><div class="css-bar-track"><div class="css-bar-fill" style="width:${Math.min(p,100)}%;background:#0d9488"></div></div><div class="css-bar-val" style="color:#9ca3af">${p}%</div></div>`;
+      }).join('');
       const sortedSat=[...aspects].sort((a,b)=>(a.satisfaction_pct||0)-(b.satisfaction_pct||0));
-      document.getElementById('satisfactionBarsDiv').innerHTML = sortedSat.map(d=>{const p=d.satisfaction_pct||0;const col=p>=80?'#22c55e':p>=60?'#f59e0b':'#ef4444';return `<div class="css-bar-row"><div class="css-bar-lbl">${ICONS[d.aspect_id]||''} ${d.aspect_name}</div><div class="css-bar-track"><div class="css-bar-fill" style="width:${Math.min(p,100)}%;background:${col}"></div></div><div class="css-bar-val" style="color:${col}">${p}%</div></div>`;}).join('');
+      document.getElementById('satisfactionBarsDiv').innerHTML = sortedSat.map(d=>{
+        let p=d.satisfaction_pct||0;
+        if(p===0 && (d.positive_count||d.negative_count)) p=Math.round((d.positive_count||0)*100/((d.positive_count||0)+(d.negative_count||0)));
+        const col=p>=80?'#22c55e':p>=60?'#f59e0b':'#ef4444';
+        return `<div class="css-bar-row"><div class="css-bar-lbl">${ICONS[d.aspect_id]||''} ${d.aspect_name}</div><div class="css-bar-track"><div class="css-bar-fill" style="width:${Math.min(p,100)}%;background:${col}"></div></div><div class="css-bar-val" style="color:${col}">${p}%</div></div>`;
+      }).join('');
       document.getElementById('chartsRow').classList.remove('hidden');
     }
     // Pain points & delights
@@ -964,11 +1000,13 @@ async function loadHotelDataV2(productId) {
 // ─── RENDER HELPERS ───────────────────────────────────────────
 function renderEmotions(emotions) {
   const row = document.getElementById('emotionsRow');
-  if(!emotions||!emotions.length){ row.classList.add('hidden'); return; }
+  const valid = (emotions||[]).filter(e => e.percentage > 0 || e.pct_of_total > 0);
+  if(!valid.length){ row.classList.add('hidden'); return; }
   row.classList.remove('hidden');
-  document.getElementById('emotionsBar').innerHTML = emotions.slice(0,6).map(e=>{
+  document.getElementById('emotionsBar').innerHTML = valid.slice(0,6).map(e=>{
     const c=EMOTION_COLORS[e.emotion]||{bg:'#374151',text:'#d1d5db',icon:'😐'};
-    return `<span class="emotion-pill" style="background:${c.bg};color:${c.text}">${c.icon} ${e.emotion} ${e.percentage||e.pct_of_total||0}%</span>`;
+    const pct = e.percentage||e.pct_of_total||0;
+    return `<span class="emotion-pill" style="background:${c.bg};color:${c.text}">${c.icon} ${e.emotion} ${pct}%</span>`;
   }).join('');
 }
 
@@ -1051,6 +1089,11 @@ function updateChatContext(){
 
 async function sendMessage(msg) {
   msg = (msg||'').trim(); if(!msg) return;
+  if(!currentHotel && !currentBrand) {
+    document.getElementById('chatMessages').innerHTML += '<div class="msg-bot" style="color:#f59e0b">Please select a hotel or brand first, then ask me questions about it.</div>';
+    document.getElementById('chatMessages').scrollTop = 999999;
+    return;
+  }
   document.getElementById('chatInput').value='';
   const msgs = document.getElementById('chatMessages');
   msgs.innerHTML += `<div class="msg-user">${escapeHtml(msg)}</div>`;
