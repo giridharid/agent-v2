@@ -408,102 +408,65 @@
             </div>
         </div>
 
-        <!-- EMOTIONS BAR (NEW) -->
-        <div id="emotionsRow" class="glass rounded-none p-4 mb-4 hidden">
-            <div class="flex items-center gap-3 mb-3">
-                <span class="text-gray-400 text-xs font-medium">😊 TOP EMOTIONS</span>
+        <!-- EMOTIONS BAR -->
+        <div id="emotionsRow" class="mb-4 hidden" style="background:#252035;border-radius:12px;padding:14px 18px;">
+            <div style="color:#9ca3af;font-size:11px;letter-spacing:.05em;margin-bottom:8px;">😊 TOP EMOTIONS</div>
+            <div id="emotionsBar" class="flex gap-2 flex-wrap"></div>
+        </div>
+
+        <!-- CHARTS ROW -->
+        <div id="chartsRow" class="grid grid-cols-2 gap-4 mb-4 hidden">
+            <div style="background:#252035;border-radius:12px;padding:16px;">
+                <div style="color:#e5e7eb;font-size:14px;font-weight:500;margin-bottom:12px;">Share of Voice</div>
+                <div id="sovChart" style="height:300px;"></div>
             </div>
-            <div id="emotionsBar" class="flex gap-2 flex-wrap">
-                <!-- Populated by JS -->
+            <div style="background:#252035;border-radius:12px;padding:16px;">
+                <div style="color:#e5e7eb;font-size:14px;font-weight:500;margin-bottom:12px;">Satisfaction by Aspect</div>
+                <div id="satisfactionBarsDiv"></div>
             </div>
         </div>
 
-        <!-- PAIN POINTS & DELIGHTS (NEW) -->
+        <!-- PAIN POINTS & DELIGHTS -->
         <div id="painDelightsRow" class="grid grid-cols-2 gap-4 mb-4 hidden">
-            <!-- Pain Points -->
-            <div class="glass rounded-2xl p-4">
-                <div class="flex items-center justify-between mb-3">
-                    <span class="text-red-400 font-medium text-sm">❌ Pain Points</span>
-                    <span class="text-gray-500 text-xs">Click to see reviews</span>
-                </div>
-                <div id="painPointsList" class="space-y-2">
-                    <!-- Populated by JS -->
-                </div>
+            <div style="background:#252035;border-radius:12px;padding:16px;">
+                <div style="color:#ef4444;font-size:14px;font-weight:500;margin-bottom:12px;">❌ Pain Points <span style="color:#6b7280;font-size:11px;">(click to see reviews)</span></div>
+                <div id="painPointsList" class="space-y-2"></div>
             </div>
-            <!-- Delights -->
-            <div class="glass rounded-2xl p-4">
-                <div class="flex items-center justify-between mb-3">
-                    <span class="text-green-400 font-medium text-sm">✅ Delights</span>
-                    <span class="text-gray-500 text-xs">Click to see reviews</span>
-                </div>
-                <div id="delightsList" class="space-y-2">
-                    <!-- Populated by JS -->
-                </div>
+            <div style="background:#252035;border-radius:12px;padding:16px;">
+                <div style="color:#22c55e;font-size:14px;font-weight:500;margin-bottom:12px;">✅ Delights <span style="color:#6b7280;font-size:11px;">(click to see reviews)</span></div>
+                <div id="delightsList" class="space-y-2"></div>
             </div>
         </div>
 
-        <!-- R&D SIGNALS (NEW) -->
-        <div id="rdSignalsRow" class="glass rounded-2xl p-4 mb-4 hidden">
-            <div class="flex items-center gap-2 mb-3">
-                <span class="text-gray-300 font-medium text-sm">🔬 R&D Signals</span>
-                <span class="text-gray-500 text-xs">Click to see reviews</span>
-            </div>
+        <!-- R&D SIGNALS -->
+        <div id="rdSignalsRow" class="mb-4 hidden" style="background:#252035;border-radius:12px;padding:16px;">
+            <div style="color:#e5e7eb;font-size:14px;font-weight:500;margin-bottom:12px;">🔬 R&D Signals <span style="color:#6b7280;font-size:11px;">(click to see reviews)</span></div>
             <div class="grid grid-cols-3 gap-4">
-                <div class="glass-dark rounded-lg p-3">
-                    <div class="text-yellow-400 text-xs font-medium mb-2">💡 Feature Requests</div>
-                    <div id="featureRequestsList" class="space-y-1 text-xs">
-                        <!-- Populated by JS -->
-                    </div>
+                <div style="background:#1e1a29;border-radius:8px;padding:12px;">
+                    <div style="color:#fbbf24;font-size:12px;font-weight:500;margin-bottom:8px;">💡 Feature Requests</div>
+                    <div id="featureRequestsList" class="space-y-1 text-xs"></div>
                 </div>
-                <div class="glass-dark rounded-lg p-3">
-                    <div class="text-red-400 text-xs font-medium mb-2">💰 Price Feedback</div>
-                    <div id="priceFeedbackList" class="space-y-1 text-xs">
-                        <!-- Populated by JS -->
-                    </div>
+                <div style="background:#1e1a29;border-radius:8px;padding:12px;">
+                    <div style="color:#f87171;font-size:12px;font-weight:500;margin-bottom:8px;">💰 Price Feedback</div>
+                    <div id="priceFeedbackList" class="space-y-1 text-xs"></div>
                 </div>
-                <div class="glass-dark rounded-lg p-3">
-                    <div class="text-orange-400 text-xs font-medium mb-2">⚠️ Expectation Gap</div>
-                    <div id="expectationGapList" class="space-y-1 text-xs">
-                        <!-- Populated by JS -->
-                    </div>
+                <div style="background:#1e1a29;border-radius:8px;padding:12px;">
+                    <div style="color:#fb923c;font-size:12px;font-weight:500;margin-bottom:8px;">⚠️ Expectation Gap</div>
+                    <div id="expectationGapList" class="space-y-1 text-xs"></div>
                 </div>
             </div>
         </div>
 
         <!-- ROW 3: Sub-tabs (3rd - for Brand View / Hotel View only) -->
+        <!-- Analytics Sub-tabs (Demographics only) -->
         <div id="subTabsRow" class="glass rounded-none px-4 py-2 mb-4 flex gap-2 hidden">
-            <button class="sub-tab active px-4 py-2 rounded-lg text-sm font-medium bg-gradient-to-r from-purple-500/20 to-indigo-600/20 text-purple-300 border border-purple-500/30" data-tab="drivers">📊 Drivers</button>
-            <button class="sub-tab px-4 py-2 rounded-lg text-sm font-medium text-gray-400 hover:text-white transition" data-tab="satisfaction">📈 Satisfaction</button>
-            <button class="sub-tab px-4 py-2 rounded-lg text-sm font-medium text-gray-400 hover:text-white transition" data-tab="demographics">👥 Demographics</button>
+            <button class="sub-tab active px-4 py-2 rounded-lg text-sm font-medium bg-gradient-to-r from-purple-500/20 to-indigo-600/20 text-purple-300 border border-purple-500/30" data-tab="demographics">👥 Demographics</button>
             <button class="sub-tab px-4 py-2 rounded-lg text-sm font-medium text-gray-400 hover:text-white transition" data-tab="stayPurpose">🎯 Stay Purpose</button>
             <button class="sub-tab px-4 py-2 rounded-lg text-sm font-medium text-gray-400 hover:text-white transition" data-tab="travelerType">✈️ Traveler Type</button>
         </div>
 
-        <!-- Tab Panels (4th) -->
         <div id="tabContent">
-            <!-- Drivers Tab -->
-            <div id="driversTab" class="tab-panel">
-                <div class="grid grid-cols-2 gap-6">
-                    <div class="glass rounded-2xl p-6">
-                        <h3 class="text-lg font-semibold mb-4">Share of Voice</h3>
-                        <div id="sovChart" style="height: 350px;"></div>
-                    </div>
-                    <div class="glass rounded-2xl p-6">
-                        <h3 class="text-lg font-semibold mb-4">Satisfaction by Aspect</h3>
-                        <div id="radarChart" style="height: 350px;"></div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Satisfaction Tab -->
-            <div id="satisfactionTab" class="tab-panel hidden">
-                <div class="glass rounded-2xl p-6">
-                    <h3 class="text-lg font-semibold mb-4">Satisfaction by Aspect</h3>
-                    <div id="satisfactionChart" style="height: 400px;"></div>
-                </div>
-            </div>
-            
-            <!-- Comparison Content (shown when Compare mode is active) -->
+            <!-- Comparison Tab -->
             <div id="comparisonTab" class="tab-panel hidden">
                 <div class="glass rounded-2xl p-6">
                     <div id="comparisonContent">
@@ -511,7 +474,7 @@
                     </div>
                 </div>
             </div>
-            
+
             <!-- Demographics Tab -->
             <div id="demographicsTab" class="tab-panel hidden">
                 <div class="grid grid-cols-3 gap-6">
@@ -529,7 +492,7 @@
                     </div>
                 </div>
             </div>
-            
+
             <!-- Stay Purpose Preferences Tab -->
             <div id="stayPurposeTab" class="tab-panel hidden">
                 <div class="glass rounded-2xl p-6">
@@ -537,7 +500,7 @@
                     <div id="stayPurposeContent"></div>
                 </div>
             </div>
-            
+
             <!-- Traveler Type Preferences Tab -->
             <div id="travelerTypeTab" class="tab-panel hidden">
                 <div class="glass rounded-2xl p-6">
@@ -848,8 +811,7 @@
             document.getElementById('contextHeader').classList.remove('hidden');
             document.getElementById('statsRow').classList.remove('hidden');
             document.getElementById('subTabsRow').classList.remove('hidden');
-            showSubTab('drivers');
-            await loadDashboard();
+            showSubTab('demographics');
             await loadHotelDataV2(currentHotel);
             hideLoader();
         }
@@ -961,6 +923,7 @@
         
         function switchMode(mode) {
             currentMode = mode;
+            viewMode = mode;
             
             // Update ROW 1 tabs
             document.querySelectorAll('.mode-tab').forEach(t => {
@@ -975,78 +938,59 @@
             document.getElementById('compareBrandsSelectors').classList.add('hidden');
             document.getElementById('compareHotelsSelectors').classList.add('hidden');
             
-            // Hide all content sections by default
-            document.getElementById('contextHeader').classList.add('hidden');
-            document.getElementById('statsRow').classList.add('hidden');
-            document.getElementById('subTabsRow').classList.add('hidden');
+            // Hide all tab panels
             document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
-            
-            // Reset ALL dropdowns when switching modes (fresh start each time)
-            // Reset Brand View
-            document.getElementById('brandSelect').selectedIndex = 0;
-            document.getElementById('citySelect').selectedIndex = 0;
-            document.getElementById('starSelect').selectedIndex = 0;
-            
-            // Reset Hotel View dropdowns
-            document.getElementById('hotelBrandSelect').selectedIndex = 0;
-            document.getElementById('hotelCitySelect').innerHTML = '<option value="">Select City</option>';
-            document.getElementById('hotelSelect').innerHTML = '<option value="">Select Hotel</option>';
-            
-            // Reset Compare Hotels dropdowns
-            for (let i = 1; i <= 3; i++) {
-                document.getElementById('compareBrand' + i).selectedIndex = 0;
-                document.getElementById('compareCity' + i).innerHTML = '<option value="">Select City</option>';
-                document.getElementById('compareHotel' + i).innerHTML = '<option value="">Select Hotel</option>';
-            }
-            
-            // Reset Compare Brands dropdowns
-            for (let i = 1; i <= 3; i++) {
-                const el = document.getElementById('compareBrandOnly' + i);
-                if (el) el.selectedIndex = 0;
-            }
-            
-            // Clear current selections
-            if (mode !== viewMode) {
-                currentBrand = null;
-                currentHotel = null;
-                currentCity = null;
-                currentStar = null;
-            }
-            
+
+            // Show correct content based on mode — preserve existing loaded data
             if (mode === 'brand') {
                 document.getElementById('brandViewSelectors').classList.remove('hidden');
-                // Only show content if brand data is loaded
-                if (currentBrand && viewMode === 'brand') {
+                if (currentBrand) {
                     document.getElementById('contextHeader').classList.remove('hidden');
                     document.getElementById('statsRow').classList.remove('hidden');
+                    document.getElementById('emotionsRow').classList.remove('hidden');
+                    document.getElementById('chartsRow').classList.remove('hidden');
+                    document.getElementById('painDelightsRow').classList.remove('hidden');
+                    document.getElementById('rdSignalsRow').classList.remove('hidden');
                     document.getElementById('subTabsRow').classList.remove('hidden');
-                    document.getElementById(activeTab + 'Tab').classList.remove('hidden');
+                    document.getElementById((activeTab || 'drivers') + 'Tab').classList.remove('hidden');
+                } else {
+                    document.getElementById('contextHeader').classList.add('hidden');
+                    document.getElementById('statsRow').classList.add('hidden');
+                    document.getElementById('subTabsRow').classList.add('hidden');
                 }
             } else if (mode === 'hotel') {
                 document.getElementById('hotelViewSelectors').classList.remove('hidden');
-                // Only show content if hotel data is loaded
-                if (currentHotel && viewMode === 'hotel') {
+                if (currentHotel) {
                     document.getElementById('contextHeader').classList.remove('hidden');
                     document.getElementById('statsRow').classList.remove('hidden');
+                    document.getElementById('emotionsRow').classList.remove('hidden');
+                    document.getElementById('chartsRow').classList.remove('hidden');
+                    document.getElementById('painDelightsRow').classList.remove('hidden');
+                    document.getElementById('rdSignalsRow').classList.remove('hidden');
                     document.getElementById('subTabsRow').classList.remove('hidden');
-                    document.getElementById(activeTab + 'Tab').classList.remove('hidden');
+                    document.getElementById((activeTab || 'drivers') + 'Tab').classList.remove('hidden');
+                } else {
+                    document.getElementById('contextHeader').classList.add('hidden');
+                    document.getElementById('statsRow').classList.add('hidden');
+                    document.getElementById('subTabsRow').classList.add('hidden');
                 }
             } else if (mode === 'compareBrands') {
                 document.getElementById('compareBrandsSelectors').classList.remove('hidden');
                 document.getElementById('comparisonTab').classList.remove('hidden');
-                // Clear comparison content when entering compare mode
-                document.getElementById('comparisonContent').innerHTML = '<p class="text-gray-400 text-center py-8">Select brands and click Compare</p>';
+                document.getElementById('contextHeader').classList.add('hidden');
+                document.getElementById('statsRow').classList.add('hidden');
+                document.getElementById('subTabsRow').classList.add('hidden');
+                populateCompareSelects();
             } else if (mode === 'compareHotels') {
                 document.getElementById('compareHotelsSelectors').classList.remove('hidden');
                 document.getElementById('comparisonTab').classList.remove('hidden');
-                // Clear comparison content when entering compare mode
-                document.getElementById('comparisonContent').innerHTML = '<p class="text-gray-400 text-center py-8">Select hotels and click Compare</p>';
-            }
-            
-            // Populate compare selectors
-            if (mode === 'compareBrands' || mode === 'compareHotels') {
+                document.getElementById('contextHeader').classList.add('hidden');
+                document.getElementById('statsRow').classList.add('hidden');
+                document.getElementById('subTabsRow').classList.add('hidden');
                 populateCompareSelects();
             }
+
+            updateChatContext();
         }
         
         function showComparisonTab() {
@@ -1089,7 +1033,7 @@
             document.getElementById('contextHeader').classList.remove('hidden');
             document.getElementById('statsRow').classList.remove('hidden');
             document.getElementById('subTabsRow').classList.remove('hidden');
-            showSubTab('drivers');
+            showSubTab('demographics');
             await loadDashboard();
             await loadHotelDataV2(currentHotel);
             hideLoader();
@@ -1111,8 +1055,7 @@
             document.getElementById('contextHeader').classList.remove('hidden');
             document.getElementById('statsRow').classList.remove('hidden');
             document.getElementById('subTabsRow').classList.remove('hidden');
-            showSubTab('drivers');
-            await loadDashboard();
+            showSubTab('demographics');
             await loadHotelDataV2(currentHotel);
             hideLoader();
         }
@@ -1322,7 +1265,7 @@
         // ═══════════════════════════════════════════
         // DASHBOARD LOADING
         // ═══════════════════════════════════════════
-        let activeTab = 'drivers'; // Track active tab
+        let activeTab = 'demographics'; // Track active tab
         
         // Build API params with optional city/star filters for brand view
         function buildParams() {
@@ -1367,28 +1310,29 @@
                 
                 if (viewMode === 'hotel') {
                     document.getElementById('contextIcon').textContent = '🏨';
-                    document.getElementById('contextTitle').textContent = data.Name || currentHotelName || currentHotel;
-                    document.getElementById('contextSubtitle').textContent = `${data.Brand || ''} • ${data.City || ''} • ${'⭐'.repeat(data.Star_Category || 0)}`;
+                    document.getElementById('contextTitle').textContent = data.hotel_name || currentHotelName || currentHotel;
+                    const stars = data.star_category ? '⭐'.repeat(data.star_category) : '';
+                    document.getElementById('contextSubtitle').textContent = `${data.brand_name || ''} • ${data.city || ''} ${stars ? '• ' + stars : ''}`;
                     
-                    if (data.About_Us) {
-                        document.getElementById('contextDescription').textContent = data.About_Us;
+                    if (data.about_us) {
+                        document.getElementById('contextDescription').textContent = data.about_us;
                         document.getElementById('contextDescription').classList.remove('hidden');
                     } else {
                         document.getElementById('contextDescription').classList.add('hidden');
                     }
                     
                     document.getElementById('contextMeta').classList.remove('hidden');
-                    document.getElementById('contextRating').textContent = data.Rating ? `★ ${Number(data.Rating).toFixed(1)}` : '--';
+                    document.getElementById('contextRating').textContent = data.google_rating ? `★ ${Number(data.google_rating).toFixed(1)}` : '--';
                     document.getElementById('contextReviews').textContent = data.review_count ? Number(data.review_count).toLocaleString() : '--';
-                    document.getElementById('contextAddress').textContent = data.Address || '';
+                    document.getElementById('contextAddress').textContent = data.address || '';
                 } else {
                     document.getElementById('contextIcon').textContent = '🏢';
-                    document.getElementById('contextTitle').textContent = data.Name || currentBrand;
+                    document.getElementById('contextTitle').textContent = data.brand_name || currentBrand;
                     document.getElementById('contextSubtitle').textContent = `${data.hotel_count || 0} hotels in portfolio`;
                     document.getElementById('contextDescription').classList.add('hidden');
                     
                     document.getElementById('contextMeta').classList.remove('hidden');
-                    document.getElementById('contextRating').textContent = data.Rating ? `★ ${Number(data.Rating).toFixed(1)}` : '--';
+                    document.getElementById('contextRating').textContent = data.overall_satisfaction ? `${data.overall_satisfaction}% sat` : '--';
                     document.getElementById('contextReviews').textContent = data.review_count ? Number(data.review_count).toLocaleString() : '--';
                     document.getElementById('contextAddress').textContent = '';
                 }
@@ -1425,11 +1369,12 @@
                     document.getElementById('statWeaknessScore').textContent = weakest.satisfaction + '% satisfaction';
                 }
                 
-                if (demographics.traveler_type?.length > 0) {
-                    const topType = demographics.traveler_type[0];
-                    const total = demographics.traveler_type.reduce((s, t) => s + t.review_count, 0);
+                const knownTypes = (demographics.traveler_type || []).filter(t => t.traveler_type && t.traveler_type.toLowerCase() !== 'unknown');
+                if (knownTypes.length > 0) {
+                    const topType = knownTypes[0];
+                    const knownTotal = knownTypes.reduce((s, t) => s + t.review_count, 0);
                     document.getElementById('statGuestType').textContent = topType.traveler_type;
-                    document.getElementById('statGuestPct').textContent = Math.round(topType.review_count * 100 / total) + '% of guests';
+                    document.getElementById('statGuestPct').textContent = Math.round(topType.review_count * 100 / knownTotal) + '% of guests';
                 }
             } catch (e) {
                 console.error('Stats error:', e);
@@ -1532,13 +1477,14 @@
                 }
                 
                 // Traveler Type - Pie Chart
-                if (data.traveler_type?.length > 0) {
+                const knownTravelers = (data.traveler_type || []).filter(t => t.traveler_type && t.traveler_type.toLowerCase() !== 'unknown');
+                if (knownTravelers.length > 0) {
                     if (charts.traveler) charts.traveler.destroy();
-                    const total = data.traveler_type.reduce((s, t) => s + t.review_count, 0);
+                    const total = knownTravelers.reduce((s, t) => s + t.review_count, 0);
                     charts.traveler = new ApexCharts(document.getElementById('travelerChart'), {
-                        series: data.traveler_type.map(t => Math.round(t.review_count * 100 / total)),
+                        series: knownTravelers.map(t => Math.round(t.review_count * 100 / total)),
                         chart: { type: 'donut', height: 280, background: 'transparent' },
-                        labels: data.traveler_type.map(t => t.traveler_type),
+                        labels: knownTravelers.map(t => t.traveler_type),
                         colors: cbSafePalette,
                         legend: { position: 'bottom', labels: { colors: '#9ca3af' } },
                         dataLabels: { enabled: true, formatter: v => Math.round(v) + '%' },
@@ -1548,9 +1494,10 @@
                 }
                 
                 // Stay Purpose - Pie Chart (matching Gender and Traveler)
-                if (data.stay_purpose?.length > 0) {
+                const knownPurposes = (data.stay_purpose || []).filter(p => p.stay_purpose && p.stay_purpose.toLowerCase() !== 'unknown');
+                if (knownPurposes.length > 0) {
                     if (charts.purpose) charts.purpose.destroy();
-                    const total = data.stay_purpose.reduce((s, p) => s + p.review_count, 0);
+                    const total = knownPurposes.reduce((s, p) => s + p.review_count, 0);
                     // Map numeric/raw values to readable names
                     const purposeLabels = {
                         '1': 'Leisure', '2': 'Business', '3': 'Family', '4': 'Romantic', '5': 'Other',
@@ -2222,45 +2169,120 @@
             }
         }
         
-        // Update loadHotelData to use new API and render new features
-        const originalLoadHotelData = typeof loadHotelData === 'function' ? loadHotelData : null;
-        
         async function loadHotelDataV2(productId) {
             if (!productId) return;
             currentProductId = productId;
-            
+
             try {
                 const response = await fetch(`/api/hotel/${productId}/summary`);
                 const data = await response.json();
-                
-                // Render new features
-                if (data.emotions) renderEmotions(data.emotions);
-                if (data.pain_points) {
-                    renderPainPoints(data.pain_points);
-                    document.getElementById('painDelightsRow').classList.remove('hidden');
+
+                // ── Context header ──────────────────────────────
+                document.getElementById('contextIcon').textContent = '🏨';
+                document.getElementById('contextTitle').textContent = data.hotel_name || currentHotelName || productId;
+                const stars = data.star_category ? '⭐'.repeat(data.star_category) : '';
+                document.getElementById('contextSubtitle').textContent =
+                    `${data.brand_name || ''} • ${data.city || ''} ${stars ? '• ' + stars : ''}`.trim().replace(/^•|•$/g,'').trim();
+                document.getElementById('contextRating').textContent = data.google_rating ? `★ ${Number(data.google_rating).toFixed(1)}` : '--';
+                document.getElementById('contextReviews').textContent = data.review_count ? Number(data.review_count).toLocaleString() : '--';
+                document.getElementById('contextAddress').textContent = data.address || '';
+                document.getElementById('contextMeta').classList.remove('hidden');
+                if (data.about_us) {
+                    document.getElementById('contextDescription').textContent = data.about_us;
+                    document.getElementById('contextDescription').classList.remove('hidden');
+                } else {
+                    document.getElementById('contextDescription').classList.add('hidden');
                 }
-                if (data.delights) renderDelights(data.delights);
-                if (data.rd_signals) {
-                    renderRdSignals(data.rd_signals);
-                    document.getElementById('rdSignalsRow').classList.remove('hidden');
+
+                // ── Stats cards ─────────────────────────────────
+                const sat = data.overall_satisfaction || 0;
+                document.getElementById('statOverall').textContent = sat + '%';
+
+                const aspects = data.aspects || [];
+                const mentions = aspects.reduce((s,a) => s + (a.total_mentions||0), 0);
+                document.getElementById('statMentions').textContent = `Based on ${mentions.toLocaleString()} mentions`;
+
+                const sortedA = [...aspects].sort((a,b) => (b.satisfaction_pct||0) - (a.satisfaction_pct||0));
+                if (sortedA.length > 0) {
+                    document.getElementById('statStrength').textContent = sortedA[0].aspect_name;
+                    document.getElementById('statStrengthScore').textContent = (sortedA[0].satisfaction_pct||0) + '% satisfaction';
+                    const weakest = sortedA[sortedA.length-1];
+                    document.getElementById('statWeakness').textContent = weakest.aspect_name;
+                    document.getElementById('statWeaknessScore').textContent = (weakest.satisfaction_pct||0) + '% satisfaction';
                 }
-                
-                // Update context header
-                if (data.hotel_name) {
-                    document.getElementById('contextTitle').textContent = data.hotel_name;
-                    document.getElementById('contextSubtitle').textContent = `${data.city || ''} | ⭐ ${data.star_category || 'N/A'}`;
+
+                // Guest type (filter unknown)
+                const demo = data.demographics || {};
+                const knownTypes = (demo.traveler_type||[]).filter(t => t.dimension_value && t.dimension_value.toLowerCase() !== 'unknown');
+                if (knownTypes.length > 0) {
+                    const knownTotal = knownTypes.reduce((s,t) => s + t.count, 0);
+                    document.getElementById('statGuestType').textContent = knownTypes[0].dimension_value;
+                    document.getElementById('statGuestPct').textContent = Math.round(knownTypes[0].count * 100 / knownTotal) + '% of guests';
+                } else {
+                    document.getElementById('statGuestType').textContent = '--';
+                    document.getElementById('statGuestPct').textContent = '--';
                 }
-                
-                // Update stats
-                if (data.overall_satisfaction) {
-                    document.getElementById('statOverall').textContent = data.overall_satisfaction + '%';
+
+                // ── Emotions ────────────────────────────────────
+                renderEmotions(data.emotions || []);
+
+                // ── Pain points & delights ──────────────────────
+                const pains = data.pain_points || [];
+                const delights = data.delights || [];
+                document.getElementById('painDelightsRow').classList.remove('hidden');
+                if (pains.length > 0) {
+                    renderPainPoints(pains);
+                } else {
+                    document.getElementById('painPointsList').innerHTML = '<p class="text-gray-600 text-xs">No pain points found</p>';
                 }
-                
-                // Load charts with aspect data
-                if (data.aspects) {
-                    renderAspectCharts(data.aspects);
+                if (delights.length > 0) {
+                    renderDelights(delights);
+                } else {
+                    document.getElementById('delightsList').innerHTML = '<p class="text-gray-600 text-xs">No delights found</p>';
                 }
-                
+
+                // ── R&D Signals ─────────────────────────────────
+                const rd = data.rd_signals || {};
+                document.getElementById('rdSignalsRow').classList.remove('hidden');
+                renderRdSignals(rd);
+
+                // ── Charts row ─────────────────────────────────
+                if (aspects.length > 0) {
+                    document.getElementById('chartsRow').classList.remove('hidden');
+                    const ICONS = {1:'🍽️',2:'🧹',3:'🏊',4:'👨‍💼',5:'🛏️',6:'📍',7:'💰',8:'⭐'};
+                    const sortedSov = [...aspects].sort((a,b) => (b.share_of_voice_pct||0) - (a.share_of_voice_pct||0));
+
+                    // SoV bar chart
+                    if (charts.sov) charts.sov.destroy();
+                    charts.sov = new ApexCharts(document.getElementById('sovChart'), {
+                        series: [{ name: 'Share of Voice', data: sortedSov.map(d => d.share_of_voice_pct||0) }],
+                        chart: { type: 'bar', height: 300, background: 'transparent', toolbar: { show: false } },
+                        plotOptions: { bar: { horizontal: true, borderRadius: 4, barHeight: '65%' } },
+                        colors: ['#0d9488'],
+                        xaxis: { categories: sortedSov.map(d => `${ICONS[d.aspect_id]||''} ${d.aspect_name}`), labels: { style: { colors: '#9ca3af' }, formatter: v => v + '%' } },
+                        yaxis: { labels: { style: { colors: '#e2e8f0', fontSize: '12px' } } },
+                        dataLabels: { enabled: true, formatter: v => v + '%', style: { colors: ['#fff'], fontSize: '11px' } },
+                        grid: { borderColor: 'rgba(255,255,255,0.06)' },
+                        tooltip: { theme: 'dark' }
+                    });
+                    charts.sov.render();
+
+                    // Satisfaction horizontal bars (inline HTML, not chart library)
+                    const satSorted = [...aspects].sort((a,b) => (b.satisfaction_pct||0) - (a.satisfaction_pct||0));
+                    document.getElementById('satisfactionBarsDiv').innerHTML = satSorted.map(a => {
+                        const pct = a.satisfaction_pct || 0;
+                        const color = pct >= 80 ? '#22c55e' : pct >= 60 ? '#f59e0b' : '#ef4444';
+                        const icon = ICONS[a.aspect_id] || '⭐';
+                        return \`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                            <span style="width:80px;color:#9ca3af;font-size:12px;flex-shrink:0;">\${icon} \${a.aspect_name}</span>
+                            <div style="flex:1;height:8px;background:#374151;border-radius:4px;overflow:hidden;">
+                                <div style="width:\${pct}%;height:100%;background:\${color};border-radius:4px;"></div>
+                            </div>
+                            <span style="color:\${color};font-size:12px;width:32px;text-align:right;">\${pct}%</span>
+                        </div>\`;
+                    }).join('');
+                }
+
                 return data;
             } catch (e) {
                 console.error('Error loading hotel data:', e);
