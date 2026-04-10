@@ -417,13 +417,14 @@ async def get_brand_summary(brand_id: str):
     brand_query = f"""
     SELECT brand_id, brand_name
     FROM `{PROJECT}.{DATASET}.brand_master`
-    WHERE brand_id = '{brand_id}'
+    WHERE brand_name = '{brand_id}' OR CAST(brand_id AS STRING) = '{brand_id}'
+    LIMIT 1
     """
     brand_df = client.query(brand_query).to_dataframe()
     if brand_df.empty:
-        raise HTTPException(status_code=404, detail="Brand not found")
-    
-    brand_info = brand_df.iloc[0].to_dict()
+        brand_info = {"brand_id": brand_id, "brand_name": brand_id}
+    else:
+        brand_info = clean_row(brand_df.iloc[0].to_dict())
     
     # Hotel count and review count
     hotels_query = f"""
@@ -764,9 +765,9 @@ async def drilldown(request: DrilldownRequest):
     
     # Build filter based on signal type
     if request.signal_type == "pain_point":
-        filter_clause = "pain_point = 1"
+        filter_clause = "pain_point = 1 AND sentiment_type = 'negative'"
     elif request.signal_type == "delight":
-        filter_clause = "delight = 1"
+        filter_clause = "delight = 1 AND sentiment_type = 'positive'"
     elif request.signal_type == "rd_signal":
         filter_clause = "rd_signal IS NOT NULL"
     else:
@@ -1098,17 +1099,17 @@ async def hotel_details_alias(product_id: Optional[int] = None, brand: Optional[
             """
             df = client.query(query).to_dataframe()
             if df.empty:
-                return {{"brand_name": brand, "hotel_count": 0, "review_count": 0}}
+                return {"brand_name": brand, "hotel_count": 0, "review_count": 0}
             row = df.iloc[0]
-            return {{
+            return {
                 "brand_name": brand,
                 "hotel_count": int(row['hotel_count'] or 0),
                 "review_count": int(row['total_reviews'] or 0),
                 "overall_satisfaction": int(row['overall_satisfaction'] or 0),
                 "avg_rating": float(row['avg_rating'] or 0)
-            }}
+            }
         except Exception as e:
-            return {{"brand_name": brand, "hotel_count": 0, "review_count": 0}}
+            return {"brand_name": brand, "hotel_count": 0, "review_count": 0}
     return {}
 
 @app.get("/api/drivers")

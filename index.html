@@ -154,8 +154,18 @@ body{background:#0f0c1a;color:#e2e8f0;min-height:100vh;font-size:13px}
 .chat-hdr-btn{background:none;border:none;color:#9ca3af;cursor:pointer;font-size:16px}
 #chatMessages{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px}
 .msg-user{align-self:flex-end;background:#2d2438;border-radius:12px 12px 2px 12px;padding:10px 14px;max-width:80%;color:#e5e7eb;font-size:13px}
-.msg-bot{align-self:flex-start;background:#252035;border-radius:12px 12px 12px 2px;padding:10px 14px;max-width:85%;color:#d1d5db;font-size:13px;line-height:1.6}
-.msg-bot strong{color:#e9d5ff}
+.msg-bot{align-self:flex-start;background:#252035;border-radius:12px 12px 12px 2px;padding:12px 16px;max-width:90%;color:#d1d5db;font-size:13px;line-height:1.7}
+.msg-bot strong{color:#c4b5fd;font-weight:600}
+.msg-bot h3{color:#a855f7;font-size:13px;font-weight:600;margin:10px 0 4px;border-bottom:1px solid #2d2438;padding-bottom:4px}
+.msg-bot h4{color:#9ca3af;font-size:12px;font-weight:600;margin:8px 0 3px}
+.msg-bot ul{margin:4px 0 8px 12px}
+.msg-bot li{margin-bottom:3px;color:#d1d5db}
+.msg-bot li::marker{color:#a855f7}
+.msg-bot p{margin-bottom:6px}
+.msg-bot hr{border:none;border-top:1px solid #2d2438;margin:8px 0}
+.msg-bot code{background:#1e1a29;padding:1px 5px;border-radius:3px;font-size:12px;color:#86efac}
+.msg-bot .stat-inline{display:inline-block;background:#1e1a29;border:1px solid #374151;border-radius:6px;padding:6px 12px;margin:4px 4px 4px 0;font-size:12px}
+.msg-bot .stat-inline strong{color:#c4b5fd}
 .typing{display:flex;gap:4px;padding:4px 0}
 .typing span{width:7px;height:7px;background:#a855f7;border-radius:50%;animation:bounce 1.4s infinite ease-in-out both}
 .typing span:nth-child(2){animation-delay:-.16s}
@@ -573,14 +583,16 @@ async function loadStarCategoriesFor(view) {
   const brandEl = view==='brandView'?'brandSelect':'hotelBrandSelect';
   const cityEl = view==='brandView'?'citySelect':'hotelCitySelect';
   const starEl = view==='brandView'?'starSelect':'hotelStarSelect';
-  const brand = document.getElementById(brandEl).value;
-  const city = document.getElementById(cityEl).value;
+  const brand = document.getElementById(brandEl)?.value||'';
+  const city = document.getElementById(cityEl)?.value||'';
+  if(!brand) return;
   try {
     let url = `/api/star_categories?brand=${encodeURIComponent(brand)}`;
     if(city) url += `&city=${encodeURIComponent(city)}`;
     const r = await fetch(url);
+    if(!r.ok) return;
     const stars = await r.json();
-    document.getElementById(starEl).innerHTML = '<option value="">All Stars</option>' + (stars||[]).map(s=>`<option value="${s}">${'⭐'.repeat(s)} ${s} Star</option>`).join('');
+    document.getElementById(starEl).innerHTML = '<option value="">All Stars</option>' + (stars||[]).map(s=>`<option value="${s}">${'⭐'.repeat(s)} (${s} Star)</option>`).join('');
   } catch(e){}
 }
 
@@ -891,32 +903,95 @@ async function loadComparison(items, compareBy) {
     const r = await fetch(`/api/comparison?items=${encodeURIComponent(items.join('|||'))}&compare_by=${compareBy}`);
     const data = await r.json();
     const COLORS = ['#f59e0b','#8b5cf6','#10b981'];
-    const aspects = ['Dining','Cleanliness','Amenities','Staff','Room','Location','Value for Money','General'];
+    const ASPECTS = ['Dining','Cleanliness','Staff','Room','Location','Value for Money','General'];
     const itemStats = items.map((item,i) => {
       const d = data[item]||{display_name:item,aspects:[],overall:{}};
       const pos = d.overall.positive||0; const neg = d.overall.negative||0; const tot = d.overall.total_mentions||0;
-      return {item,name:d.display_name||item,pos:tot>0?Math.round(pos*100/tot):0,neg:tot>0?Math.round(neg*100/tot):0,sat:d.overall.satisfaction||0,tot,aspects:d.aspects||[],color:COLORS[i]};
+      const rating = d.overall.avg_rating||0;
+      return {item, name:d.display_name||item, pos:tot>0?Math.round(pos*100/tot):0,
+              neg:tot>0?Math.round(neg*100/tot):0, tot, rating,
+              aspects:d.aspects||[], color:COLORS[i%3]};
     });
-    let html = `<div style="margin-bottom:20px"><div style="display:flex;gap:12px;margin-bottom:12px">`;
-    itemStats.forEach(s => html += `<div style="display:flex;align-items:center;gap:6px"><div style="width:10px;height:10px;border-radius:50%;background:${s.color}"></div><span style="color:#e2e8f0;font-size:13px;font-weight:500">${s.name}</span></div>`);
-    html += `</div><table class="data-table"><thead><tr><th>Metric</th>${itemStats.map(s=>`<th class="item-col"><div class="item-header"><div class="dot" style="background:${s.color}"></div><div class="name">${s.name}</div></div></th>`).join('')}</tr></thead><tbody>`;
-    html += `<tr><td style="color:#9ca3af">Review Count</td>${itemStats.map(s=>`<td><span class="heat-cell heat-high">${s.tot.toLocaleString()}</span></td>`).join('')}</tr>`;
-    html += `<tr><td style="color:#9ca3af">+ve Sentiment</td>${itemStats.map(s=>`<td><span class="heat-cell ${getHeatClass(s.pos)}">${s.pos}%</span></td>`).join('')}</tr>`;
-    html += `<tr><td style="color:#9ca3af">-ve Sentiment</td>${itemStats.map(s=>`<td><span class="heat-cell ${getHeatClassInverse(s.neg)}">${s.neg}%</span></td>`).join('')}</tr>`;
-    html += `</tbody></table></div>`;
-    html += `<table class="data-table"><thead><tr><th>Aspect</th>${itemStats.map(s=>`<th class="item-col"><div class="item-header"><div class="dot" style="background:${s.color}"></div><div class="name">${s.name}</div></div></th>`).join('')}</tr></thead><tbody>`;
-    aspects.forEach(asp => {
+
+    const hdrCols = itemStats.map(s=>`<th class="item-col"><div class="item-header"><div class="dot" style="background:${s.color}"></div><div class="name" style="font-size:12px">${s.name}</div></div></th>`).join('');
+    const legendHtml = `<div style="display:flex;align-items:center;gap:6px;margin-bottom:16px;font-size:11px;color:#9ca3af">
+      <span>Low</span>
+      <div style="display:flex;gap:2px">${['rgba(127,29,29,.6)','rgba(161,98,7,.5)','rgba(21,128,61,.4)','rgba(13,148,136,.5)','rgba(13,148,136,.7)'].map(c=>`<div style="width:18px;height:10px;background:${c};border-radius:2px"></div>`).join('')}</div>
+      <span>High</span>
+    </div>`;
+
+    // ── Section 1: Satisfaction Score ───────────────────────────────
+    let html = `<div style="margin-bottom:24px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <h3 style="color:#a855f7;font-size:14px;font-weight:600">Satisfaction Score</h3>
+        ${legendHtml}
+      </div>
+      <table class="data-table"><thead><tr><th></th>${hdrCols}</tr></thead><tbody>
+        <tr><td style="color:#9ca3af">Review Count</td>${itemStats.map(s=>`<td><span class="heat-cell heat-high">${s.tot.toLocaleString()}</span></td>`).join('')}</tr>
+        <tr><td style="color:#9ca3af">+ve Sentiment %</td>${itemStats.map(s=>`<td><span class="heat-cell ${getHeatClass(s.pos)}">${s.pos}%</span></td>`).join('')}</tr>
+        <tr><td style="color:#9ca3af">-ve Sentiment %</td>${itemStats.map(s=>`<td><span class="heat-cell ${getHeatClassInverse(s.neg)}">${s.neg}%</span></td>`).join('')}</tr>
+        <tr><td style="color:#9ca3af">Net Sentiment</td>${itemStats.map(s=>`<td><span class="heat-cell ${getHeatClass(s.pos-s.neg+50)}">${s.pos-s.neg}%</span></td>`).join('')}</tr>
+      </tbody></table>
+    </div>`;
+
+    // ── Section 2: Driver Analysis (SOV) ───────────────────────────
+    html += `<div style="margin-bottom:24px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <h3 style="color:#a855f7;font-size:14px;font-weight:600">Driver Analysis</h3>
+        ${legendHtml}
+      </div>
+      <table class="data-table"><thead><tr><th></th>${hdrCols}</tr></thead><tbody>`;
+    if(itemStats.some(s=>s.rating>0)) {
+      html += `<tr><td style="color:#9ca3af">Avg. Rating</td>${itemStats.map(s=>`<td><span class="heat-cell ${getHeatClass(s.rating*20)}">&#9733; ${s.rating||'--'}</span></td>`).join('')}</tr>`;
+    }
+    ASPECTS.forEach(asp => {
       html += `<tr><td style="color:#d1d5db">${asp}</td>`;
       itemStats.forEach(s => {
         const a = (s.aspects||[]).find(x=>x.aspect_name===asp);
-        const val = a?(a.satisfaction_pct||a.satisfaction||0):0;
-        html += `<td>${val?`<span class="heat-cell ${getHeatClass(val)}">${val}%</span>`:`<span style="color:#4b5563">-</span>`}</td>`;
+        const val = a?(a.share_of_voice_pct||a.total_mentions||0):0;
+        html += `<td>${val>0?`<span class="heat-cell ${getHeatClass(val*2)}">${val}%</span>`:`<span style="color:#4b5563">-</span>`}</td>`;
       });
       html += `</tr>`;
     });
-    html += `</tbody></table>`;
+    html += `</tbody></table></div>`;
+
+    // ── Section 3: Aspect-wise Comparison ─────────────────────────
+    html += `<div style="margin-bottom:24px">
+      <h3 style="color:#a855f7;font-size:14px;font-weight:600;margin-bottom:10px">Aspect-wise Comparison</h3>
+      <table class="data-table"><thead><tr><th>Aspect</th>${hdrCols}<th style="color:#9ca3af;font-size:11px;text-align:center">Winner</th></tr></thead><tbody>`;
+    ASPECTS.forEach(asp => {
+      const vals = itemStats.map(s => { const a=(s.aspects||[]).find(x=>x.aspect_name===asp); return {name:s.name,val:a?(a.satisfaction_pct||a.satisfaction||0):0,color:s.color}; });
+      const maxVal = Math.max(...vals.map(v=>v.val));
+      const winner = maxVal>0 ? vals.find(v=>v.val===maxVal) : null;
+      html += `<tr><td style="color:#d1d5db;font-weight:500">${asp}</td>`;
+      vals.forEach(v => { html += `<td>${v.val>0?`<span class="heat-cell ${getHeatClass(v.val)}">${v.val}%</span>`:`<span style="color:#4b5563">-</span>`}</td>`; });
+      html += `<td style="text-align:center">${winner?`<span style="color:${winner.color};font-size:12px;font-weight:500">${winner.name}</span>`:`<span style="color:#4b5563">-</span>`}</td></tr>`;
+    });
+    html += `</tbody></table></div>`;
+
+    // ── Section 4: Attribute Wins by Brand ────────────────────────
+    html += `<div><h3 style="color:#a855f7;font-size:14px;font-weight:600;margin-bottom:4px">Attribute Wins &#127942;</h3>
+      <p style="color:#6b7280;font-size:11px;margin-bottom:12px">Attributes listed under the brand that scores highest on them.</p>
+      <div style="display:grid;grid-template-columns:repeat(${itemStats.length},1fr);gap:12px">`;
+    itemStats.forEach(s => {
+      const wins = ASPECTS.map(asp => {
+        const vals = itemStats.map(x=>{ const a=(x.aspects||[]).find(y=>y.aspect_name===asp); return {name:x.name,val:a?(a.satisfaction_pct||a.satisfaction||0):0}; });
+        const maxVal = Math.max(...vals.map(v=>v.val));
+        return maxVal>0 && vals.find(v=>v.val===maxVal)?.name===s.name ? {asp,val:maxVal} : null;
+      }).filter(Boolean);
+      html += `<div style="background:#1e1a29;border-radius:8px;padding:14px;border-top:3px solid ${s.color}">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px">
+          <div style="width:10px;height:10px;border-radius:50%;background:${s.color}"></div>
+          <span style="color:#e2e8f0;font-size:13px;font-weight:600">${s.name}</span>
+          <span style="color:#6b7280;font-size:11px">(${wins.length})</span>
+        </div>
+        ${wins.length?wins.map(w=>`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #2d2438"><span style="color:#9ca3af;font-size:12px">${w.asp}</span><span style="color:${s.color};font-size:12px;font-weight:500">${w.val}%</span></div>`).join(''):'<div style="color:#4b5563;font-size:12px">No category wins</div>'}
+      </div>`;
+    });
+    html += `</div></div>`;
+
     document.getElementById('comparisonContent').innerHTML = html;
-  } catch(e){ document.getElementById('comparisonContent').innerHTML='<div class="no-data">Error loading comparison</div>'; }
+  } catch(e){ console.error(e); document.getElementById('comparisonContent').innerHTML='<div class="no-data">Error loading comparison</div>'; }
 }
 
 // ─── HOTEL DATA V2 (single call) ─────────────────────────────
@@ -925,13 +1000,19 @@ async function loadBrandSignals(brand) {
   if(!brand) return;
   try {
     const r = await fetch(`/api/brand/${encodeURIComponent(brand)}/summary`);
+    if(!r.ok) { console.warn('Brand signals not available'); return; }
     const data = await r.json();
     renderEmotions(data.emotions||[]);
-    document.getElementById('painDelightsRow').classList.remove('hidden');
-    renderPainPoints(data.pain_points||[]);
-    renderDelights(data.delights||[]);
-    document.getElementById('rdSignalsRow').classList.remove('hidden');
-    renderRdSignals(data.rd_signals||{});
+    const pains = data.pain_points||[];
+    const delights = data.delights||[];
+    if(pains.length||delights.length) {
+      document.getElementById('painDelightsRow').classList.remove('hidden');
+      renderPainPoints(pains);
+      renderDelights(delights);
+    }
+    const rd = data.rd_signals||{};
+    const hasRd = Object.values(rd).some(v=>v&&v.length>0);
+    if(hasRd) { document.getElementById('rdSignalsRow').classList.remove('hidden'); renderRdSignals(rd); }
     const demo = data.demographics||{};
     const knownTypes = (demo.traveler_type||[]).filter(t=>t.dimension_value&&t.dimension_value.toLowerCase()!=='unknown'&&(t.count||0)>=10);
     if(knownTypes.length>0){ const kt=knownTypes.reduce((s,t)=>s+t.count,0); document.getElementById('statGuestType').textContent=knownTypes[0].dimension_value; document.getElementById('statGuestPct').textContent=Math.round(knownTypes[0].count*100/kt)+'% of guests'; }
@@ -958,7 +1039,8 @@ async function loadHotelDataV2(productId) {
     const mentions = aspects.reduce((s,a)=>s+(a.total_mentions||0),0);
     document.getElementById('statOverall').textContent = (data.overall_satisfaction||0)+'%';
     document.getElementById('statMentions').textContent = `Based on ${mentions.toLocaleString()} mentions`;
-    const sortedA = [...aspects].sort((a,b)=>(b.satisfaction_pct||0)-(a.satisfaction_pct||0));
+    const filteredAspects = aspects.filter(a => a.aspect_name !== 'General');
+    const sortedA = [...filteredAspects].sort((a,b)=>(b.satisfaction_pct||0)-(a.satisfaction_pct||0));
     if(sortedA.length>0){ document.getElementById('statStrength').textContent=sortedA[0].aspect_name; document.getElementById('statStrengthScore').textContent=(sortedA[0].satisfaction_pct||0)+'% satisfaction'; }
     if(sortedA.length>1){ const w=sortedA[sortedA.length-1]; document.getElementById('statWeakness').textContent=w.aspect_name; document.getElementById('statWeaknessScore').textContent=(w.satisfaction_pct||0)+'% satisfaction'; }
     const demo = data.demographics||{};
@@ -1000,13 +1082,14 @@ async function loadHotelDataV2(productId) {
 // ─── RENDER HELPERS ───────────────────────────────────────────
 function renderEmotions(emotions) {
   const row = document.getElementById('emotionsRow');
-  const valid = (emotions||[]).filter(e => e.percentage > 0 || e.pct_of_total > 0);
+  const valid = (emotions||[]).filter(e => (e.count||e.mention_count||0) > 0);
   if(!valid.length){ row.classList.add('hidden'); return; }
   row.classList.remove('hidden');
   document.getElementById('emotionsBar').innerHTML = valid.slice(0,6).map(e=>{
     const c=EMOTION_COLORS[e.emotion]||{bg:'#374151',text:'#d1d5db',icon:'😐'};
     const pct = e.percentage||e.pct_of_total||0;
-    return `<span class="emotion-pill" style="background:${c.bg};color:${c.text}">${c.icon} ${e.emotion} ${pct}%</span>`;
+    const pctDisplay = pct > 0 ? `${pct}%` : '<1%';
+    return `<span class="emotion-pill" style="background:${c.bg};color:${c.text}">${c.icon} ${e.emotion} ${pctDisplay}</span>`;
   }).join('');
 }
 
