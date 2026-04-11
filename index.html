@@ -251,7 +251,7 @@ body{background:#0f0c1a;color:#e2e8f0;min-height:100vh;font-size:13px}
 
 <div id="hotelViewSelectors" class="filter-row hidden">
   <select id="hotelBrandSelect" class="fsel" onchange="loadCitiesFor('hotelView')"><option value="">Select Brand</option></select>
-  <select id="hotelCitySelect" class="fsel" onchange="loadStarCategoriesFor('hotelView');loadHotelsFor('hotelView')"><option value="">All Cities</option></select>
+  <select id="hotelCitySelect" class="fsel" onchange="loadStarCategoriesFor('hotelView').then(()=>loadHotelsFor('hotelView'))"><option value="">All Cities</option></select>
   <select id="hotelStarSelect" class="fsel" onchange="loadHotelsFor('hotelView')"><option value="">All Stars</option></select>
   <select id="hotelSelect" class="fsel" style="min-width:220px"><option value="">Select Hotel</option></select>
   <button class="apply-btn" id="applyHotelBtn" onclick="applyHotelView()">Apply</button>
@@ -261,6 +261,10 @@ body{background:#0f0c1a;color:#e2e8f0;min-height:100vh;font-size:13px}
   <select id="compareBrandOnly1" class="fsel"><option value="">Brand 1</option></select>
   <select id="compareBrandOnly2" class="fsel"><option value="">Brand 2</option></select>
   <select id="compareBrandOnly3" class="fsel"><option value="">Brand 3</option></select>
+  <label style="display:flex;align-items:center;gap:6px;color:#9ca3af;font-size:12px;cursor:pointer">
+    <input type="checkbox" id="benchmarkBrand" onchange="toggleBenchmarkBrand()" style="accent-color:#a855f7"> Benchmark
+  </label>
+  <select id="benchmarkBrandSelect" class="fsel hidden"><option value="">Select Benchmark Brand</option></select>
   <button class="compare-run-btn" id="runCompareBrandsBtn" onclick="runBrandComparison()">Compare</button>
 </div>
 
@@ -279,6 +283,14 @@ body{background:#0f0c1a;color:#e2e8f0;min-height:100vh;font-size:13px}
     <select id="compareBrand3" class="fsel" onchange="loadCitiesForCompareSlot(3)"><option value="">Brand</option></select>
     <select id="compareCity3" class="fsel" onchange="loadHotelsForCompareSlot(3)"><option value="">City</option></select>
     <select id="compareHotel3" class="fsel" onchange="storeProductId(3)"><option value="">Hotel</option></select>
+  </div>
+  <label style="display:flex;align-items:center;gap:6px;color:#9ca3af;font-size:12px;cursor:pointer;margin-left:8px">
+    <input type="checkbox" id="benchmarkHotel" onchange="toggleBenchmarkHotel()" style="accent-color:#a855f7"> Benchmark
+  </label>
+  <div id="benchmarkHotelSlot" class="compare-slot hidden">
+    <select id="benchmarkHotelBrand" class="fsel" onchange="loadBenchmarkCities()"><option value="">Brand</option></select>
+    <select id="benchmarkHotelCity" class="fsel" onchange="loadBenchmarkHotels()"><option value="">City</option></select>
+    <select id="benchmarkHotelSelect" class="fsel" onchange="this.dataset.productId=this.value"><option value="">Hotel</option></select>
   </div>
   <button class="compare-run-btn" id="runCompareHotelsBtn" onclick="runHotelComparison()">Compare</button>
 </div>
@@ -402,6 +414,30 @@ body{background:#0f0c1a;color:#e2e8f0;min-height:100vh;font-size:13px}
 
   <div id="travelerTypeTab" class="tab-panel hidden">
     <div class="card"><div class="card-title">Traveler Type × Aspect Satisfaction</div><div id="travelerTypeContent" style="overflow-x:auto"></div></div>
+  </div>
+
+  <div id="treemapTab" class="tab-panel hidden">
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+        <div class="card-title" style="margin:0">Aspect Sentiment Treemap</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="color:#9ca3af;font-size:11px">Filter:</span>
+          <select id="treemapAspectFilter" class="fsel" onchange="renderTreemap()" style="font-size:11px">
+            <option value="all">Top 7 Aspects</option>
+            <option value="Dining">Dining</option>
+            <option value="Staff">Staff</option>
+            <option value="Room">Room</option>
+            <option value="Cleanliness">Cleanliness</option>
+            <option value="Amenities">Amenities</option>
+            <option value="Location">Location</option>
+            <option value="Value for Money">Value for Money</option>
+            <option value="General">General</option>
+          </select>
+        </div>
+      </div>
+      <div id="treemapChart" style="width:100%;overflow:hidden"></div>
+      <div style="margin-top:8px;font-size:10px;color:#4b5563">Bubble size = mention volume &nbsp;&nbsp;|&nbsp;&nbsp; Y = positive sentiment % &nbsp;&nbsp;|&nbsp;&nbsp; X = review count</div>
+    </div>
   </div>
 
   <div id="comparisonTab" class="tab-panel hidden">
@@ -571,11 +607,19 @@ async function loadBrands() {
 async function loadCitiesFor(view) {
   const brand = document.getElementById(view==='brandView'?'brandSelect':'hotelBrandSelect').value;
   const cityId = view==='brandView'?'citySelect':'hotelCitySelect';
+  const starId = view==='brandView'?'starSelect':'hotelStarSelect';
+  // Reset downstream
+  document.getElementById(cityId).innerHTML = '<option value="">All Cities</option>';
+  if(starId) document.getElementById(starId).innerHTML = '<option value="">All Stars</option>';
+  if(view==='hotelView') document.getElementById('hotelSelect').innerHTML = '<option value="">Select Hotel</option>';
+  if(!brand) return;
   try {
     const r = await fetch(`/api/cities?brand=${encodeURIComponent(brand)}`);
     const d = await r.json();
     const cities = d.cities||[];
     document.getElementById(cityId).innerHTML = '<option value="">All Cities</option>' + cities.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+    // Auto-load stars after cities loaded
+    await loadStarCategoriesFor(view==='brandView'?'brandView':'hotelView');
   } catch(e){}
 }
 
@@ -731,12 +775,18 @@ async function applyHotelView() {
 
 async function runBrandComparison() {
   const items = [1,2,3].map(i => document.getElementById(`compareBrandOnly${i}`).value).filter(v=>v);
+  const benchmarkChecked = document.getElementById('benchmarkBrand')?.checked;
+  const benchmarkBrand = document.getElementById('benchmarkBrandSelect')?.value;
+  if(benchmarkChecked && benchmarkBrand) items.push('__benchmark__:' + benchmarkBrand);
   if(items.length<2){ alert('Select at least 2 brands'); return; }
   showLoader(); await loadComparison(items,'brand'); hideLoader();
 }
 
 async function runHotelComparison() {
   const items = [1,2,3].map(i => document.getElementById(`compareHotel${i}`).dataset.productId).filter(v=>v);
+  const benchmarkChecked = document.getElementById('benchmarkHotel')?.checked;
+  const benchmarkPid = document.getElementById('benchmarkHotelSelect')?.value;
+  if(benchmarkChecked && benchmarkPid) items.push('__benchmark__:' + benchmarkPid);
   if(items.length<2){ alert('Select at least 2 hotels'); return; }
   showLoader(); await loadComparison(items,'hotel'); hideLoader();
 }
@@ -840,21 +890,30 @@ async function loadDemographics() {
   try {
     const r = await fetch(`/api/demographics?${buildParams()}`);
     const data = await r.json();
-    const renderDonut = (containerId, items, labelKey, colorArr) => {
-      const known = (items||[]).filter(t=> t[labelKey] && (t[labelKey]||'').toLowerCase()!=='unknown' && (t.review_count||t.count||0)>=10);
+    const renderBars = (containerId, items, labelKey, colorArr) => {
+      // Accept any count > 0, filter unknown
+      const known = (items||[]).filter(t => {
+        const lbl = (t[labelKey]||'').toLowerCase();
+        const cnt = t.review_count||t.count||0;
+        return lbl && lbl !== 'unknown' && lbl !== 'none' && lbl !== 'null' && cnt > 0;
+      });
       if(!known.length){ document.getElementById(containerId).innerHTML='<div class="no-data">No data available</div>'; return; }
       const total = known.reduce((s,t)=>s+(t.review_count||t.count||0),0);
-      document.getElementById(containerId).innerHTML = known.slice(0,6).map((t,i) => {
+      document.getElementById(containerId).innerHTML = known.slice(0,8).map((t,i) => {
         const cnt = t.review_count||t.count||0;
         const pct = Math.round(cnt*100/total);
-        return `<div class="css-bar-row" style="margin-bottom:8px"><div class="css-bar-lbl" style="width:100px">${t[labelKey]}</div><div class="css-bar-track"><div class="css-bar-fill" style="width:${pct}%;background:${colorArr[i%colorArr.length]}"></div></div><div class="css-bar-val" style="color:#9ca3af">${pct}%</div></div>`;
+        const label = t[labelKey]||'';
+        return `<div class="css-bar-row" style="margin-bottom:8px">
+          <div class="css-bar-lbl" style="width:110px;font-size:11px">${label}</div>
+          <div class="css-bar-track"><div class="css-bar-fill" style="width:${pct}%;background:${colorArr[i%colorArr.length]}"></div></div>
+          <div class="css-bar-val" style="color:#9ca3af;font-size:11px">${pct}%</div>
+        </div>`;
       }).join('');
     };
-    renderDonut('genderChart', data.gender, 'gender', ['#0072B2','#D55E00']);
-    const knownTravelers = (data.traveler_type||[]).filter(t=>t.traveler_type&&t.traveler_type.toLowerCase()!=='unknown');
-    renderDonut('travelerChart', knownTravelers.map(t=>({...t,traveler_type:t.traveler_type})), 'traveler_type', ['#a855f7','#3b82f6','#22c55e','#f59e0b','#ef4444','#06b6d4']);
-    renderDonut('purposeChart', data.stay_purpose, 'stay_purpose', ['#14b8a6','#8b5cf6','#f97316','#ec4899','#6366f1']);
-  } catch(e){}
+    renderBars('genderChart', data.gender||[], 'gender', ['#0072B2','#D55E00']);
+    renderBars('travelerChart', data.traveler_type||[], 'traveler_type', ['#a855f7','#3b82f6','#22c55e','#f59e0b','#ef4444','#06b6d4']);
+    renderBars('purposeChart', data.stay_purpose||[], 'stay_purpose', ['#14b8a6','#8b5cf6','#f97316','#ec4899','#6366f1']);
+  } catch(e){ console.error('loadDemographics error:',e); }
 }
 
 async function loadStayPurposePreferences() {
@@ -897,6 +956,145 @@ async function loadTravelerTypePreferences() {
   } catch(e){}
 }
 
+
+// ─── TREEMAP BUBBLE CHART ─────────────────────────────────────
+const ASPECT_COLORS = {
+  'Dining':'#14b8a6','Staff':'#8b5cf6','Room':'#3b82f6','Cleanliness':'#22c55e',
+  'Amenities':'#f59e0b','Location':'#ec4899','Value for Money':'#f97316','General':'#6b7280'
+};
+
+let treemapData = [];
+
+async function loadTreemapData() {
+  const container = document.getElementById('treemapChart');
+  container.innerHTML = '<div style="text-align:center;padding:2rem;color:#9ca3af">Loading...</div>';
+  try {
+    const r = await fetch(`/api/drivers?${buildParams()}`);
+    const aspects = await r.json();
+    if(!aspects||!aspects.length){ container.innerHTML='<div class="no-data">No aspect data</div>'; return; }
+    treemapData = aspects;
+    renderTreemap();
+  } catch(e){ container.innerHTML='<div class="no-data">Error loading treemap</div>'; }
+}
+
+function renderTreemap() {
+  const container = document.getElementById('treemapChart');
+  const filter = document.getElementById('treemapAspectFilter')?.value || 'all';
+
+  // Filter + top 7 by mentions
+  let data = filter === 'all'
+    ? [...treemapData].sort((a,b)=>(b.total_mentions||0)-(a.total_mentions||0)).slice(0,7)
+    : treemapData.filter(d=>d.aspect_name===filter);
+
+  if(!data.length){ container.innerHTML='<div class="no-data">No data for this aspect</div>'; return; }
+
+  drawBubbleChart(container, [{label: currentHotelName||currentBrand||'', color:'#a855f7', aspects:data}], filter);
+}
+
+function drawBubbleChart(container, series, filter) {
+  // series = [{label, color, aspects:[{aspect_name, satisfaction, total_mentions}]}]
+  const allAspects = series.flatMap(s=>s.aspects);
+  const maxMentions = Math.max(...allAspects.map(d=>d.total_mentions||0), 1);
+  const W = Math.max(container.offsetWidth||680, 400);
+  const H = 360;
+  const PAD = {l:50,r:20,t:20,b:40};
+  const CW = W - PAD.l - PAD.r;
+  const CH = H - PAD.t - PAD.b;
+
+  const toX = v => PAD.l + (v/maxMentions)*CW;
+  const toY = v => PAD.t + (1 - v/100)*CH;
+  const toR = v => Math.max(10, Math.min(30, 10 + (v/maxMentions)*20));
+
+  let svg = `<svg width="${W}" height="${H}" style="overflow:visible;display:block">`;
+
+  // Grid
+  [0,25,50,75,100].forEach(pct => {
+    const y = toY(pct);
+    svg += `<line x1="${PAD.l}" y1="${y}" x2="${W-PAD.r}" y2="${y}" stroke="${pct===0?'#374151':'#2d2438'}" stroke-width="1" stroke-dasharray="${pct===0?'0':'3'}"/>`;
+    svg += `<text x="${PAD.l-6}" y="${y+4}" fill="#6b7280" font-size="9" text-anchor="end">${pct}%</text>`;
+  });
+  svg += `<line x1="${PAD.l}" y1="${PAD.t}" x2="${PAD.l}" y2="${H-PAD.b}" stroke="#374151" stroke-width="1"/>`;
+
+  // Axis labels
+  svg += `<text x="${PAD.l + CW/2}" y="${H-4}" fill="#6b7280" font-size="10" text-anchor="middle">Mention Count</text>`;
+  svg += `<text x="12" y="${PAD.t+CH/2}" fill="#6b7280" font-size="10" text-anchor="middle" transform="rotate(-90,12,${PAD.t+CH/2})">Sentiment %</text>`;
+
+  // X axis ticks
+  [0, 0.25, 0.5, 0.75, 1].forEach(f => {
+    const x = PAD.l + f*CW;
+    const val = Math.round(f*maxMentions);
+    const label = val >= 1000 ? (val/1000).toFixed(0)+'k' : val;
+    svg += `<text x="${x}" y="${H-PAD.b+12}" fill="#6b7280" font-size="9" text-anchor="middle">${label}</text>`;
+  });
+
+  // Bubbles — draw per series
+  series.forEach(s => {
+    s.aspects.forEach(d => {
+      const sat = d.satisfaction || d.satisfaction_pct || 0;
+      const mentions = d.total_mentions || 0;
+      const x = toX(mentions);
+      const y = toY(sat);
+      const r = toR(mentions);
+      const col = s.color === '__aspect__' ? (ASPECT_COLORS[d.aspect_name]||'#6b7280') : s.color;
+      const isBm = s.isBenchmark;
+      const labelName = series.length > 1
+        ? (filter==='all' ? d.aspect_name : s.label)
+        : d.aspect_name;
+
+      svg += `<g style="cursor:pointer">
+        <title>${labelName}: ${sat}% satisfaction, ${mentions.toLocaleString()} mentions</title>
+        <circle cx="${x}" cy="${y}" r="${r}" fill="${col}" fill-opacity="${isBm?0.15:0.85}"
+          stroke="${isBm?col:'none'}" stroke-width="${isBm?1.5:0}" stroke-dasharray="${isBm?'4':'0'}"/>
+        <text x="${x}" y="${y-r-4}" fill="${isBm?col:'#e5e7eb'}" font-size="9" text-anchor="middle" font-weight="500">${labelName}</text>
+        <text x="${x}" y="${y+4}" fill="${isBm?col:'white'}" font-size="8" text-anchor="middle">${sat}%</text>
+      </g>`;
+    });
+  });
+
+  svg += `</svg>`;
+  container.innerHTML = svg;
+}
+
+
+// ─── BENCHMARK ────────────────────────────────────────────────
+function toggleBenchmarkBrand() {
+  const checked = document.getElementById('benchmarkBrand').checked;
+  const sel = document.getElementById('benchmarkBrandSelect');
+  sel.classList.toggle('hidden', !checked);
+  if(checked) {
+    // populate with brands
+    const opts = Array.from(document.getElementById('compareBrandOnly1').options).slice(1).map(o=>`<option value="${o.value}">${o.text}</option>`).join('');
+    sel.innerHTML = '<option value="">Select Benchmark Brand</option>' + opts;
+  }
+}
+
+function toggleBenchmarkHotel() {
+  const checked = document.getElementById('benchmarkHotel').checked;
+  const slot = document.getElementById('benchmarkHotelSlot');
+  slot.classList.toggle('hidden', !checked);
+  if(checked) {
+    const opts = Array.from(document.getElementById('compareBrand1').options).slice(1).map(o=>`<option value="${o.value}">${o.text}</option>`).join('');
+    document.getElementById('benchmarkHotelBrand').innerHTML = '<option value="">Brand</option>' + opts;
+  }
+}
+
+async function loadBenchmarkCities() {
+  const brand = document.getElementById('benchmarkHotelBrand').value;
+  if(!brand) return;
+  const r = await fetch(`/api/cities?brand=${encodeURIComponent(brand)}`);
+  const d = await r.json();
+  document.getElementById('benchmarkHotelCity').innerHTML = '<option value="">City</option>' + (d.cities||[]).map(c=>`<option>${c}</option>`).join('');
+}
+
+async function loadBenchmarkHotels() {
+  const brand = document.getElementById('benchmarkHotelBrand').value;
+  const city = document.getElementById('benchmarkHotelCity').value;
+  if(!brand||!city) return;
+  const r = await fetch(`/api/hotels?brand=${encodeURIComponent(brand)}&city=${encodeURIComponent(city)}`);
+  const d = await r.json();
+  document.getElementById('benchmarkHotelSelect').innerHTML = '<option value="">Hotel</option>' + (d.hotels||[]).map(h=>`<option value="${h.product_id}">${h.hotel_name}</option>`).join('');
+}
+
 // ─── COMPARISON ───────────────────────────────────────────────
 async function loadComparison(items, compareBy) {
   try {
@@ -913,7 +1111,16 @@ async function loadComparison(items, compareBy) {
               aspects:d.aspects||[], color:COLORS[i%3]};
     });
 
-    const hdrCols = itemStats.map(s=>`<th class="item-col"><div class="item-header"><div class="dot" style="background:${s.color}"></div><div class="name" style="font-size:12px">${s.name}</div></div></th>`).join('');
+    const hdrCols = itemStats.map(s=>`<th class="item-col" title="${s.name}">
+      <div style="display:flex;justify-content:center;align-items:center;height:100%;padding-bottom:4px">
+        <div style="position:relative;display:inline-block">
+          <div style="width:13px;height:13px;border-radius:50%;background:${s.color};cursor:default"
+               title="${s.name}" onmouseenter="this.nextSibling.style.display='block'" onmouseleave="this.nextSibling.style.display='none'">
+          </div>
+          <div style="display:none;position:absolute;bottom:130%;left:50%;transform:translateX(-50%);background:#1e1a29;border:1px solid #374151;border-radius:5px;padding:4px 8px;white-space:nowrap;color:#e5e7eb;font-size:11px;z-index:99;pointer-events:none">${s.name}</div>
+        </div>
+      </div>
+    </th>`).join('');
     const legendHtml = `<div style="display:flex;align-items:center;gap:6px;margin-bottom:16px;font-size:11px;color:#9ca3af">
       <span>Low</span>
       <div style="display:flex;gap:2px">${['rgba(127,29,29,.6)','rgba(161,98,7,.5)','rgba(21,128,61,.4)','rgba(13,148,136,.5)','rgba(13,148,136,.7)'].map(c=>`<div style="width:18px;height:10px;background:${c};border-radius:2px"></div>`).join('')}</div>
@@ -965,7 +1172,11 @@ async function loadComparison(items, compareBy) {
       const winner = maxVal>0 ? vals.find(v=>v.val===maxVal) : null;
       html += `<tr><td style="color:#d1d5db;font-weight:500">${asp}</td>`;
       vals.forEach(v => { html += `<td>${v.val>0?`<span class="heat-cell ${getHeatClass(v.val)}">${v.val}%</span>`:`<span style="color:#4b5563">-</span>`}</td>`; });
-      html += `<td style="text-align:center">${winner?`<span style="color:${winner.color};font-size:12px;font-weight:500">${winner.name}</span>`:`<span style="color:#4b5563">-</span>`}</td></tr>`;
+      html += `<td style="text-align:center">${winner?`<div style="position:relative;display:inline-block">
+        <div style="width:13px;height:13px;border-radius:50%;background:${winner.color};margin:0 auto;cursor:default"
+             onmouseenter="this.nextSibling.style.display='block'" onmouseleave="this.nextSibling.style.display='none'"></div>
+        <div style="display:none;position:absolute;bottom:130%;left:50%;transform:translateX(-50%);background:#1e1a29;border:1px solid #374151;border-radius:5px;padding:4px 8px;white-space:nowrap;color:#e5e7eb;font-size:11px;z-index:99;pointer-events:none">${winner.name}</div>
+      </div>`:`<span style="color:#4b5563">-</span>`}</td></tr>`;
     });
     html += `</tbody></table></div>`;
 
@@ -981,17 +1192,93 @@ async function loadComparison(items, compareBy) {
       }).filter(Boolean);
       html += `<div style="background:#1e1a29;border-radius:8px;padding:14px;border-top:3px solid ${s.color}">
         <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px">
-          <div style="width:10px;height:10px;border-radius:50%;background:${s.color}"></div>
-          <span style="color:#e2e8f0;font-size:13px;font-weight:600">${s.name}</span>
-          <span style="color:#6b7280;font-size:11px">(${wins.length})</span>
+          <div style="width:11px;height:11px;border-radius:50%;background:${s.color};flex-shrink:0"></div>
+          <span style="color:#e2e8f0;font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px" title="${s.name}">${s.name}</span>
+          <span style="color:#6b7280;font-size:11px;flex-shrink:0">(${wins.length})</span>
         </div>
         ${wins.length?wins.map(w=>`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #2d2438"><span style="color:#9ca3af;font-size:12px">${w.asp}</span><span style="color:${s.color};font-size:12px;font-weight:500">${w.val}%</span></div>`).join(''):'<div style="color:#4b5563;font-size:12px">No category wins</div>'}
       </div>`;
     });
     html += `</div></div>`;
 
+    // ── Section 4b: Treemap comparison ──────────────────────────────
+    const tmFilter = 'all'; // no filter active by default in compare
+    html += `<div style="margin-bottom:24px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <h3 style="color:#a855f7;font-size:14px;font-weight:600">Aspect Sentiment Treemap</h3>
+        <select id="compareTreemapFilter" class="fsel" onchange="redrawCompareTreemap()" style="font-size:11px">
+          <option value="all">Top 5 Aspects</option>
+          <option value="Dining">Dining</option>
+          <option value="Staff">Staff</option>
+          <option value="Room">Room</option>
+          <option value="Cleanliness">Cleanliness</option>
+          <option value="Amenities">Amenities</option>
+          <option value="Location">Location</option>
+          <option value="Value for Money">Value for Money</option>
+        </select>
+      </div>
+      <div id="compareTreemapChart" style="width:100%;overflow:hidden"></div>
+      <div style="display:flex;gap:14px;margin-top:8px;flex-wrap:wrap">
+        ${itemStats.map(s=>`<div style="display:flex;align-items:center;gap:5px;font-size:11px;color:#9ca3af">
+          <div style="width:9px;height:9px;border-radius:50%;background:${s.color}"></div>${s.name}</div>`).join('')}
+        <div style="font-size:10px;color:#4b5563;margin-left:auto">Bubble size = mentions &nbsp;|&nbsp; Y = sentiment% &nbsp;|&nbsp; X = review count</div>
+      </div>
+    </div>`;
+
+    // ── Section 5: Pain Points & Delights per item ─────────────────
+    try {
+      const pdResults = await Promise.all(itemStats.map(async s => {
+        const isBenchmark = s.item.startsWith('__benchmark__:');
+        const endpoint = compareBy==='hotel' && !isBenchmark
+          ? `/api/hotel/${s.item}/pain_delights`
+          : null;
+        if(!endpoint) return {name:s.name,color:s.color,pain:[],delights:[]};
+        const r2 = await fetch(endpoint);
+        const d2 = await r2.json();
+        return {name:s.name,color:s.color,pain:(d2.pain_points||[]).slice(0,5),delights:(d2.delights||[]).slice(0,5)};
+      }));
+
+      html += `<div style="margin-top:24px"><h3 style="color:#a855f7;font-size:14px;font-weight:600;margin-bottom:12px">Top Pain Points & Delights</h3>
+        <div style="display:grid;grid-template-columns:repeat(${pdResults.length},1fr);gap:12px">`;
+      pdResults.forEach(item => {
+        html += `<div style="background:#1e1a29;border-radius:8px;padding:12px;border-top:3px solid ${item.color}">
+          <div style="color:#e5e7eb;font-size:12px;font-weight:600;margin-bottom:8px">${item.name}</div>
+          <div style="color:#ef4444;font-size:11px;font-weight:500;margin-bottom:4px">❌ Pain Points</div>
+          ${item.pain.length ? item.pain.map(p=>`<div style="padding:4px 0;border-bottom:1px solid #2d2438;cursor:pointer;color:#fca5a5;font-size:11px" onclick="openDrilldown(${item.item},'${p.phrase}','pain_point')">• ${p.phrase} <span style="color:#6b7280">${p.mention_count||''}</span></div>`).join('') : '<div style="color:#4b5563;font-size:11px">No data</div>'}
+          <div style="color:#22c55e;font-size:11px;font-weight:500;margin:8px 0 4px">✅ Delights</div>
+          ${item.delights.length ? item.delights.map(d=>`<div style="padding:4px 0;border-bottom:1px solid #2d2438;cursor:pointer;color:#86efac;font-size:11px" onclick="openDrilldown(${item.item},'${d.phrase}','delight')">• ${d.phrase} <span style="color:#6b7280">${d.mention_count||''}</span></div>`).join('') : '<div style="color:#4b5563;font-size:11px">No data</div>'}
+        </div>`;
+      });
+      html += `</div></div>`;
+    } catch(e2) { console.warn('Pain/delight compare failed:', e2); }
+
     document.getElementById('comparisonContent').innerHTML = html;
+
+    // Draw compare treemap after DOM is set
+    window._compareTreemapSeries = itemStats.map(s => ({
+      label: s.name,
+      color: s.color,
+      isBenchmark: s.item.startsWith?.('__benchmark__'),
+      aspects: [...s.aspects].sort((a,b)=>(b.total_mentions||0)-(a.total_mentions||0)).slice(0,5)
+        .map(a=>({aspect_name:a.aspect_name,satisfaction:a.satisfaction_pct||a.satisfaction||0,total_mentions:a.total_mentions||0}))
+    }));
+    redrawCompareTreemap();
+
   } catch(e){ console.error(e); document.getElementById('comparisonContent').innerHTML='<div class="no-data">Error loading comparison</div>'; }
+}
+
+function redrawCompareTreemap() {
+  const container = document.getElementById('compareTreemapChart');
+  if(!container || !window._compareTreemapSeries) return;
+  const filter = document.getElementById('compareTreemapFilter')?.value || 'all';
+  const series = window._compareTreemapSeries.map(s => ({
+    ...s,
+    aspects: filter === 'all'
+      ? [...s.aspects].sort((a,b)=>(b.total_mentions||0)-(a.total_mentions||0)).slice(0,5)
+      : s.aspects.filter(a=>a.aspect_name===filter)
+  })).filter(s=>s.aspects.length>0);
+  if(!series.length){ container.innerHTML='<div class="no-data" style="text-align:center;padding:1rem;color:#4b5563">No data for this aspect</div>'; return; }
+  drawBubbleChart(container, series, filter);
 }
 
 // ─── HOTEL DATA V2 (single call) ─────────────────────────────
@@ -1094,14 +1381,22 @@ function renderEmotions(emotions) {
 }
 
 function renderPainPoints(pains) {
-  document.getElementById('painPointsList').innerHTML = pains.length
-    ? pains.slice(0,5).map(p=>`<div class="sig-item pain" onclick="openDrilldown(${currentProductId},'${escapeHtml(p.phrase)}','pain_point')"><span class="sig-txt-r">${escapeHtml(p.phrase)}</span><span class="sig-cnt">${p.mention_count} →</span></div>`).join('')
+  const valid = (pains||[]).filter(p => p && p.phrase && p.phrase !== 'null' && p.phrase !== 'None');
+  document.getElementById('painPointsList').innerHTML = valid.length
+    ? valid.slice(0,8).map(p=>`<div class="sig-item pain" onclick="openDrilldown(${currentProductId},'${escapeHtml(p.phrase)}','pain_point')">
+        <span class="sig-txt-r">${escapeHtml(p.phrase)}</span>
+        <span class="sig-cnt">${p.mention_count||''} →</span>
+      </div>`).join('')
     : '<div class="no-data">No pain points found</div>';
 }
 
 function renderDelights(delights) {
-  document.getElementById('delightsList').innerHTML = delights.length
-    ? delights.slice(0,5).map(d=>`<div class="sig-item delight" onclick="openDrilldown(${currentProductId},'${escapeHtml(d.phrase)}','delight')"><span class="sig-txt-g">${escapeHtml(d.phrase)}</span><span class="sig-cnt">${d.mention_count} →</span></div>`).join('')
+  const valid = (delights||[]).filter(d => d && d.phrase && d.phrase !== 'null' && d.phrase !== 'None');
+  document.getElementById('delightsList').innerHTML = valid.length
+    ? valid.slice(0,8).map(d=>`<div class="sig-item delight" onclick="openDrilldown(${currentProductId},'${escapeHtml(d.phrase)}','delight')">
+        <span class="sig-txt-g">${escapeHtml(d.phrase)}</span>
+        <span class="sig-cnt">${d.mention_count||''} →</span>
+      </div>`).join('')
     : '<div class="no-data">No delights found</div>';
 }
 
@@ -1184,7 +1479,13 @@ async function sendMessage(msg) {
   msgs.innerHTML += `<div id="${tid}" class="msg-bot"><div class="typing"><span></span><span></span><span></span></div></div>`;
   msgs.scrollTop = msgs.scrollHeight;
   try {
-    const r = await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg,product_id:viewMode==='hotel'?currentProductId:null,brand_id:viewMode==='brand'?currentBrand:null,category:'hotels'})});
+    const chatPayload = {
+      message: msg,
+      product_id: viewMode==='hotel' ? (currentProductId||currentHotel||null) : null,
+      brand_id: viewMode==='brand' ? currentBrand : null,
+      category: 'hotels'
+    };
+    const r = await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(chatPayload)});
     const data = await r.json();
     document.getElementById(tid)?.remove();
     msgs.innerHTML += `<div class="msg-bot">${marked.parse?marked.parse(data.response||'No response'):data.response||'No response'}</div>`;

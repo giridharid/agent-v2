@@ -921,6 +921,8 @@ async def chat(request: ChatRequest):
         entity_name = ""
         entity_type = ""
         data_context = ""
+        if not request.product_id and not request.brand_id:
+            return {"response": "Please select a hotel or brand first, then ask me about it.", "conversation_id": None}
         
         if request.product_id:
             # Get hotel data
@@ -970,7 +972,7 @@ Overall Satisfaction: {summary.get('overall_satisfaction', 0)}%
 {delight_lines}
 """
         elif request.brand_id:
-            # Get brand data
+            # Get brand data - brand_id here is actually brand_name from frontend
             summary = await get_brand_summary(request.brand_id)
             entity_name = summary.get('brand_name', 'Unknown Brand')
             entity_type = "Brand"
