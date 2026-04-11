@@ -510,6 +510,7 @@ async def get_brand_summary(brand_id: str):
     FROM `{PROJECT}.{DATASET}.product_pain_delights` p
     JOIN `{PROJECT}.{DATASET}.hotel_master` h ON p.product_id = h.product_id
     WHERE h.brand_name = '{brand_id}'
+    AND p.phrase IS NOT NULL AND TRIM(p.phrase) != ''
     GROUP BY p.phrase, p.aspect_name, p.signal_type
     ORDER BY mention_count DESC
     """
@@ -589,10 +590,12 @@ async def get_hotel_summary(product_id: int):
         "pain": f"""SELECT phrase, treemap_name, aspect_id, aspect_name, mention_count, severity_rank
                FROM `{PROJECT}.{DATASET}.product_pain_delights`
                WHERE product_id = {product_id} AND signal_type = 'pain_point'
+               AND phrase IS NOT NULL AND TRIM(phrase) != ''
                ORDER BY severity_rank LIMIT 10""",
         "delight": f"""SELECT phrase, treemap_name, aspect_id, aspect_name, mention_count, severity_rank
                FROM `{PROJECT}.{DATASET}.product_pain_delights`
                WHERE product_id = {product_id} AND signal_type = 'delight'
+               AND phrase IS NOT NULL AND TRIM(phrase) != ''
                ORDER BY severity_rank LIMIT 10""",
         "rd": f"""SELECT signal_type as rd_signal, phrase, treemap_name, mention_count
                FROM `{PROJECT}.{DATASET}.product_rd_signals`
@@ -623,8 +626,8 @@ async def get_hotel_summary(product_id: int):
                 "pct_of_total": int(row['pct_of_total'] or 0)
             })
 
-    pain_points = [clean_row(r) for r in dfs["pain"].to_dict(orient='records')]
-    delights = [clean_row(r) for r in dfs["delight"].to_dict(orient='records')]
+    pain_points = [clean_row(r) for r in dfs["pain"].to_dict(orient='records') if r.get("phrase") and str(r.get("phrase")).lower() not in ("nan","none","null","")]
+    delights = [clean_row(r) for r in dfs["delight"].to_dict(orient='records') if r.get("phrase") and str(r.get("phrase")).lower() not in ("nan","none","null","")]
 
     rd_signals = {"feature_request": [], "price_feedback": [], "expectation_gap": []}
     for _, row in dfs["rd"].iterrows():
@@ -695,6 +698,7 @@ async def get_hotel_pain_delights(product_id: int):
            mention_count, severity_rank
     FROM `{PROJECT}.{DATASET}.product_pain_delights`
     WHERE product_id = {product_id}
+    AND phrase IS NOT NULL AND TRIM(phrase) != ''
     ORDER BY signal_type, severity_rank
     """
     df = client.query(query).to_dataframe()
@@ -806,6 +810,43 @@ async def drilldown(request: DrilldownRequest):
         }
     except Exception as e:
         print(f"[DRILLDOWN ERROR] {e}")
+        return {"reviews": [], "total_count": 0, "error": str(e)}
+
+
+@app.get("/api/hotel/{product_id}/paradox")
+async def get_paradox_reviews(product_id: int, limit: int = 50):
+    """5-star reviews with negative sentiment — the paradox reviews"""
+    client = get_bq()
+    if not client:
+        raise HTTPException(status_code=500, detail="Database unavailable")
+    try:
+        query = f"""
+        SELECT DISTINCT review_id, review_text, sentiment_text, star_rating,
+               reviewer_name, review_date, traveler_type, stay_purpose,
+               emotion, phrase, treemap_name
+        FROM `{PROJECT}.{DATASET}.review_drilldown`
+        WHERE CAST(product_id AS STRING) = CAST({product_id} AS STRING)
+          AND star_rating = 5
+          AND sentiment_type = 'negative'
+          AND pain_point = 1
+        ORDER BY review_date DESC
+        LIMIT {limit}
+        """
+        df = client.query(query).to_dataframe()
+        count_query = f"""
+        SELECT COUNT(DISTINCT review_id) as total
+        FROM `{PROJECT}.{DATASET}.review_drilldown`
+        WHERE CAST(product_id AS STRING) = CAST({product_id} AS STRING)
+          AND star_rating = 5
+          AND sentiment_type = 'negative'
+          AND pain_point = 1
+        """
+        count_df = client.query(count_query).to_dataframe()
+        total = int(count_df.iloc[0]['total']) if not count_df.empty else 0
+        reviews = [clean_row(r) for r in df.to_dict(orient='records')]
+        return {"reviews": reviews, "total_count": total}
+    except Exception as e:
+        print(f"[PARADOX ERROR] {e}")
         return {"reviews": [], "total_count": 0, "error": str(e)}
 
 # ─────────────────────────────────────────

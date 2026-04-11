@@ -139,7 +139,7 @@ body{background:#0f0c1a;color:#e2e8f0;min-height:100vh;font-size:13px}
 .review-date{color:#6b7280;font-size:11px}
 .review-badge{background:#374151;color:#9ca3af;padding:2px 8px;border-radius:4px;font-size:10px}
 .review-text{color:#d1d5db;font-size:13px;line-height:1.6}
-.review-text mark{background:#fef08a;color:#1a1625;padding:1px 4px;border-radius:2px}
+.review-text mark{background:#92400e;color:#fde68a;padding:1px 4px;border-radius:2px;font-weight:500}
 .modal-footer{padding:12px 20px;border-top:1px solid #374151;text-align:center;flex-shrink:0}
 .load-more-btn{background:#374151;color:#e5e7eb;border:none;padding:8px 20px;border-radius:6px;font-size:13px;cursor:pointer}
 .load-more-btn:hover{background:#4b5563}
@@ -243,7 +243,7 @@ body{background:#0f0c1a;color:#e2e8f0;min-height:100vh;font-size:13px}
 
 <!-- FILTER ROWS -->
 <div id="brandViewSelectors" class="filter-row hidden">
-  <select id="brandSelect" class="fsel" onchange="loadCitiesFor('brandView');loadStarCategoriesFor('brandView')"><option value="">Select Brand</option></select>
+  <select id="brandSelect" class="fsel" onchange="loadCitiesFor('brandView')"><option value="">Select Brand</option></select>
   <select id="citySelect" class="fsel" onchange="loadStarCategoriesFor('brandView')"><option value="">All Cities</option></select>
   <select id="starSelect" class="fsel"><option value="">All Stars</option></select>
   <button class="apply-btn" id="applyBrandBtn" onclick="applyBrandView()">Apply</button>
@@ -257,42 +257,38 @@ body{background:#0f0c1a;color:#e2e8f0;min-height:100vh;font-size:13px}
   <button class="apply-btn" id="applyHotelBtn" onclick="applyHotelView()">Apply</button>
 </div>
 
-<div id="compareBrandsSelectors" class="filter-row hidden">
-  <select id="compareBrandOnly1" class="fsel"><option value="">Brand 1</option></select>
-  <select id="compareBrandOnly2" class="fsel"><option value="">Brand 2</option></select>
-  <select id="compareBrandOnly3" class="fsel"><option value="">Brand 3</option></select>
-  <label style="display:flex;align-items:center;gap:6px;color:#9ca3af;font-size:12px;cursor:pointer">
-    <input type="checkbox" id="benchmarkBrand" onchange="toggleBenchmarkBrand()" style="accent-color:#a855f7"> Benchmark
-  </label>
-  <select id="benchmarkBrandSelect" class="fsel hidden"><option value="">Select Benchmark Brand</option></select>
-  <button class="compare-run-btn" id="runCompareBrandsBtn" onclick="runBrandComparison()">Compare</button>
+<div id="compareBrandsSelectors" class="hidden" style="background:#1e1a29;border-bottom:1px solid #2d2438;padding:10px 20px">
+  <div style="display:grid;grid-template-columns:80px 1fr 1fr 1fr auto;gap:8px;align-items:center">
+    <span style="color:#6b7280;font-size:11px;font-weight:500">Brand</span>
+    <select id="compareBrandOnly1" class="fsel" style="width:100%"><option value="">Brand 1</option></select>
+    <select id="compareBrandOnly2" class="fsel" style="width:100%"><option value="">Brand 2</option></select>
+    <select id="compareBrandOnly3" class="fsel" style="width:100%"><option value="">Brand 3</option></select>
+    <button class="compare-run-btn" onclick="runBrandComparison()">Compare</button>
+  </div>
 </div>
 
-<div id="compareHotelsSelectors" class="filter-row hidden">
-  <div class="compare-slot">
-    <select id="compareBrand1" class="fsel" onchange="loadCitiesForCompareSlot(1)"><option value="">Brand</option></select>
-    <select id="compareCity1" class="fsel" onchange="loadHotelsForCompareSlot(1)"><option value="">City</option></select>
-    <select id="compareHotel1" class="fsel" onchange="storeProductId(1)"><option value="">Hotel</option></select>
+<div id="compareHotelsSelectors" class="hidden" style="background:#1e1a29;border-bottom:1px solid #2d2438;padding:10px 20px">
+  <div style="display:grid;grid-template-columns:80px 1fr 1fr 1fr auto;gap:8px;align-items:center;margin-bottom:6px">
+    <span style="color:#6b7280;font-size:11px;font-weight:500">Brand</span>
+    <select id="compareBrand1" class="fsel" style="width:100%" onchange="loadCitiesForCompareSlot(1)"><option value="">Hotel 1 Brand</option></select>
+    <select id="compareBrand2" class="fsel" style="width:100%" onchange="loadCitiesForCompareSlot(2)"><option value="">Hotel 2 Brand</option></select>
+    <select id="compareBrand3" class="fsel" style="width:100%" onchange="loadCitiesForCompareSlot(3)"><option value="">Hotel 3 Brand</option></select>
+    <div></div>
   </div>
-  <div class="compare-slot">
-    <select id="compareBrand2" class="fsel" onchange="loadCitiesForCompareSlot(2)"><option value="">Brand</option></select>
-    <select id="compareCity2" class="fsel" onchange="loadHotelsForCompareSlot(2)"><option value="">City</option></select>
-    <select id="compareHotel2" class="fsel" onchange="storeProductId(2)"><option value="">Hotel</option></select>
+  <div style="display:grid;grid-template-columns:80px 1fr 1fr 1fr auto;gap:8px;align-items:center;margin-bottom:6px">
+    <span style="color:#6b7280;font-size:11px;font-weight:500">City</span>
+    <select id="compareCity1" class="fsel" style="width:100%" onchange="loadHotelsForCompareSlot(1)"><option value="">City</option></select>
+    <select id="compareCity2" class="fsel" style="width:100%" onchange="loadHotelsForCompareSlot(2)"><option value="">City</option></select>
+    <select id="compareCity3" class="fsel" style="width:100%" onchange="loadHotelsForCompareSlot(3)"><option value="">City</option></select>
+    <div></div>
   </div>
-  <div class="compare-slot">
-    <select id="compareBrand3" class="fsel" onchange="loadCitiesForCompareSlot(3)"><option value="">Brand</option></select>
-    <select id="compareCity3" class="fsel" onchange="loadHotelsForCompareSlot(3)"><option value="">City</option></select>
-    <select id="compareHotel3" class="fsel" onchange="storeProductId(3)"><option value="">Hotel</option></select>
+  <div style="display:grid;grid-template-columns:80px 1fr 1fr 1fr auto;gap:8px;align-items:center">
+    <span style="color:#6b7280;font-size:11px;font-weight:500">Hotel</span>
+    <select id="compareHotel1" class="fsel" style="width:100%" onchange="storeProductId(1)"><option value="">Select Hotel</option></select>
+    <select id="compareHotel2" class="fsel" style="width:100%" onchange="storeProductId(2)"><option value="">Select Hotel</option></select>
+    <select id="compareHotel3" class="fsel" style="width:100%" onchange="storeProductId(3)"><option value="">Select Hotel</option></select>
+    <button class="compare-run-btn" onclick="runHotelComparison()">Compare</button>
   </div>
-  <label style="display:flex;align-items:center;gap:6px;color:#9ca3af;font-size:12px;cursor:pointer;margin-left:8px">
-    <input type="checkbox" id="benchmarkHotel" onchange="toggleBenchmarkHotel()" style="accent-color:#a855f7"> Benchmark
-  </label>
-  <div id="benchmarkHotelSlot" class="compare-slot hidden">
-    <select id="benchmarkHotelBrand" class="fsel" onchange="loadBenchmarkCities()"><option value="">Brand</option></select>
-    <select id="benchmarkHotelCity" class="fsel" onchange="loadBenchmarkHotels()"><option value="">City</option></select>
-    <select id="benchmarkHotelSelect" class="fsel" onchange="this.dataset.productId=this.value"><option value="">Hotel</option></select>
-  </div>
-  <button class="compare-run-btn" id="runCompareHotelsBtn" onclick="runHotelComparison()">Compare</button>
 </div>
 
 <!-- MAIN CONTENT -->
@@ -317,6 +313,10 @@ body{background:#0f0c1a;color:#e2e8f0;min-height:100vh;font-size:13px}
         <div id="contextReviews" class="ctx-meta-val" style="color:#a855f7">--</div>
       </div>
       <div id="contextAddress" class="ctx-meta-sub"></div>
+      <button id="paradoxBtn" class="hidden" onclick="openParadoxModal()"
+        style="margin-top:8px;background:transparent;border:1px solid #ef4444;color:#fca5a5;padding:4px 10px;border-radius:6px;font-size:11px;cursor:pointer;display:flex;align-items:center;gap:5px">
+        &#9888; 5&#9733; but negative
+      </button>
     </div>
   </div>
 
@@ -563,7 +563,7 @@ function renderSearchResults(results, q) {
 }
 
 function highlightMatch(text, q) {
-  return text.replace(new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')})`, 'gi'), '<mark style="background:#fef08a;color:#1a1625;border-radius:2px;padding:0 2px">$1</mark>');
+  return text.replace(new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')})`, 'gi'), '<mark style="background:#92400e;color:#fde68a;border-radius:2px;padding:0 2px;font-weight:500">$1</mark>');
 }
 
 async function selectSearchResult(el) {
@@ -611,7 +611,10 @@ async function loadCitiesFor(view) {
   // Reset downstream
   document.getElementById(cityId).innerHTML = '<option value="">All Cities</option>';
   if(starId) document.getElementById(starId).innerHTML = '<option value="">All Stars</option>';
-  if(view==='hotelView') document.getElementById('hotelSelect').innerHTML = '<option value="">Select Hotel</option>';
+  if(view==='hotelView') {
+    document.getElementById('hotelSelect').innerHTML = '<option value="">Select Hotel</option>';
+    document.getElementById('hotelStarSelect').innerHTML = '<option value="">All Stars</option>';
+  }
   if(!brand) return;
   try {
     const r = await fetch(`/api/cities?brand=${encodeURIComponent(brand)}`);
@@ -636,7 +639,8 @@ async function loadStarCategoriesFor(view) {
     const r = await fetch(url);
     if(!r.ok) return;
     const stars = await r.json();
-    document.getElementById(starEl).innerHTML = '<option value="">All Stars</option>' + (stars||[]).map(s=>`<option value="${s}">${'⭐'.repeat(s)} (${s} Star)</option>`).join('');
+    const validStars = (stars||[]).filter(s => s && s > 0);
+    document.getElementById(starEl).innerHTML = '<option value="">All Stars</option>' + validStars.map(s=>`<option value="${s}">${'⭐'.repeat(Math.min(s,5))} (${s} Star)</option>`).join('');
   } catch(e){}
 }
 
@@ -854,22 +858,34 @@ async function loadStats() {
 
 async function loadDrivers() {
   try {
-    const r = await fetch(`/api/drivers?${buildParams()}`);
+    const params = buildParams();
+    console.log('[loadDrivers] params:', params);
+    const r = await fetch(`/api/drivers?${params}`);
     const data = await r.json();
-    if(!data||!data.length) return;
+    console.log('[loadDrivers] data:', data?.length, 'items');
+    if(!data||!data.length) {
+      document.getElementById('sovChart').innerHTML = '<div class="no-data">No aspect data available</div>';
+      document.getElementById('satisfactionBarsDiv').innerHTML = '';
+      document.getElementById('chartsRow').classList.remove('hidden');
+      return;
+    }
     const ICONS = {1:'🍽️',2:'🧹',3:'🏊',4:'👨‍💼',5:'🛏️',6:'📍',7:'💰',8:'⭐'};
+    const totalMentions = data.reduce((s,d)=>s+(d.total_mentions||0),0);
     const sortedSov = [...data].sort((a,b)=>(b.share_of_voice||0)-(a.share_of_voice||0));
     document.getElementById('sovChart').innerHTML = sortedSov.map(d => {
-      const pct = d.share_of_voice||0;
+      let pct = d.share_of_voice||0;
+      if(!pct && d.total_mentions && totalMentions) pct = Math.round(d.total_mentions*100/totalMentions);
       return `<div class="css-bar-row"><div class="css-bar-lbl">${ICONS[d.aspect_id]||''} ${d.aspect_name}</div><div class="css-bar-track"><div class="css-bar-fill" style="width:${Math.min(pct,100)}%;background:#0d9488"></div></div><div class="css-bar-val" style="color:#9ca3af">${pct}%</div></div>`;
     }).join('');
-    const sortedSat = [...data].sort((a,b)=>(a.satisfaction||0)-(b.satisfaction||0));
+    const sortedSat = [...data].filter(a=>a.aspect_name!=='General').sort((a,b)=>(a.satisfaction||0)-(b.satisfaction||0));
     document.getElementById('satisfactionBarsDiv').innerHTML = sortedSat.map(d => {
-      const pct = d.satisfaction||0;
+      let pct = d.satisfaction||0;
+      if(!pct && (d.positive_count||d.negative_count)) pct=Math.round((d.positive_count||0)*100/((d.positive_count||0)+(d.negative_count||1)));
       const col = pct>=80?'#22c55e':pct>=60?'#f59e0b':'#ef4444';
       return `<div class="css-bar-row"><div class="css-bar-lbl">${ICONS[d.aspect_id]||''} ${d.aspect_name}</div><div class="css-bar-track"><div class="css-bar-fill" style="width:${Math.min(pct,100)}%;background:${col}"></div></div><div class="css-bar-val" style="color:${col}">${pct}%</div></div>`;
     }).join('');
-  } catch(e){}
+    document.getElementById('chartsRow').classList.remove('hidden');
+  } catch(e){ console.error('[loadDrivers] error:', e); }
 }
 
 async function loadSatisfactionTab() {
@@ -1420,7 +1436,8 @@ function renderDrilldownReviews() {
   document.getElementById('drilldownContent').innerHTML = visible.map(r=>{
     const stars = '⭐'.repeat(Math.round(r.star_rating||0));
     const text = highlightSentiment(r.review_text||'', r.sentiment_text||'');
-    return `<div class="review-card"><div class="review-top"><div class="review-left"><span class="review-stars">${stars}</span><span class="review-name">${escapeHtml(r.reviewer_name||'Guest')}</span><span class="review-date">${formatDate(r.review_date)}</span></div>${r.traveler_type?`<span class="review-badge">${escapeHtml(r.traveler_type)}</span>`:''}</div><div class="review-text">${text}</div></div>`;
+    const phraseBadge = r.phrase ? `<span style="background:#7f1d1d;color:#fca5a5;padding:2px 7px;border-radius:4px;font-size:10px;margin-left:4px">${escapeHtml(r.phrase)}</span>` : '';
+    return `<div class="review-card"><div class="review-top"><div class="review-left"><span class="review-stars">${stars}</span><span class="review-name">${escapeHtml(r.reviewer_name||'Guest')}</span><span class="review-date">${formatDate(r.review_date)}</span>${phraseBadge}</div>${r.traveler_type?`<span class="review-badge">${escapeHtml(r.traveler_type)}</span>`:''}</div><div class="review-text">${text}</div></div>`;
   }).join('');
   document.getElementById('drilldownFooter').innerHTML = allReviews.length>showing
     ? `<button class="load-more-btn" onclick="loadMoreDrilldown()">Load More (${allReviews.length-showing} remaining)</button>` : '';
@@ -1447,6 +1464,30 @@ async function openDrilldown(productId, phrase, signalType) {
 }
 
 function closeDrilldown(){ document.getElementById('drilldownOverlay').classList.remove('open'); }
+
+async function openParadoxModal() {
+  if(!currentProductId && !currentHotel) return;
+  const pid = currentProductId || currentHotel;
+  const overlay = document.getElementById('drilldownOverlay');
+  document.getElementById('drilldownTitle').innerHTML = '<span style="color:#fbbf24">&#9888; 5-Star Reviews with Negative Sentiment</span>';
+  document.getElementById('drilldownCount').textContent = '';
+  document.getElementById('drilldownContent').innerHTML = '<div style="text-align:center;padding:2rem;color:#9ca3af">Loading paradox reviews...</div>';
+  document.getElementById('drilldownFooter').innerHTML = '';
+  overlay.classList.add('open');
+  try {
+    const r = await fetch(`/api/hotel/${pid}/paradox?limit=50`);
+    const data = await r.json();
+    if(!data.reviews||!data.reviews.length){
+      document.getElementById('drilldownContent').innerHTML = '<div style="text-align:center;padding:2rem;color:#6b7280">No paradox reviews found — guests who rated 5 stars but mentioned pain points.</div>';
+      return;
+    }
+    document.getElementById('drilldownCount').textContent = `${data.reviews.length} of ${data.total_count} reviews — gave 5 stars but mentioned a pain point`;
+    drilldownState = { allReviews: data.reviews, showing: 3, signalType: 'paradox' };
+    renderDrilldownReviews();
+  } catch(e) {
+    document.getElementById('drilldownContent').innerHTML = `<div style="text-align:center;padding:2rem;color:#ef4444">Error: ${e.message}</div>`;
+  }
+}
 
 function highlightSentiment(text, sentiment) {
   if(!sentiment||!text) return escapeHtml(text);
