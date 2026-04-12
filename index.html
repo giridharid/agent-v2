@@ -251,7 +251,7 @@ body{background:#0f0c1a;color:#e2e8f0;min-height:100vh;font-size:13px}
 
 <div id="hotelViewSelectors" class="filter-row hidden">
   <select id="hotelBrandSelect" class="fsel" onchange="loadCitiesFor('hotelView')"><option value="">Select Brand</option></select>
-  <select id="hotelCitySelect" class="fsel" onchange="loadStarCategoriesFor('hotelView').then(()=>loadHotelsFor('hotelView'))"><option value="">All Cities</option></select>
+  <select id="hotelCitySelect" class="fsel" onchange="loadStarCategoriesFor('hotelView')"><option value="">All Cities</option></select>
   <select id="hotelStarSelect" class="fsel" onchange="loadHotelsFor('hotelView')"><option value="">All Stars</option></select>
   <select id="hotelSelect" class="fsel" style="min-width:220px"><option value="">Select Hotel</option></select>
   <button class="apply-btn" id="applyHotelBtn" onclick="applyHotelView()">Apply</button>
@@ -604,59 +604,99 @@ async function loadBrands() {
   } catch(e){}
 }
 
-async function loadCitiesFor(view) {
-  const brand = document.getElementById(view==='brandView'?'brandSelect':'hotelBrandSelect').value;
-  const cityId = view==='brandView'?'citySelect':'hotelCitySelect';
-  const starId = view==='brandView'?'starSelect':'hotelStarSelect';
-  // Reset downstream
-  document.getElementById(cityId).innerHTML = '<option value="">All Cities</option>';
-  if(starId) document.getElementById(starId).innerHTML = '<option value="">All Stars</option>';
-  if(view==='hotelView') {
-    document.getElementById('hotelSelect').innerHTML = '<option value="">Select Hotel</option>';
-    document.getElementById('hotelStarSelect').innerHTML = '<option value="">All Stars</option>';
+// ─── CONTEXTUAL FILTER CASCADE ───────────────────────────────
+// Brand → Cities + Stars + Hotels
+// City  → Stars + Hotels
+// Star  → Hotels
+// Each step resets everything downstream before fetching
+
+function resetDownstream(from) {
+  // from: 'brand' | 'city' | 'star'
+  if(from === 'brand') {
+    document.getElementById('hotelCitySelect').innerHTML = '<option value="">All Cities</option>';
+    document.getElementById('citySelect').innerHTML = '<option value="">All Cities</option>';
   }
+  if(from === 'brand' || from === 'city') {
+    document.getElementById('hotelStarSelect').innerHTML = '<option value="">All Stars</option>';
+    document.getElementById('starSelect').innerHTML = '<option value="">All Stars</option>';
+  }
+  document.getElementById('hotelSelect').innerHTML = '<option value="">Select Hotel</option>';
+}
+
+async function loadCitiesFor(view) {
+  const isBrand = view === 'brandView';
+  const brand = document.getElementById(isBrand ? 'brandSelect' : 'hotelBrandSelect').value;
+
+  // Reset everything downstream
+  resetDownstream('brand');
+
   if(!brand) return;
+
   try {
     const r = await fetch(`/api/cities?brand=${encodeURIComponent(brand)}`);
     const d = await r.json();
-    const cities = d.cities||[];
-    document.getElementById(cityId).innerHTML = '<option value="">All Cities</option>' + cities.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
-    // Auto-load stars after cities loaded
-    await loadStarCategoriesFor(view==='brandView'?'brandView':'hotelView');
-  } catch(e){}
+    const cities = d.cities || [];
+    const cityEl = isBrand ? 'citySelect' : 'hotelCitySelect';
+    document.getElementById(cityEl).innerHTML =
+      '<option value="">All Cities</option>' +
+      cities.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+
+    // After cities load, load stars for this brand (no city selected yet)
+    await loadStarCategoriesFor(view);
+
+    // For hotel view, also load all hotels for this brand
+    if(!isBrand) await loadHotelsFor(view);
+  } catch(e) { console.error('loadCitiesFor error:', e); }
 }
 
 async function loadStarCategoriesFor(view) {
-  const brandEl = view==='brandView'?'brandSelect':'hotelBrandSelect';
-  const cityEl = view==='brandView'?'citySelect':'hotelCitySelect';
-  const starEl = view==='brandView'?'starSelect':'hotelStarSelect';
-  const brand = document.getElementById(brandEl)?.value||'';
-  const city = document.getElementById(cityEl)?.value||'';
+  const isBrand = view === 'brandView';
+  const brand = document.getElementById(isBrand ? 'brandSelect' : 'hotelBrandSelect').value;
+  const city = document.getElementById(isBrand ? 'citySelect' : 'hotelCitySelect').value;
+  const starEl = isBrand ? 'starSelect' : 'hotelStarSelect';
+
+  // Reset hotel list when city changes
+  document.getElementById('hotelSelect').innerHTML = '<option value="">Select Hotel</option>';
+
   if(!brand) return;
+
   try {
     let url = `/api/star_categories?brand=${encodeURIComponent(brand)}`;
     if(city) url += `&city=${encodeURIComponent(city)}`;
     const r = await fetch(url);
     if(!r.ok) return;
     const stars = await r.json();
-    const validStars = (stars||[]).filter(s => s && s > 0);
-    document.getElementById(starEl).innerHTML = '<option value="">All Stars</option>' + validStars.map(s=>`<option value="${s}">${'⭐'.repeat(Math.min(s,5))} (${s} Star)</option>`).join('');
-  } catch(e){}
+    const valid = (stars || []).filter(s => s && s > 0);
+    document.getElementById(starEl).innerHTML =
+      '<option value="">All Stars</option>' +
+      valid.map(s => `<option value="${s}">${'⭐'.repeat(Math.min(s,5))} (${s} Star)</option>`).join('');
+
+    // After stars load, refresh hotel list for brand+city
+    if(!isBrand) await loadHotelsFor(view);
+  } catch(e) { console.error('loadStarCategoriesFor error:', e); }
 }
 
 async function loadHotelsFor(view) {
   const brand = document.getElementById('hotelBrandSelect').value;
   const city = document.getElementById('hotelCitySelect').value;
-  const star = document.getElementById('hotelStarSelect')?.value||'';
+  const star = document.getElementById('hotelStarSelect')?.value || '';
+
+  if(!brand) {
+    document.getElementById('hotelSelect').innerHTML = '<option value="">Select Hotel</option>';
+    return;
+  }
+
   try {
     let url = `/api/hotels?brand=${encodeURIComponent(brand)}`;
     if(city) url += `&city=${encodeURIComponent(city)}`;
-    if(star) url += `&star_category=${star}`;
+    if(star) url += `&star_category=${encodeURIComponent(star)}`;
     const r = await fetch(url);
     const d = await r.json();
-    const hotels = d.hotels||[];
-    document.getElementById('hotelSelect').innerHTML = '<option value="">Select Hotel</option>' + hotels.map(h=>`<option value="${h.product_id}" data-name="${escapeHtml(h.hotel_name)}">${escapeHtml(h.hotel_name)}</option>`).join('');
-  } catch(e){}
+    const hotels = d.hotels || [];
+    document.getElementById('hotelSelect').innerHTML =
+      `<option value="">Select Hotel (${hotels.length})</option>` +
+      hotels.map(h => `<option value="${h.product_id}" data-name="${escapeHtml(h.hotel_name)}">${escapeHtml(h.hotel_name)}</option>`).join('');
+  } catch(e) { console.error('loadHotelsFor error:', e); }
 }
 
 async function loadCitiesForCompareSlot(idx) {
@@ -755,9 +795,9 @@ async function applyBrandView() {
   document.getElementById('contextHeader').classList.remove('hidden');
   document.getElementById('statsRow').classList.remove('hidden');
   document.getElementById('subTabsRow').classList.remove('hidden');
-  showSubTab('drivers');
   await loadDashboard();
   await loadBrandSignals(currentBrand);
+  showSubTab('drivers');
   hideLoader();
 }
 
@@ -772,8 +812,8 @@ async function applyHotelView() {
   document.getElementById('contextHeader').classList.remove('hidden');
   document.getElementById('statsRow').classList.remove('hidden');
   document.getElementById('subTabsRow').classList.remove('hidden');
-  showSubTab('drivers');
   await loadHotelDataV2(currentHotel);
+  showSubTab('drivers');
   hideLoader();
 }
 
