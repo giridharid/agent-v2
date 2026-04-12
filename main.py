@@ -591,12 +591,14 @@ async def get_hotel_summary(product_id: int):
                FROM `{PROJECT}.{DATASET}.product_pain_delights`
                WHERE product_id = {product_id} AND signal_type = 'pain_point'
                AND phrase IS NOT NULL AND TRIM(phrase) != ''
-               ORDER BY severity_rank LIMIT 10""",
+               GROUP BY phrase, aspect_name, aspect_id, signal_type, treemap_name, severity_rank
+               ORDER BY mention_count DESC LIMIT 10""",
         "delight": f"""SELECT phrase, treemap_name, aspect_id, aspect_name, mention_count, severity_rank
                FROM `{PROJECT}.{DATASET}.product_pain_delights`
                WHERE product_id = {product_id} AND signal_type = 'delight'
                AND phrase IS NOT NULL AND TRIM(phrase) != ''
-               ORDER BY severity_rank LIMIT 10""",
+               GROUP BY phrase, aspect_name, aspect_id, signal_type, treemap_name, severity_rank
+               ORDER BY mention_count DESC LIMIT 10""",
         "rd": f"""SELECT signal_type as rd_signal, phrase, treemap_name, mention_count
                FROM `{PROJECT}.{DATASET}.product_rd_signals`
                WHERE product_id = {product_id} ORDER BY rd_signal, mention_count DESC"""

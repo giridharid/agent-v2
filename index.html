@@ -365,11 +365,37 @@ body{background:#0f0c1a;color:#e2e8f0;min-height:100vh;font-size:13px}
   <!-- Pain points & delights -->
   <div id="painDelightsRow" class="hidden">
     <div class="sig-card">
-      <div class="sig-title" style="color:#ef4444">&#10060; Pain Points <span style="color:#6b7280;font-size:10px;font-weight:400">click to see reviews</span></div>
+      <div class="sig-title" style="color:#ef4444;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px">
+        <span>&#10060; Pain Points <span style="color:#6b7280;font-size:10px;font-weight:400">click to see reviews</span></span>
+        <select class="fsel" style="font-size:10px;padding:3px 8px" onchange="currentPainAspect=this.value;renderFilteredPains()">
+          <option value="all">All Aspects</option>
+          <option value="Dining">Dining</option>
+          <option value="Staff">Staff</option>
+          <option value="Room">Room</option>
+          <option value="Cleanliness">Cleanliness</option>
+          <option value="Amenities">Amenities</option>
+          <option value="Location">Location</option>
+          <option value="Value for Money">Value for Money</option>
+          <option value="General">General</option>
+        </select>
+      </div>
       <div id="painPointsList"></div>
     </div>
     <div class="sig-card">
-      <div class="sig-title" style="color:#22c55e">&#10003; Delights <span style="color:#6b7280;font-size:10px;font-weight:400">click to see reviews</span></div>
+      <div class="sig-title" style="color:#22c55e;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px">
+        <span>&#10003; Delights <span style="color:#6b7280;font-size:10px;font-weight:400">click to see reviews</span></span>
+        <select class="fsel" style="font-size:10px;padding:3px 8px" onchange="currentDelightAspect=this.value;renderFilteredDelights()">
+          <option value="all">All Aspects</option>
+          <option value="Dining">Dining</option>
+          <option value="Staff">Staff</option>
+          <option value="Room">Room</option>
+          <option value="Cleanliness">Cleanliness</option>
+          <option value="Amenities">Amenities</option>
+          <option value="Location">Location</option>
+          <option value="Value for Money">Value for Money</option>
+          <option value="General">General</option>
+        </select>
+      </div>
       <div id="delightsList"></div>
     </div>
   </div>
@@ -763,7 +789,8 @@ function showContentAreas() {
   });
 }
 function hideContentAreas() {
-  ['contextHeader','statsRow','emotionsRow','painDelightsRow','rdSignalsRow','subTabsRow','chartsRow'].forEach(id => document.getElementById(id)?.classList.add('hidden'));
+  ['contextHeader','statsRow','emotionsRow','painDelightsRow','rdSignalsRow','subTabsRow'].forEach(id => document.getElementById(id)?.classList.add('hidden'));
+  document.getElementById('chartsRow')?.classList.add('hidden');
 }
 
 function showSubTab(name) {
@@ -773,7 +800,6 @@ function showSubTab(name) {
   activeTab = name;
   if(name==='drivers') {
     document.getElementById('chartsRow').classList.remove('hidden');
-    if(viewMode==='brand' && currentBrand) loadDrivers();
   } else {
     document.getElementById('chartsRow').classList.add('hidden');
     document.getElementById(name+'Tab')?.classList.remove('hidden');
@@ -846,7 +872,6 @@ function buildParams() {
 async function loadDashboard() {
   if(viewMode==='brand' && !currentBrand) return;
   await Promise.all([loadContextHeader(), loadStats(), loadDrivers()]);
-  refreshActiveTab();
 }
 
 function refreshActiveTab() {
@@ -1436,24 +1461,62 @@ function renderEmotions(emotions) {
   }).join('');
 }
 
+function dedupeByPhrase(items) {
+  // Group by phrase, sum counts, take highest
+  const map = {};
+  (items||[]).forEach(p => {
+    if(!p || !p.phrase || p.phrase === 'null' || p.phrase === 'None') return;
+    const key = p.phrase.toLowerCase().trim();
+    if(!map[key] || (p.mention_count||0) > (map[key].mention_count||0)) {
+      map[key] = p;
+    }
+  });
+  return Object.values(map).sort((a,b) => (b.mention_count||0) - (a.mention_count||0));
+}
+
+let allPainPoints = [], allDelights = [];
+let currentPainAspect = 'all', currentDelightAspect = 'all';
+
 function renderPainPoints(pains) {
-  const valid = (pains||[]).filter(p => p && p.phrase && p.phrase !== 'null' && p.phrase !== 'None');
-  document.getElementById('painPointsList').innerHTML = valid.length
-    ? valid.slice(0,8).map(p=>`<div class="sig-item pain" onclick="openDrilldown(${currentProductId},'${escapeHtml(p.phrase)}','pain_point')">
+  allPainPoints = dedupeByPhrase(pains);
+  renderFilteredPains();
+}
+
+function renderFilteredPains() {
+  const pid = currentProductId || currentHotel;
+  const filtered = currentPainAspect === 'all'
+    ? allPainPoints
+    : allPainPoints.filter(p => (p.aspect_name||'').toLowerCase() === currentPainAspect.toLowerCase());
+  document.getElementById('painPointsList').innerHTML = filtered.length
+    ? filtered.slice(0,8).map(p=>`<div class="sig-item pain" onclick="openDrilldown(${pid},'${escapeHtml(p.phrase)}','pain_point')">
         <span class="sig-txt-r">${escapeHtml(p.phrase)}</span>
-        <span class="sig-cnt">${p.mention_count||''} →</span>
+        <span style="display:flex;align-items:center;gap:6px">
+          ${p.aspect_name ? `<span style="color:#6b7280;font-size:10px">${escapeHtml(p.aspect_name)}</span>` : ''}
+          <span class="sig-cnt">${p.mention_count||''} →</span>
+        </span>
       </div>`).join('')
-    : '<div class="no-data">No pain points found</div>';
+    : '<div class="no-data">No pain points for this aspect</div>';
 }
 
 function renderDelights(delights) {
-  const valid = (delights||[]).filter(d => d && d.phrase && d.phrase !== 'null' && d.phrase !== 'None');
-  document.getElementById('delightsList').innerHTML = valid.length
-    ? valid.slice(0,8).map(d=>`<div class="sig-item delight" onclick="openDrilldown(${currentProductId},'${escapeHtml(d.phrase)}','delight')">
+  allDelights = dedupeByPhrase(delights);
+  renderFilteredDelights();
+}
+
+function renderFilteredDelights() {
+  const pid = currentProductId || currentHotel;
+  const filtered = currentDelightAspect === 'all'
+    ? allDelights
+    : allDelights.filter(d => (d.aspect_name||'').toLowerCase() === currentDelightAspect.toLowerCase());
+  document.getElementById('delightsList').innerHTML = filtered.length
+    ? filtered.slice(0,8).map(d=>`<div class="sig-item delight" onclick="openDrilldown(${pid},'${escapeHtml(d.phrase)}','delight')">
         <span class="sig-txt-g">${escapeHtml(d.phrase)}</span>
-        <span class="sig-cnt">${d.mention_count||''} →</span>
+        <span style="display:flex;align-items:center;gap:6px">
+          ${d.aspect_name ? `<span style="color:#6b7280;font-size:10px">${escapeHtml(d.aspect_name)}</span>` : ''}
+          <span class="sig-cnt">${d.mention_count||''} →</span>
+        </span>
       </div>`).join('')
-    : '<div class="no-data">No delights found</div>';
+    : '<div class="no-data">No delights for this aspect</div>';
 }
 
 function renderRdSignals(rd) {
