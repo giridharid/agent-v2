@@ -78,9 +78,15 @@ EMOTION_COLORS = {
 # CACHING
 # ─────────────────────────────────────────
 CACHE = {
-    "brands": {"data": None, "timestamp": 0},
-    "hotels": {"data": None, "timestamp": 0},
-    "cities": {"data": None, "timestamp": 0},
+    "brands":           {"data": None, "timestamp": 0},
+    "hotels":           {"data": None, "timestamp": 0},
+    "cities":           {"data": None, "timestamp": 0},
+    "aspects_by_pid":   {"data": None, "timestamp": 0},  # dict: product_id -> [aspects]
+    "aspects_by_brand": {"data": None, "timestamp": 0},  # dict: brand_name -> [aspects aggregated]
+    "emotions_by_pid":  {"data": None, "timestamp": 0},  # dict: product_id -> [emotions]
+    "pain_by_pid":      {"data": None, "timestamp": 0},  # dict: product_id -> [pain_points]
+    "delight_by_pid":   {"data": None, "timestamp": 0},  # dict: product_id -> [delights]
+    "demo_by_pid":      {"data": None, "timestamp": 0},  # dict: product_id -> {gender,traveler_type,stay_purpose}
 }
 CACHE_TTL = 86400  # 24 hours
 
@@ -251,7 +257,137 @@ def load_master_caches():
         cities = sorted(hotels_df['city'].dropna().unique().tolist())
         set_cache("cities", cities)
         print(f"[CACHE] Loaded {len(cities)} cities")
-        
+
+        # Build hotel_name → brand_name lookup
+        hotel_to_brand = dict(zip(
+            hotels_df['product_id'].astype(str),
+            hotels_df['brand_name'].fillna('')
+        ))
+
+        # ── Load product_aspect_summary (all products + brands) ──
+        asp_df = client.query(f"""
+            SELECT product_id, aspect_id, aspect_name,
+                   positive_count, negative_count, total_mentions,
+                   satisfaction_pct, share_of_voice_pct
+            FROM `{PROJECT}.{DATASET}.product_aspect_summary`
+        """).to_dataframe()
+
+        asp_by_pid = {}
+        asp_brand_raw = {}  # brand_name -> {aspect_name -> {pos,neg,total}}
+        for _, row in asp_df.iterrows():
+            pid = str(int(row['product_id']))
+            brand = hotel_to_brand.get(pid, '')
+            r = {
+                'aspect_id': int(row['aspect_id'] or 0),
+                'aspect_name': str(row['aspect_name'] or ''),
+                'positive_count': int(row['positive_count'] or 0),
+                'negative_count': int(row['negative_count'] or 0),
+                'total_mentions': int(row['total_mentions'] or 0),
+                'satisfaction_pct': int(row['satisfaction_pct'] or 0),
+                'share_of_voice_pct': int(row['share_of_voice_pct'] or 0),
+            }
+            asp_by_pid.setdefault(pid, []).append(r)
+            if brand:
+                ba = asp_brand_raw.setdefault(brand, {})
+                ak = r['aspect_name']
+                if ak not in ba:
+                    ba[ak] = {'aspect_id': r['aspect_id'], 'pos': 0, 'neg': 0, 'total': 0}
+                ba[ak]['pos'] += r['positive_count']
+                ba[ak]['neg'] += r['negative_count']
+                ba[ak]['total'] += r['total_mentions']
+        set_cache("aspects_by_pid", asp_by_pid)
+
+        # Compute brand-level aggregated aspects
+        asp_by_brand = {}
+        for brand, aspects in asp_brand_raw.items():
+            total_all = sum(v['total'] for v in aspects.values()) or 1
+            rows = []
+            for asp_name, v in aspects.items():
+                sat = round(v['pos'] * 100 / (v['pos'] + v['neg'])) if (v['pos'] + v['neg']) > 0 else 0
+                sov = round(v['total'] * 100 / total_all)
+                rows.append({
+                    'aspect_id': v['aspect_id'],
+                    'aspect_name': asp_name,
+                    'positive_count': v['pos'],
+                    'negative_count': v['neg'],
+                    'total_mentions': v['total'],
+                    'satisfaction_pct': sat,
+                    'share_of_voice_pct': sov,
+                    'satisfaction': sat,
+                    'share_of_voice': sov,
+                })
+            asp_by_brand[brand] = sorted(rows, key=lambda x: -x['total_mentions'])
+        set_cache("aspects_by_brand", asp_by_brand)
+        print(f"[CACHE] Loaded aspects: {len(asp_by_pid)} products, {len(asp_by_brand)} brands")
+
+        # ── Load product_emotions ──
+        emo_df = client.query(f"""
+            SELECT product_id, emotion, mention_count, pct_of_total as percentage
+            FROM `{PROJECT}.{DATASET}.product_emotions`
+        """).to_dataframe()
+
+        emo_by_pid = {}
+        for _, row in emo_df.iterrows():
+            pid = str(int(row['product_id']))
+            emo_by_pid.setdefault(pid, []).append({
+                'emotion': str(row['emotion'] or ''),
+                'count': int(row['mention_count'] or 0),
+                'percentage': int(row['percentage'] or 0),
+            })
+        set_cache("emotions_by_pid", emo_by_pid)
+        print(f"[CACHE] Loaded emotions: {len(emo_by_pid)} products")
+
+        # ── Load product_pain_delights ──
+        pd_df = client.query(f"""
+            SELECT product_id, phrase, aspect_name, signal_type, mention_count, severity_rank
+            FROM `{PROJECT}.{DATASET}.product_pain_delights`
+            WHERE phrase IS NOT NULL AND TRIM(phrase) != ''
+            ORDER BY product_id, signal_type, severity_rank
+        """).to_dataframe()
+
+        pain_by_pid = {}
+        delight_by_pid = {}
+        for _, row in pd_df.iterrows():
+            pid = str(int(row['product_id']))
+            phrase = str(row['phrase'] or '').strip()
+            if not phrase or phrase.lower() in ('null','none','nan'): continue
+            r = {
+                'phrase': phrase,
+                'aspect_name': str(row['aspect_name'] or ''),
+                'mention_count': int(row['mention_count'] or 0),
+            }
+            sig = str(row['signal_type'] or '')
+            if sig == 'pain_point':
+                pain_by_pid.setdefault(pid, []).append(r)
+            elif sig == 'delight':
+                delight_by_pid.setdefault(pid, []).append(r)
+        set_cache("pain_by_pid", pain_by_pid)
+        set_cache("delight_by_pid", delight_by_pid)
+        print(f"[CACHE] Loaded pain: {len(pain_by_pid)} products, delights: {len(delight_by_pid)} products")
+
+        # ── Load product_demographics ──
+        demo_df = client.query(f"""
+            SELECT product_id, dimension, dimension_value, review_count, pct_of_total
+            FROM `{PROJECT}.{DATASET}.product_demographics`
+            WHERE dimension_value IS NOT NULL
+        """).to_dataframe()
+
+        demo_by_pid = {}
+        for _, row in demo_df.iterrows():
+            pid = str(int(row['product_id']))
+            dim = str(row['dimension'] or '')
+            val = str(row['dimension_value'] or '').strip()
+            if not val or val.lower() in ('unknown','none','null',''): continue
+            entry = demo_by_pid.setdefault(pid, {'gender':[], 'traveler_type':[], 'stay_purpose':[]})
+            if dim in entry:
+                entry[dim].append({
+                    dim: val,
+                    'review_count': int(row['review_count'] or 0),
+                    'pct_of_total': int(row['pct_of_total'] or 0),
+                })
+        set_cache("demo_by_pid", demo_by_pid)
+        print(f"[CACHE] Loaded demographics: {len(demo_by_pid)} products")
+
     except Exception as e:
         print(f"[CACHE ERROR] {e}")
         traceback.print_exc()
@@ -316,22 +452,24 @@ async def get_brands(category: str = "hotels"):
 
 @app.get("/api/hotels")
 async def get_hotels(
-    brand_id: Optional[str] = None,
+    brand: Optional[str] = None,
     city: Optional[str] = None,
-    stars: Optional[str] = None,
+    star_category: Optional[str] = None,
     category: str = "hotels"
 ):
     """Get hotels with optional filters"""
     cached = get_cache("hotels")
     if cached:
         filtered = cached
-        if brand_id:
-            filtered = [h for h in filtered if str(h.get('brand_id')) == str(brand_id)]
+        if brand:
+            filtered = [h for h in filtered if h.get('brand_name','').lower() == brand.lower()]
         if city and city != "All Cities":
             filtered = [h for h in filtered if h.get('city') == city]
-        if stars and stars != "All Stars":
-            star_val = float(stars.replace('+', ''))
-            filtered = [h for h in filtered if (h.get('star_category') or 0) >= star_val]
+        if star_category and star_category != "All Stars":
+            try:
+                star_val = int(float(star_category))
+                filtered = [h for h in filtered if int(h.get('star_category') or 0) == star_val]
+            except: pass
         return {"hotels": filtered}
     
     client = get_bq()
@@ -339,13 +477,15 @@ async def get_hotels(
         raise HTTPException(status_code=500, detail="Database unavailable")
     
     conditions = ["1=1"]
-    if brand_id:
-        conditions.append(f"brand_id = '{brand_id}'")
+    if brand:
+        conditions.append(f"brand_name = '{brand}'")
     if city and city != "All Cities":
         conditions.append(f"city = '{city}'")
-    if stars and stars != "All Stars":
-        star_val = float(stars.replace('+', ''))
-        conditions.append(f"star_category >= {star_val}")
+    if star_category and star_category != "All Stars":
+        try:
+            star_val = int(float(star_category))
+            conditions.append(f"star_category = {star_val}")
+        except: pass
     
     query = f"""
     SELECT product_id, hotel_name, brand_id, brand_name, city, state, country,
@@ -358,13 +498,13 @@ async def get_hotels(
     return {"hotels": df.to_dict(orient='records')}
 
 @app.get("/api/cities")
-async def get_cities(brand_id: Optional[str] = None):
-    """Get unique cities, optionally filtered by brand"""
+async def get_cities(brand: Optional[str] = None):
+    """Get unique cities, optionally filtered by brand name"""
     cached = get_cache("hotels")
     if cached:
         filtered = cached
-        if brand_id:
-            filtered = [h for h in filtered if str(h.get('brand_id')) == str(brand_id)]
+        if brand:
+            filtered = [h for h in filtered if h.get('brand_name','').lower() == brand.lower()]
         cities = sorted(set(h.get('city') for h in filtered if h.get('city')))
         return {"cities": cities}
     
@@ -968,73 +1108,128 @@ async def chat(request: ChatRequest):
             return {"response": "Please select a hotel or brand first, then ask me about it.", "conversation_id": None}
         
         if request.product_id:
-            # Get hotel data
-            summary = await get_hotel_summary(request.product_id)
-            entity_name = summary.get('hotel_name', 'Unknown Hotel')
+            # ── Hotel context — pull from cache where possible ──
+            pid_str = str(request.product_id)
+            asp_cache  = get_cache("aspects_by_pid")
+            emo_cache  = get_cache("emotions_by_pid")
+            pain_cache = get_cache("pain_by_pid")
+            del_cache  = get_cache("delight_by_pid")
+
+            aspects   = asp_cache.get(pid_str, []) if asp_cache else []
+            emotions  = emo_cache.get(pid_str, []) if emo_cache else []
+            pains     = pain_cache.get(pid_str, []) if pain_cache else []
+            delights_ = del_cache.get(pid_str, []) if del_cache else []
+
+            # Still need hotel info from BQ (name, city, rating)
+            hotel_info = {}
+            try:
+                client2 = get_bq()
+                if client2:
+                    h_df = client2.query(f"SELECT * FROM `{PROJECT}.{DATASET}.hotel_master` WHERE product_id = {request.product_id}").to_dataframe()
+                    if not h_df.empty:
+                        hotel_info = clean_row(h_df.iloc[0].to_dict())
+            except: pass
+
+            entity_name = hotel_info.get('hotel_name', f'Hotel {request.product_id}')
             entity_type = "Hotel"
-            
-            # Format data context
+            overall_sat = hotel_info.get('overall_satisfaction', 0)
+            total_reviews = hotel_info.get('review_count', 0)
+
             aspect_lines = "\n".join([
-                f"  {a['aspect_name']}: {a.get('satisfaction_pct', 0)}% satisfaction, {a.get('share_of_voice_pct', 0)}% SOV"
-                for a in summary.get('aspects', [])
+                f"  {a['aspect_name']}: {a.get('satisfaction_pct',0)}% satisfaction, {a.get('share_of_voice_pct',0)}% share of voice, {a.get('positive_count',0)} positive / {a.get('negative_count',0)} negative mentions"
+                for a in sorted(aspects, key=lambda x: -x.get('total_mentions',0))
             ])
-            
             emotion_lines = ", ".join([
-                f"{e['emotion']} {e.get('percentage', 0)}%"
-                for e in summary.get('emotions', [])[:5]
+                f"{e['emotion']} ({e.get('percentage',0)}%, {e.get('count',0)} mentions)"
+                for e in sorted(emotions, key=lambda x: -x.get('count',0))[:6]
             ])
-            
             pain_lines = "\n".join([
-                f"  * {p['phrase']} ({p['aspect_name']}, {p['mention_count']} mentions)"
-                for p in summary.get('pain_points', [])[:5]
+                f"  * {p['phrase']} — {p.get('aspect_name','')} — {p.get('mention_count',0)} mentions"
+                for p in pains[:8]
             ])
-            
             delight_lines = "\n".join([
-                f"  * {d['phrase']} ({d['aspect_name']}, {d['mention_count']} mentions)"
-                for d in summary.get('delights', [])[:5]
+                f"  * {d['phrase']} — {d.get('aspect_name','')} — {d.get('mention_count',0)} mentions"
+                for d in delights_[:8]
             ])
-            
+
             data_context = f"""
-=== CURRENT CONTEXT ===
-Category: {request.category}
-Hotel: {entity_name} (ID: {request.product_id})
-City: {summary.get('city', 'Unknown')}
-Star Rating: {summary.get('star_category', 'N/A')}
-Overall Satisfaction: {summary.get('overall_satisfaction', 0)}%
+=== HOTEL INTELLIGENCE CONTEXT ===
+Hotel: {entity_name}
+City: {hotel_info.get('city','Unknown')} | Stars: {hotel_info.get('star_category','N/A')} | Google Rating: {hotel_info.get('google_rating','N/A')}
+Total Reviews: {total_reviews:,} | Overall Satisfaction: {overall_sat}%
 
-=== ASPECT SATISFACTION ===
-{aspect_lines}
+=== ASPECT PERFORMANCE (sorted by volume) ===
+{aspect_lines if aspect_lines else 'No aspect data'}
 
-=== TOP EMOTIONS ===
-{emotion_lines}
+=== GUEST EMOTIONS ===
+{emotion_lines if emotion_lines else 'No emotion data'}
 
-=== PAIN POINTS (Top 5) ===
-{pain_lines}
+=== TOP PAIN POINTS (most mentioned) ===
+{pain_lines if pain_lines else 'No pain point data'}
 
-=== DELIGHTS (Top 5) ===
-{delight_lines}
+=== TOP DELIGHTS (most mentioned) ===
+{delight_lines if delight_lines else 'No delight data'}
+
+INSTRUCTION: Use ONLY the exact numbers above. Do not estimate or invent any figure.
 """
-        elif request.brand_id:
-            # Get brand data - brand_id here is actually brand_name from frontend
-            summary = await get_brand_summary(request.brand_id)
-            entity_name = summary.get('brand_name', 'Unknown Brand')
-            entity_type = "Brand"
-            
-            aspect_lines = "\n".join([
-                f"  {a['aspect_name']}: {a.get('satisfaction_pct', 0)}% satisfaction"
-                for a in summary.get('aspects', [])
-            ])
-            
-            data_context = f"""
-=== CURRENT CONTEXT ===
-Category: {request.category}
-Brand: {entity_name} (ID: {request.brand_id})
-Hotels: {summary.get('hotel_count', 0)}
-Total Reviews: {summary.get('total_reviews', 0)}
-Overall Satisfaction: {summary.get('overall_satisfaction', 0)}%
 
-=== ASPECT SATISFACTION ===
-{aspect_lines}
+        elif request.brand_id:
+            # ── Brand context — pull aspects from cache ──
+            brand = request.brand_id
+            asp_cache = get_cache("aspects_by_brand")
+            aspects   = asp_cache.get(brand, []) if asp_cache else []
+
+            # Get brand stats from hotel_master
+            brand_stats = {"hotel_count": 0, "total_reviews": 0, "overall_satisfaction": 0, "avg_rating": 0}
+            try:
+                client2 = get_bq()
+                if client2:
+                    b_df = client2.query(f"""
+                        SELECT COUNT(*) as hotel_count, SUM(review_count) as total_reviews,
+                               ROUND(AVG(overall_satisfaction)) as overall_satisfaction,
+                               ROUND(AVG(google_rating),1) as avg_rating
+                        FROM `{PROJECT}.{DATASET}.hotel_master`
+                        WHERE brand_name = '{brand}'
+                    """).to_dataframe()
+                    if not b_df.empty:
+                        brand_stats = {k: (int(v) if k!='avg_rating' else float(v or 0)) for k,v in clean_row(b_df.iloc[0].to_dict()).items()}
+            except: pass
+
+            entity_name = brand
+            entity_type = "Brand"
+
+            aspect_lines = "\n".join([
+                f"  {a['aspect_name']}: {a.get('satisfaction_pct',0)}% satisfaction, {a.get('share_of_voice_pct',0)}% share of voice, {a.get('positive_count',0)} positive / {a.get('negative_count',0)} negative mentions"
+                for a in aspects
+            ])
+
+            # Get brand pain/delights from brand summary
+            brand_pain, brand_delights = [], []
+            try:
+                bs = await get_brand_summary(brand)
+                brand_pain = bs.get('pain_points', [])[:8]
+                brand_delights = bs.get('delights', [])[:8]
+            except: pass
+
+            pain_lines = "\n".join([f"  * {p['phrase']} — {p.get('aspect_name','')} — {p.get('mention_count',0)} mentions" for p in brand_pain])
+            delight_lines = "\n".join([f"  * {d['phrase']} — {d.get('aspect_name','')} — {d.get('mention_count',0)} mentions" for d in brand_delights])
+
+            data_context = f"""
+=== BRAND INTELLIGENCE CONTEXT ===
+Brand: {entity_name}
+Portfolio: {brand_stats['hotel_count']} hotels | Total Reviews: {brand_stats['total_reviews']:,}
+Overall Satisfaction: {brand_stats['overall_satisfaction']}% | Avg Google Rating: {brand_stats['avg_rating']}
+
+=== ASPECT PERFORMANCE (aggregated across all hotels) ===
+{aspect_lines if aspect_lines else 'No aspect data'}
+
+=== TOP PAIN POINTS (brand-wide) ===
+{pain_lines if pain_lines else 'No pain point data'}
+
+=== TOP DELIGHTS (brand-wide) ===
+{delight_lines if delight_lines else 'No delight data'}
+
+INSTRUCTION: Use ONLY the exact numbers above. Do not estimate or invent any figure.
 """
         
         # Check for drill-down request
@@ -1159,17 +1354,39 @@ async def hotel_details_alias(product_id: Optional[int] = None, brand: Optional[
 
 @app.get("/api/drivers")
 async def drivers_alias(product_id: Optional[int] = None, brand: Optional[str] = None):
+    ASPECT_ICONS = {1:"🍽️",2:"🧹",3:"🏊",4:"👨‍💼",5:"🛏️",6:"📍",7:"💰",8:"⭐"}
+
+    if product_id:
+        cached = get_cache("aspects_by_pid")
+        if cached:
+            rows = cached.get(str(product_id), [])
+            if rows:
+                total = sum(r['total_mentions'] for r in rows) or 1
+                result = []
+                for r in sorted(rows, key=lambda x: -x['total_mentions']):
+                    pos, neg = r['positive_count'], r['negative_count']
+                    sat = r['satisfaction_pct'] or (round(pos*100/(pos+neg)) if (pos+neg)>0 else 0)
+                    sov = r['share_of_voice_pct'] or round(r['total_mentions']*100/total)
+                    result.append({**r, 'satisfaction': sat, 'share_of_voice': sov,
+                                   'icon': ASPECT_ICONS.get(r['aspect_id'], '⭐')})
+                return result
+
+    elif brand:
+        cached = get_cache("aspects_by_brand")
+        if cached and brand in cached:
+            rows = cached[brand]
+            return [{**r, 'icon': ASPECT_ICONS.get(r['aspect_id'], '⭐')} for r in rows]
+
+    # Fallback to BQ if cache miss
     client = get_bq()
     if not client:
         raise HTTPException(status_code=500, detail="Database unavailable")
-    ASPECT_ICONS = {1:"🍽️",2:"🧹",3:"🏊",4:"👨‍💼",5:"🛏️",6:"📍",7:"💰",8:"⭐"}
     if product_id:
         query = f"""
         SELECT aspect_id, aspect_name, positive_count, negative_count,
                total_mentions, satisfaction_pct as satisfaction, share_of_voice_pct as share_of_voice
         FROM `{PROJECT}.{DATASET}.product_aspect_summary`
-        WHERE product_id = {product_id}
-        ORDER BY total_mentions DESC
+        WHERE product_id = {product_id} ORDER BY total_mentions DESC
         """
     elif brand:
         query = f"""
@@ -1180,9 +1397,7 @@ async def drivers_alias(product_id: Optional[int] = None, brand: Optional[str] =
                ROUND(SUM(a.total_mentions)*100/NULLIF(SUM(SUM(a.total_mentions)) OVER(),0)) as share_of_voice
         FROM `{PROJECT}.{DATASET}.product_aspect_summary` a
         JOIN `{PROJECT}.{DATASET}.hotel_master` h ON a.product_id = h.product_id
-        WHERE h.brand_name = '{brand}'
-        GROUP BY a.aspect_id, a.aspect_name
-        ORDER BY total_mentions DESC
+        WHERE h.brand_name = '{brand}' GROUP BY a.aspect_id, a.aspect_name ORDER BY total_mentions DESC
         """
     else:
         return []
@@ -1193,20 +1408,13 @@ async def drivers_alias(product_id: Optional[int] = None, brand: Optional[str] =
         pos = int(row.get('positive_count') or 0)
         neg = int(row.get('negative_count') or 0)
         total = int(row.get('total_mentions') or 0)
-        sat = int(row.get('satisfaction') or 0)
-        sov = int(row.get('share_of_voice') or 0)
-        if sat == 0 and (pos + neg) > 0:
-            sat = round(pos * 100 / (pos + neg))
-        if sov == 0 and total > 0 and total_mentions > 0:
-            sov = round(total * 100 / total_mentions)
+        sat = int(row.get('satisfaction') or 0) or (round(pos*100/(pos+neg)) if (pos+neg)>0 else 0)
+        sov = int(row.get('share_of_voice') or 0) or (round(total*100/total_mentions) if total_mentions>0 else 0)
         results.append({
             'aspect_id': int(row.get('aspect_id') or 0),
             'aspect_name': str(row.get('aspect_name') or ''),
-            'satisfaction': sat,
-            'share_of_voice': sov,
-            'positive_count': pos,
-            'negative_count': neg,
-            'total_mentions': total,
+            'satisfaction': sat, 'share_of_voice': sov,
+            'positive_count': pos, 'negative_count': neg, 'total_mentions': total,
             'icon': ASPECT_ICONS.get(int(row.get('aspect_id') or 0), '⭐')
         })
     return results
