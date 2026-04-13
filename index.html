@@ -1536,16 +1536,28 @@ function buildTreemapChart(points, allStats, asp){
   svg+=`<text x="${PL+CW/2}" y="${H-PB+27}" fill="#4a3f6b" font-size="10" text-anchor="middle">Mention Count →</text>`;
   svg+=`<text x="12" y="${PT+CH/2}" fill="#4a3f6b" font-size="10" text-anchor="middle" transform="rotate(-90,12,${PT+CH/2})">+ve Sentiment % ↑</text>`;
 
-  // ── BEST PRACTICE: Jitter with spiral, stay in bounds ────────
+  // ── Jitter: clamp to quadrant boundaries so bubbles don't cross lines ──
+  const getQuadrant=p=>{
+    const qc=p.x<=xLowRaw?0:p.x<=xHighRaw?1:2;
+    const qr=p.y>=yHigh?0:p.y>=yLow?1:2;
+    return{qr,qc,
+      xMin:qx[qc]+R+1, xMax:qx[qc+1]-R-1,
+      yMin:qy[qr]+R+1, yMax:qy[qr+1]-R-1};
+  };
+
   const placed=[];
   const jittered=points.map(p=>{
+    const q=getQuadrant(p);
     let px=toX(p.x), py=toY(p.y), attempts=0;
-    while(placed.some(q=>Math.hypot(q.px-px,q.py-py)<R*2.1) && attempts<12){
+    // Clamp initial position inside its quadrant
+    px=Math.max(q.xMin,Math.min(q.xMax,px));
+    py=Math.max(q.yMin,Math.min(q.yMax,py));
+    while(placed.some(o=>Math.hypot(o.px-px,o.py-py)<R*2.1) && attempts<12){
       const angle=(p.entityIdx/Math.max(allStats.length,1))*2*Math.PI+attempts*0.7;
       const dist=R*2.2*(1+attempts*0.2);
-      px=Math.max(PL+R,Math.min(W-PR-R,toX(p.x)+Math.cos(angle)*dist));
-      py=Math.max(PT+R+14,Math.min(H-PB-R-6,toY(p.y)+Math.sin(angle)*dist));
-      attempts++;
+      const npx=Math.max(q.xMin,Math.min(q.xMax,toX(p.x)+Math.cos(angle)*dist));
+      const npy=Math.max(q.yMin,Math.min(q.yMax,toY(p.y)+Math.sin(angle)*dist));
+      px=npx; py=npy; attempts++;
     }
     const out={...p,px,py}; placed.push(out); return out;
   });
@@ -1566,24 +1578,28 @@ function buildTreemapChart(points, allStats, asp){
   });
   svg+=`</g>`;
 
-  // ── BEST PRACTICE: Smart labels — hide if overlapping, rely on tooltip ──
+  // ── BEST PRACTICE: Smart labels — hide if overlapping, anchor by position ──
   const placedLbls=[];
   svg+=`<g clip-path="url(#cc)">`;
   jittered.forEach(p=>{
     const lbl=p.label.length>12?p.label.substring(0,11)+'…':p.label;
     const estW=lbl.length*5.2;
-    // Try above first, then below
+    // Determine text-anchor and x offset to prevent edge clipping
+    let anchor='middle', lx=p.px;
+    if(p.px-estW/2<PL+4){ anchor='start'; lx=Math.max(PL+3,p.px-R); }
+    else if(p.px+estW/2>W-PR-4){ anchor='end'; lx=Math.min(W-PR-3,p.px+R); }
+
     const candidates=[p.py-R-10, p.py+R+10, p.py-R-20];
     let chosen=null;
     for(const ly of candidates){
-      const overlaps=placedLbls.some(q=>Math.abs(q.x-p.px)<(estW/2+q.w/2+3)&&Math.abs(q.y-ly)<11);
+      if(ly<PT+4||ly>H-PB-4) continue;
+      const overlaps=placedLbls.some(q=>Math.abs(q.x-lx)<(estW/2+q.w/2+3)&&Math.abs(q.y-ly)<11);
       if(!overlaps){chosen=ly; break;}
     }
     if(chosen!==null){
-      svg+=`<text x="${p.px}" y="${chosen}" fill="${p.color}" font-size="9" text-anchor="middle" font-weight="600" pointer-events="none">${lbl}</text>`;
-      placedLbls.push({x:p.px,y:chosen,w:estW});
+      svg+=`<text x="${lx}" y="${chosen}" fill="${p.color}" font-size="9" text-anchor="${anchor}" font-weight="600" pointer-events="none">${lbl}</text>`;
+      placedLbls.push({x:lx,y:chosen,w:estW});
     }
-    // If all positions collide: bubble is visible, tooltip available — no label
   });
   svg+=`</g>`;
 
