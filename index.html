@@ -307,9 +307,13 @@ body{background:#0a0814;color:#e2e8f0;min-height:100vh;font-family:'DM Sans',sys
       <button class="compare-run-btn" onclick="runBrandComparison()">Compare →</button>
       <label style="display:flex;align-items:center;gap:6px;color:#6b5ea8;font-size:11px;cursor:pointer">
         <input type="checkbox" id="benchmarkBrandCheck" onchange="toggleBenchmarkBrand()" style="accent-color:#7c3aed">
-        Add Benchmark Brand
+        Benchmark Group
       </label>
-      <select id="benchmarkBrandSel" class="fsel hidden" style="min-width:160px"><option value="">Select Benchmark</option></select>
+      <div id="benchmarkBrandGroup" class="hidden" style="display:flex;align-items:center;gap:6px">
+        <select id="benchmarkBrandSel1" class="fsel" style="min-width:130px"><option value="">Brand A</option></select>
+        <span style="color:#5a4e7a;font-size:10px">+</span>
+        <select id="benchmarkBrandSel2" class="fsel" style="min-width:130px"><option value="">Brand B (optional)</option></select>
+      </div>
     </div>
   </div>
 </div>
@@ -340,11 +344,17 @@ body{background:#0a0814;color:#e2e8f0;min-height:100vh;font-family:'DM Sans',sys
       <button class="compare-run-btn" onclick="runHotelComparison()">Compare →</button>
       <label style="display:flex;align-items:center;gap:6px;color:#6b5ea8;font-size:11px;cursor:pointer">
         <input type="checkbox" id="benchmarkHotelCheck" onchange="toggleBenchmarkHotel()" style="accent-color:#7c3aed">
-        Add Benchmark Hotel
+        Benchmark Group
       </label>
-      <select id="benchmarkHotelBrand" class="fsel hidden" style="min-width:120px" onchange="loadBenchmarkHotelCities()"><option value="">Brand</option></select>
-      <select id="benchmarkHotelCity" class="fsel hidden" style="min-width:110px" onchange="loadBenchmarkHotels()"><option value="">City</option></select>
-      <select id="benchmarkHotelSel" class="fsel hidden" style="min-width:150px" onchange="storeBenchmarkHotel()"><option value="">Hotel</option></select>
+      <div id="benchmarkHotelGroup" class="hidden" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+        <select id="benchmarkHotelBrand" class="fsel" style="min-width:110px" onchange="loadBenchmarkHotelCities(1)"><option value="">Brand A</option></select>
+        <select id="benchmarkHotelCity" class="fsel" style="min-width:90px" onchange="loadBenchmarkHotels(1)"><option value="">City</option></select>
+        <select id="benchmarkHotelSel" class="fsel" style="min-width:130px"><option value="">Hotel A</option></select>
+        <span style="color:#5a4e7a;font-size:10px">+</span>
+        <select id="benchmarkHotelBrand2" class="fsel" style="min-width:110px" onchange="loadBenchmarkHotelCities(2)"><option value="">Brand B</option></select>
+        <select id="benchmarkHotelCity2" class="fsel" style="min-width:90px" onchange="loadBenchmarkHotels(2)"><option value="">City</option></select>
+        <select id="benchmarkHotelSel2" class="fsel" style="min-width:130px"><option value="">Hotel B (optional)</option></select>
+      </div>
     </div>
   </div>
 </div>
@@ -771,24 +781,35 @@ function switchMode(mode){
   const tabMap={brand:'brandViewTab',hotel:'hotelViewTab',compareBrands:'compareBrandsTab',compareHotels:'compareHotelsTab'};
   document.getElementById(tabMap[mode])?.classList.add('active-tab');
 
-  // Hide all filter rows and tab panels
   ['brandViewSelectors','hotelViewSelectors','compareBrandsSelectors','compareHotelsSelectors'].forEach(id=>document.getElementById(id).classList.add('hidden'));
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.add('hidden'));
 
-  // ALWAYS clear dashboard on tab switch — data belongs to one mode at a time.
-  // The user must press Apply (or Compare) in the new tab to load fresh data.
+  // Full state reset — user must Apply/Compare fresh
+  currentBrand=null; currentHotel=null; currentHotelName=null;
+  currentCity=null; currentStar=null; currentProductId=null;
   hideContentAreas();
 
   if(mode==='brand'){
     viewMode='brand';
     document.getElementById('brandViewSelectors').classList.remove('hidden');
+    // Reset brand dropdowns
+    document.getElementById('brandSelect').value='';
+    document.getElementById('citySelect').innerHTML='<option value="">All Cities</option>';
+    document.getElementById('starSelect').innerHTML='<option value="">All Stars</option>';
   } else if(mode==='hotel'){
     viewMode='hotel';
     document.getElementById('hotelViewSelectors').classList.remove('hidden');
+    // Reset hotel dropdowns
+    document.getElementById('hotelBrandSelect').value='';
+    document.getElementById('hotelCitySelect').innerHTML='<option value="">All Cities</option>';
+    document.getElementById('hotelStarSelect').innerHTML='<option value="">All Stars</option>';
+    document.getElementById('hotelSelect').innerHTML='<option value="">Select Hotel</option>';
   } else if(mode==='compareBrands'||mode==='compareHotels'){
     viewMode=mode;
     document.getElementById(mode==='compareBrands'?'compareBrandsSelectors':'compareHotelsSelectors').classList.remove('hidden');
     document.getElementById('comparisonTab').classList.remove('hidden');
+    document.getElementById('comparisonContent').innerHTML='<div style="color:#3d3355;text-align:center;padding:3rem;font-size:13px">Select items above and click Compare</div>';
+    window._cmpState=null;
   }
   updateChatContext();
 }
@@ -865,38 +886,94 @@ async function applyHotelView(){
 // ─── BENCHMARK HELPERS ───────────────────────────────────────
 function toggleBenchmarkBrand(){
   const on=document.getElementById('benchmarkBrandCheck').checked;
-  document.getElementById('benchmarkBrandSel').classList.toggle('hidden',!on);
-  if(on){const opts=Array.from(document.getElementById('compareBrandOnly1').options).slice(1).map(o=>`<option value="${o.value}">${o.text}</option>`).join('');document.getElementById('benchmarkBrandSel').innerHTML='<option value="">Select Benchmark</option>'+opts;}
+  const grp=document.getElementById('benchmarkBrandGroup');
+  grp.style.display=on?'flex':'none';
+  grp.classList.toggle('hidden',!on);
+  if(on){
+    const opts=Array.from(document.getElementById('compareBrandOnly1').options).slice(1).map(o=>`<option value="${o.value}">${o.text}</option>`).join('');
+    ['benchmarkBrandSel1','benchmarkBrandSel2'].forEach(id=>{
+      const sel=document.getElementById(id);
+      const placeholder=id.endsWith('1')?'Brand A':'Brand B (optional)';
+      sel.innerHTML=`<option value="">${placeholder}</option>`+opts;
+    });
+  }
 }
 function toggleBenchmarkHotel(){
   const on=document.getElementById('benchmarkHotelCheck').checked;
-  ['benchmarkHotelBrand','benchmarkHotelCity','benchmarkHotelSel'].forEach(id=>document.getElementById(id).classList.toggle('hidden',!on));
-  if(on){const opts=Array.from(document.getElementById('compareBrand1').options).slice(1).map(o=>`<option value="${o.value}">${o.text}</option>`).join('');document.getElementById('benchmarkHotelBrand').innerHTML='<option value="">Brand</option>'+opts;}
+  const grp=document.getElementById('benchmarkHotelGroup');
+  grp.style.display=on?'flex':'none';
+  grp.classList.toggle('hidden',!on);
+  if(on){
+    const opts=Array.from(document.getElementById('compareBrand1').options).slice(1).map(o=>`<option value="${o.value}">${o.text}</option>`).join('');
+    ['benchmarkHotelBrand','benchmarkHotelBrand2'].forEach(id=>{
+      const sel=document.getElementById(id);
+      sel.innerHTML=`<option value="">Brand</option>`+opts;
+    });
+  }
 }
-async function loadBenchmarkHotelCities(){
-  const brand=document.getElementById('benchmarkHotelBrand').value;if(!brand)return;
+async function loadBenchmarkHotelCities(slot=1){
+  const brand=document.getElementById(slot===1?'benchmarkHotelBrand':'benchmarkHotelBrand2').value;
+  if(!brand)return;
   const r=await fetch(`/api/cities?brand=${encodeURIComponent(brand)}`);const d=await r.json();
-  document.getElementById('benchmarkHotelCity').innerHTML='<option value="">City</option>'+(d.cities||[]).map(c=>`<option>${escHtml(c)}</option>`).join('');
+  const opts='<option value="">City</option>'+(d.cities||[]).map(c=>`<option>${escHtml(c)}</option>`).join('');
+  document.getElementById(slot===1?'benchmarkHotelCity':'benchmarkHotelCity2').innerHTML=opts;
 }
-async function loadBenchmarkHotels(){
-  const brand=document.getElementById('benchmarkHotelBrand').value;const city=document.getElementById('benchmarkHotelCity').value;if(!brand||!city)return;
+async function loadBenchmarkHotels(slot=1){
+  const brand=document.getElementById(slot===1?'benchmarkHotelBrand':'benchmarkHotelBrand2').value;
+  const city=document.getElementById(slot===1?'benchmarkHotelCity':'benchmarkHotelCity2').value;
+  if(!brand||!city)return;
   const r=await fetch(`/api/hotels?brand=${encodeURIComponent(brand)}&city=${encodeURIComponent(city)}`);const d=await r.json();
-  document.getElementById('benchmarkHotelSel').innerHTML='<option value="">Hotel</option>'+(d.hotels||[]).map(h=>`<option value="${h.product_id}">${escHtml(h.hotel_name)}</option>`).join('');
+  const opts='<option value="">Hotel</option>'+(d.hotels||[]).map(h=>`<option value="${h.product_id}">${escHtml(h.hotel_name)}</option>`).join('');
+  document.getElementById(slot===1?'benchmarkHotelSel':'benchmarkHotelSel2').innerHTML=opts;
 }
 
 async function runBrandComparison(){
   const items=[1,2,3].map(i=>document.getElementById(`compareBrandOnly${i}`).value).filter(v=>v);
-  const bm=document.getElementById('benchmarkBrandCheck')?.checked&&document.getElementById('benchmarkBrandSel').value;
-  if(bm)items.push('__bm__:'+bm);
-  if(items.filter(x=>!x.startsWith('__bm__')).length<2){alert('Select at least 2 brands');return;}
-  showLoader();await loadComparison(items,'brand');hideLoader();
+  if(items.length<2){alert('Select at least 2 brands');return;}
+  const bmItems=[];
+  if(document.getElementById('benchmarkBrandCheck')?.checked){
+    [1,2].forEach(i=>{
+      const v=document.getElementById(`benchmarkBrandSel${i}`)?.value;
+      if(v)bmItems.push('__bm__:'+v);
+    });
+  }
+  showLoader();await loadComparison([...items,...bmItems],'brand');hideLoader();
 }
 async function runHotelComparison(){
   const items=[1,2,3].map(i=>document.getElementById(`compareHotel${i}`).dataset.productId).filter(v=>v);
-  const bm=document.getElementById('benchmarkHotelCheck')?.checked&&document.getElementById('benchmarkHotelSel').value;
-  if(bm)items.push('__bm__:'+bm);
-  if(items.filter(x=>!x.startsWith('__bm__')).length<2){alert('Select at least 2 hotels');return;}
-  showLoader();await loadComparison(items,'hotel');hideLoader();
+  if(items.length<2){alert('Select at least 2 hotels');return;}
+  const bmItems=[];
+  if(document.getElementById('benchmarkHotelCheck')?.checked){
+    [1,2].forEach(i=>{
+      const v=document.getElementById(i===1?'benchmarkHotelSel':'benchmarkHotelSel2')?.value;
+      if(v)bmItems.push('__bm__:'+v);
+    });
+  }
+  showLoader();await loadComparison([...items,...bmItems],'hotel');hideLoader();
+}
+
+// ─── COMPARE PHRASE DRILLDOWN ────────────────────────────────
+async function cmpDrilldown(phrase, entityName, compareBy){
+  try{
+    // Use existing drilldown modal — show top 3 reviews for this phrase
+    document.getElementById('drilldownTitle').textContent=`"${phrase}" — ${entityName}`;
+    document.getElementById('drilldownCount').textContent='Loading reviews...';
+    document.getElementById('drilldownContent').innerHTML='<div style="text-align:center;padding:2rem;color:#5a4e7a">Fetching reviews…</div>';
+    document.getElementById('drilldownFooter').innerHTML='';
+    document.getElementById('drilldownOverlay').style.display='flex';
+    const r=await fetch(`/api/reviews?phrase=${encodeURIComponent(phrase)}&limit=3&compare_by=${compareBy}`);
+    const d=await r.json();
+    const reviews=d.reviews||[];
+    document.getElementById('drilldownCount').textContent=`${reviews.length} of ${d.total||'?'} reviews shown`;
+    document.getElementById('drilldownContent').innerHTML=reviews.length
+      ?reviews.map(rv=>`<div class="review-card">
+          <div class="review-meta"><span>⭐ ${rv.rating||'?'}</span><span>${rv.date||''}</span></div>
+          <div class="review-text">${hlSentiment(rv.review_text||rv.text||'',phrase)}</div>
+        </div>`).join('')
+      :'<div class="no-data">No reviews found for this phrase</div>';
+  }catch(e){
+    document.getElementById('drilldownContent').innerHTML='<div class="no-data">Error loading reviews</div>';
+  }
 }
 
 // ─── BUILD PARAMS ─────────────────────────────────────────────
@@ -1264,23 +1341,44 @@ async function openParadoxModal(){
 
 // ─── COMPARISON ───────────────────────────────────────────────
 async function loadComparison(items,compareBy){
-  const ENTITY_COLORS=['#e69f00','#56b4e9','#009e73','#d55e00'];
+  const ENTITY_COLORS=['#e69f00','#56b4e9','#009e73','#cc79a7']; // Okabe-Ito 4 colorblind-safe
   const BM_COLOR='#9d86cc';
   const ASPECTS=['Dining','Cleanliness','Staff','Room','Location','Value for Money','General'];
   try{
     const regularItems=items.filter(x=>!x.startsWith('__bm__'));
-    const bmRaw=items.find(x=>x.startsWith('__bm__'));
-    const bmItem=bmRaw?bmRaw.replace('__bm__:',''):null;
-    const allQueryItems=[...regularItems,...(bmItem?[bmItem]:[])];
+    const bmRaws=items.filter(x=>x.startsWith('__bm__')).map(x=>x.replace('__bm__:',''));
+    const allQueryItems=[...regularItems,...bmRaws];
     const r=await fetch(`/api/comparison?items=${encodeURIComponent(allQueryItems.join('|||'))}&compare_by=${compareBy}`);
     const data=await r.json();
     const makeStats=(item,idx,isBm)=>{
       const d=data[item]||{display_name:item,aspects:[],overall:{}};
       const pos=d.overall.positive||0;const neg=d.overall.negative||0;const tot=d.overall.total_mentions||0;
-      return{item,name:d.display_name||item,pos:tot>0?Math.round(pos*100/tot):0,neg:tot>0?Math.round(neg*100/tot):0,tot,aspects:d.aspects||[],color:isBm?BM_COLOR:ENTITY_COLORS[idx%4],isBm};
+      return{item,name:d.display_name||item,pos:tot>0?Math.round(pos*100/tot):0,
+             neg:tot>0?Math.round(neg*100/tot):0,tot,aspects:d.aspects||[],
+             color:isBm?BM_COLOR:ENTITY_COLORS[idx%4],isBm};
     };
     const itemStats=regularItems.map((item,i)=>makeStats(item,i,false));
-    const bmStats=bmItem?makeStats(bmItem,0,true):null;
+    // Combined benchmark: average multiple entities into one
+    let bmStats=null;
+    if(bmRaws.length>0){
+      const bmEntities=bmRaws.map(item=>makeStats(item,0,true)).filter(s=>s.tot>0);
+      if(bmEntities.length===1){
+        bmStats={...bmEntities[0],name:'⌀ Benchmark'};
+      } else if(bmEntities.length>1){
+        const avgPos=Math.round(bmEntities.reduce((s,e)=>s+e.pos,0)/bmEntities.length);
+        const avgNeg=Math.round(bmEntities.reduce((s,e)=>s+e.neg,0)/bmEntities.length);
+        const avgTot=Math.round(bmEntities.reduce((s,e)=>s+e.tot,0)/bmEntities.length);
+        const aspNames=[...new Set(bmEntities.flatMap(e=>(e.aspects||[]).map(a=>a.aspect_name)))];
+        const avgAspects=aspNames.map(an=>{
+          const vals=bmEntities.map(e=>(e.aspects||[]).find(a=>a.aspect_name===an)).filter(Boolean);
+          const avgSat=vals.length?Math.round(vals.reduce((s,a)=>s+(a.satisfaction_pct||a.satisfaction||0),0)/vals.length):0;
+          const avgMen=vals.length?Math.round(vals.reduce((s,a)=>s+(a.total_mentions||0),0)/vals.length):0;
+          return{aspect_name:an,satisfaction_pct:avgSat,satisfaction:avgSat,total_mentions:avgMen};
+        });
+        bmStats={item:'__bm__',name:'⌀ Benchmark',pos:avgPos,neg:avgNeg,tot:avgTot,
+                 aspects:avgAspects,color:BM_COLOR,isBm:true};
+      }
+    }
     const allStats=bmStats?[...itemStats,bmStats]:itemStats;
     const hdrCols=allStats.map(s=>`<th class="item-col"><div class="item-header"><div class="dot" style="background:${s.color}${s.isBm?";border:2px dashed "+s.color+";background:transparent":""}" ></div><div class="name" style="color:${s.color}">${s.isBm?"⌀ "+s.name:s.name}</div></div></th>`).join("");
     let html=`<div style="margin-bottom:24px"><h3 style="color:#c4b5fd;font-size:14px;font-weight:700;margin-bottom:10px">Satisfaction Score</h3>
@@ -1385,9 +1483,13 @@ function renderCmpDynamic(asp){
         return sum+(r?r.total_mentions||0:0);
       },0);
     });
-    const top5=ASPECTS_F.slice().sort((a,b)=>(aspVol[b]||0)-(aspVol[a]||0)).slice(0,5);
+    // Top 2 + bottom 2 aspects by volume = 4 aspects total
+    const sorted=ASPECTS_F.slice().sort((a,b)=>(aspVol[b]||0)-(aspVol[a]||0));
+    const top2asp=sorted.slice(0,2);
+    const bot2asp=sorted.slice(-2).filter(a=>!top2asp.includes(a));
+    const top4=[...top2asp,...bot2asp];
     allStats.forEach(s=>{
-      top5.forEach(aspName=>{
+      top4.forEach(aspName=>{
         const a=(s.aspects||[]).find(r=>r.aspect_name===aspName);
         if(!a)return;
         const sat=a.satisfaction_pct||a.satisfaction||0;
@@ -1434,23 +1536,23 @@ function renderCmpDynamic(asp){
   </div>`;
 
   dyn+=`<div style="margin-bottom:18px">
-    <h3 style="color:#c4b5fd;font-size:13px;font-weight:700;margin-bottom:8px">Pain Points & Delights${asp!=='all'?' — '+asp:''}</h3>
+    <h3 style="color:#c4b5fd;font-size:13px;font-weight:700;margin-bottom:8px;text-align:center">Pain Points & Delights${asp!=='all'?' — '+asp:''}</h3>
     <div style="display:grid;grid-template-columns:repeat(${nonBmPd.length},1fr);gap:10px">`;
   nonBmPd.forEach(item=>{
     const fp=filterByAsp(item.pain||[]).slice(0,5);
     const fd=filterByAsp(item.delights||[]).slice(0,5);
-    dyn+=`<div style="background:rgba(15,11,28,.6);border-radius:9px;padding:12px;border-top:3px solid ${item.color}">
+    dyn+=`<div style="background:rgba(15,11,28,.6);border-radius:9px;padding:12px;border-top:3px solid ${item.color};text-align:center">
       <div style="color:${item.color};font-size:11px;font-weight:700;margin-bottom:8px">${item.name}</div>
       <div style="color:#d55e00;font-size:10px;font-weight:700;margin-bottom:3px">⚠ Pain Points</div>
-      ${fp.length?fp.map(p=>`<div style="padding:3px 0;border-bottom:1px solid rgba(45,33,84,.12);color:#fdba74;font-size:10px;display:flex;justify-content:space-between"><span>• ${escHtml(p.phrase)}</span><span style="color:#4a3f6b;font-family:monospace;font-size:9px">${p.mention_count||''}</span></div>`).join(''):`<div style="color:#3d3355;font-size:10px;padding:3px 0">No data</div>`}
+      ${fp.length?fp.map(p=>`<div onclick="cmpDrilldown('${escHtml(p.phrase)}','${escHtml(item.name)}','${compareBy}')" style="padding:3px 0;border-bottom:1px solid rgba(45,33,84,.12);color:#fdba74;font-size:10px;display:flex;justify-content:space-between;cursor:pointer;transition:opacity .15s" onmouseover="this.style.opacity='.7'" onmouseleave="this.style.opacity='1'"><span>• ${escHtml(p.phrase)}</span><span style="color:#4a3f6b;font-family:monospace;font-size:9px">${p.mention_count||''}</span></div>`).join(''):`<div style="color:#3d3355;font-size:10px;padding:3px 0">No data</div>`}
       <div style="color:#56b4e9;font-size:10px;font-weight:700;margin:7px 0 3px">★ Delights</div>
-      ${fd.length?fd.map(d=>`<div style="padding:3px 0;border-bottom:1px solid rgba(45,33,84,.12);color:#93c5fd;font-size:10px;display:flex;justify-content:space-between"><span>• ${escHtml(d.phrase)}</span><span style="color:#4a3f6b;font-family:monospace;font-size:9px">${d.mention_count||''}</span></div>`).join(''):`<div style="color:#3d3355;font-size:10px;padding:3px 0">No data</div>`}
+      ${fd.length?fd.map(d=>`<div onclick="cmpDrilldown('${escHtml(d.phrase)}','${escHtml(item.name)}','${compareBy}')" style="padding:3px 0;border-bottom:1px solid rgba(45,33,84,.12);color:#93c5fd;font-size:10px;display:flex;justify-content:space-between;cursor:pointer;transition:opacity .15s" onmouseover="this.style.opacity='.7'" onmouseleave="this.style.opacity='1'"><span>• ${escHtml(d.phrase)}</span><span style="color:#4a3f6b;font-family:monospace;font-size:9px">${d.mention_count||''}</span></div>`).join(''):`<div style="color:#3d3355;font-size:10px;padding:3px 0">No data</div>`}
     </div>`;
   });
   dyn+='</div></div>';
 
   dyn+=`<div>
-    <h3 style="color:#c4b5fd;font-size:13px;font-weight:700;margin-bottom:8px">R&D Signals${asp!=='all'?' — '+asp:''}</h3>
+    <h3 style="color:#c4b5fd;font-size:13px;font-weight:700;margin-bottom:8px;text-align:center">R&D Signals${asp!=='all'?' — '+asp:''}</h3>
     <div style="display:grid;grid-template-columns:repeat(${nonBmPd.length},1fr);gap:10px">`;
   nonBmPd.forEach(item=>{
     const rd=item.rd||{};
