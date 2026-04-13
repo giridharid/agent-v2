@@ -1407,7 +1407,9 @@ function renderCmpDynamic(asp){
       // Top 2 + bottom 2 by mention count = max 4 per entity, avoids crowding
       const sorted=phrases.slice().sort((a,b)=>b.mention_count-a.mention_count);
       const top2=sorted.slice(0,2);
-      const bot2=sorted.slice(-2).filter(p=>!top2.find(t=>t.treemap_name===p.treemap_name));
+      const top2names=new Set(top2.map(p=>p.treemap_name));
+      // bottom2: last 2 that aren't already in top2
+      const bot2=sorted.slice().reverse().filter(p=>!top2names.has(p.treemap_name)).slice(0,2);
       [...top2,...bot2].forEach(ph=>{
         if(!ph.treemap_name||!ph.mention_count)return;
         points.push({label:ph.treemap_name,x:ph.mention_count,
@@ -1484,7 +1486,7 @@ function buildTreemapChart(points, allStats, asp){
   const yRange=maxY-minY||1;
   const yLow=minY+yRange/3, yHigh=minY+2*yRange/3;
 
-  const W=680,H=400,PL=56,PR=66,PT=18,PB=54;
+  const W=700,H=400,PL=64,PR=66,PT=18,PB=54;
   const CW=W-PL-PR, CH=H-PT-PB;
   const toX=v=>PL+Math.min(1,toSqrtX(v)/sqrtMax)*CW;
   const toY=v=>PT+CH*(1-Math.max(0,Math.min(1,(v-minY)/yRange)));
