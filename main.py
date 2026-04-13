@@ -3,7 +3,7 @@ Smaartbrand Intelligence Dashboard - FastAPI Backend v2
 Multi-vertical support with BigQuery flat tables, caching, and drill-down
 """
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from google.cloud import bigquery
