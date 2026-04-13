@@ -1367,45 +1367,38 @@ function renderCmpDynamic(asp){
   if(!allStats)return;
   const ASPECTS_F=['Dining','Cleanliness','Amenities','Staff','Room','Location','Value for Money'];
 
-  // ── Build chart points ────────────────────────────────────────
+  // ── Build scatter points (x = actual mention count, y = satisfaction %) ──
   let points=[];
   if(asp==='all'){
-    // Aspect-level: one bubble per entity per aspect (top 5 by total mentions across all entities)
-    const aspByVol={};
+    // Aspect-level: one bubble per entity per top-5 aspect (by total volume across entities)
+    const aspVol={};
     ASPECTS_F.forEach(a=>{
-      const total=allStats.reduce((sum,s)=>{
-        const x=(s.aspects||[]).find(r=>r.aspect_name===a);
-        return sum+(x?x.total_mentions||0:0);
+      aspVol[a]=allStats.reduce((sum,s)=>{
+        const r=(s.aspects||[]).find(x=>x.aspect_name===a);
+        return sum+(r?r.total_mentions||0:0);
       },0);
-      aspByVol[a]=total;
     });
-    const top5=ASPECTS_F.sort((a,b)=>(aspByVol[b]||0)-(aspByVol[a]||0)).slice(0,5);
+    const top5=ASPECTS_F.slice().sort((a,b)=>(aspVol[b]||0)-(aspVol[a]||0)).slice(0,5);
     allStats.forEach(s=>{
-      top5.forEach((aspName,ai)=>{
+      top5.forEach(aspName=>{
         const a=(s.aspects||[]).find(r=>r.aspect_name===aspName);
         if(!a)return;
         const sat=a.satisfaction_pct||a.satisfaction||0;
         const men=a.total_mentions||0;
         if(!sat||!men)return;
-        // Stagger X within same aspect slot to avoid overlap
-        const entityOffset=(allStats.indexOf(s)-(allStats.length-1)/2)*0.04;
-        points.push({label:aspName, x:men, xFrac:(ai+0.5)/5+entityOffset,
-                     y:sat, color:s.color, isBm:s.isBm, asp:aspName});
+        points.push({label:aspName,x:men,y:sat,color:s.color,isBm:s.isBm,entityIdx:allStats.indexOf(s)});
       });
     });
   } else {
-    // Phrase-level: top 5 treemap_names for selected aspect, per entity
+    // Phrase-level: top 5 treemap_names for selected aspect per entity
     allStats.forEach(s=>{
       const phrases=(tmByItem[s.item]||{})[asp]||[];
       const aspSat=((s.aspects||[]).find(r=>r.aspect_name===asp)||{}).satisfaction_pct||
                    ((s.aspects||[]).find(r=>r.aspect_name===asp)||{}).satisfaction||0;
-      const entityIdx=allStats.indexOf(s);
-      phrases.slice(0,5).forEach((ph,pi)=>{
+      phrases.slice(0,5).forEach(ph=>{
         if(!ph.treemap_name||!ph.mention_count)return;
-        // Spread phrases horizontally across chart, Y = entity's aspect satisfaction
-        const xFrac=(pi+0.5)/5+(entityIdx-(allStats.length-1)/2)*0.04;
-        points.push({label:ph.treemap_name, x:ph.mention_count, xFrac,
-                     y:aspSat, color:s.color, isBm:s.isBm, asp});
+        points.push({label:ph.treemap_name,x:ph.mention_count,y:aspSat,
+                     color:s.color,isBm:s.isBm,entityIdx:allStats.indexOf(s)});
       });
     });
   }
@@ -1414,18 +1407,16 @@ function renderCmpDynamic(asp){
   const nonBmPd=pdResults.filter(s=>!s.isBm);
   let dyn='';
 
-  // ── Treemap chart ─────────────────────────────────────────────
   dyn+=`<div style="margin-bottom:18px">
     <h3 style="color:#c4b5fd;font-size:13px;font-weight:700;margin-bottom:3px">
       Attribute Treemap${asp!=='all'?' — '+asp:''}
     </h3>
     <p style="color:#5a4e7a;font-size:10px;margin-bottom:8px">
-      ${asp==='all'?'Top 5 aspects by volume · one bubble per entity':'Top 5 phrases for this aspect · Y = entity satisfaction · color = entity'}
+      X = Mention count · Y = Satisfaction % · Top-right = high volume + high satisfaction (best) · Bottom-right = high volume + low satisfaction (worst)
     </p>
     ${buildTreemapChart(points,allStats,asp)}
   </div>`;
 
-  // ── Pain / Delights ───────────────────────────────────────────
   dyn+=`<div style="margin-bottom:18px">
     <h3 style="color:#c4b5fd;font-size:13px;font-weight:700;margin-bottom:8px">Pain Points & Delights${asp!=='all'?' — '+asp:''}</h3>
     <div style="display:grid;grid-template-columns:repeat(${nonBmPd.length},1fr);gap:10px">`;
@@ -1442,7 +1433,6 @@ function renderCmpDynamic(asp){
   });
   dyn+='</div></div>';
 
-  // ── R&D Signals ───────────────────────────────────────────────
   dyn+=`<div>
     <h3 style="color:#c4b5fd;font-size:13px;font-weight:700;margin-bottom:8px">R&D Signals${asp!=='all'?' — '+asp:''}</h3>
     <div style="display:grid;grid-template-columns:repeat(${nonBmPd.length},1fr);gap:10px">`;
@@ -1462,90 +1452,132 @@ function renderCmpDynamic(asp){
 }
 
 function buildTreemapChart(points, allStats, asp){
-  if(!points.length) return'<div class="no-data" style="padding:1rem">No data for this selection</div>';
+  if(!points.length)return'<div class="no-data" style="padding:1rem">No data for this selection</div>';
 
-  const allSat=points.map(p=>p.y).filter(v=>v>0);
-  if(!allSat.length) return'<div class="no-data" style="padding:1rem">No data</div>';
+  const allX=points.map(p=>p.x).filter(v=>v>0);
+  const allY=points.map(p=>p.y).filter(v=>v>0);
+  if(!allX.length||!allY.length)return'<div class="no-data" style="padding:1rem">No data</div>';
 
-  const minSat=Math.max(0,Math.floor((Math.min(...allSat)-10)/10)*10);
-  const maxSat=Math.min(100,Math.ceil((Math.max(...allSat)+10)/10)*10);
-  const satRange=maxSat-minSat||1;
-  const bandLow=minSat+satRange/3, bandHigh=minSat+2*satRange/3;
+  // Axis bounds with padding
+  const maxX=Math.max(...allX)*1.15;
+  const minY=Math.max(0,Math.floor((Math.min(...allY)-10)/10)*10);
+  const maxY=Math.min(100,Math.ceil((Math.max(...allY)+10)/10)*10);
+  const yRange=maxY-minY||1;
 
-  const W=660,H=280,PL=44,PR=52,PT=28,PB=38;
+  // 3x3 quadrant dividers
+  const xLow=maxX/3, xHigh=2*maxX/3;
+  const yLow=minY+yRange/3, yHigh=minY+2*yRange/3;
+
+  const W=680,H=340,PL=50,PR=56,PT=22,PB=52;
   const CW=W-PL-PR, CH=H-PT-PB;
-  // X = xFrac (0..1), Y = satisfaction %
-  const toX=f=>PL+Math.max(0,Math.min(1,f))*CW;
-  const toY=v=>PT+CH*(1-(v-minSat)/satRange);
+  const toX=v=>PL+(v/maxX)*CW;
+  const toY=v=>PT+CH*(1-(v-minY)/yRange);
   const R=11;
 
-  let svg=`<svg width="100%" viewBox="0 0 ${W} ${H}" style="display:block">`;
+  let svg=`<svg width="100%" viewBox="0 0 ${W} ${H}" style="display:block;font-family:inherit">`;
 
-  // Band fills
-  const yH=toY(bandHigh),yL=toY(bandLow),yT=toY(maxSat),yB=toY(minSat);
-  svg+=`<rect x="${PL}" y="${yT}" width="${CW}" height="${yH-yT}" fill="rgba(0,158,115,.09)"/>`;
-  svg+=`<rect x="${PL}" y="${yH}" width="${CW}" height="${yL-yH}" fill="rgba(0,114,178,.07)"/>`;
-  svg+=`<rect x="${PL}" y="${yL}" width="${CW}" height="${yB-yL}" fill="rgba(213,94,0,.07)"/>`;
-  svg+=`<text x="${W-PR+5}" y="${(yT+yH)/2+4}" fill="#009e73" font-size="9" font-weight="600">High</text>`;
-  svg+=`<text x="${W-PR+5}" y="${(yH+yL)/2+4}" fill="#0072b2" font-size="9" font-weight="600">Med</text>`;
-  svg+=`<text x="${W-PR+5}" y="${(yL+yB)/2+4}" fill="#d55e00" font-size="9" font-weight="600">Low</text>`;
-
-  // Y grid + labels
-  [minSat,Math.round(bandLow),Math.round(bandHigh),maxSat].forEach(v=>{
-    const y=toY(v);
-    svg+=`<line x1="${PL}" y1="${y}" x2="${W-PR}" y2="${y}" stroke="rgba(255,255,255,.05)" stroke-width="1"/>`;
-    svg+=`<text x="${PL-4}" y="${y+4}" fill="#4a3f6b" font-size="8" text-anchor="end">${v}%</text>`;
-  });
-  svg+=`<line x1="${PL}" y1="${PT}" x2="${PL}" y2="${H-PB}" stroke="rgba(255,255,255,.08)" stroke-width="1"/>`;
-  svg+=`<text x="10" y="${PT+CH/2}" fill="#4a3f6b" font-size="9" text-anchor="middle" transform="rotate(-90,10,${PT+CH/2})">Satisfaction %</text>`;
-
-  // For "all" mode: draw aspect divider lines + labels at top
-  if(asp==='all'){
-    const ASPECTS_F=['Dining','Cleanliness','Amenities','Staff','Room','Location','Value for Money'];
-    // Find top 5 used
-    const usedAsps=[...new Set(points.map(p=>p.asp))];
-    usedAsps.forEach((aspName,i)=>{
-      const x=PL+(i+0.5)*(CW/usedAsps.length);
-      svg+=`<text x="${x}" y="${H-PB+14}" fill="#5a4e7a" font-size="9" text-anchor="middle">${aspName.replace('Value for Money','Value')}</text>`;
-      if(i>0) svg+=`<line x1="${PL+i*(CW/usedAsps.length)}" y1="${PT}" x2="${PL+i*(CW/usedAsps.length)}" y2="${H-PB}" stroke="rgba(45,33,84,.4)" stroke-width="1" stroke-dasharray="3 3"/>`;
-    });
-    // Re-map xFrac to slot positions
-    points.forEach(p=>{
-      const slotIdx=usedAsps.indexOf(p.asp);
-      if(slotIdx<0)return;
-      const slotX=PL+(slotIdx*(CW/usedAsps.length))+(CW/usedAsps.length)/2;
-      const entityOffset=(allStats.indexOf(allStats.find(s=>s.color===p.color&&!s.isBm))-(allStats.length-1)/2)*(R*2.5);
-      p._px=slotX+entityOffset;
-      p._py=toY(p.y);
-    });
-  } else {
-    // Specific aspect: evenly spread across X, Y = entity satisfaction
-    const stepX=CW/Math.max(points.length,1);
-    points.forEach((p,i)=>{
-      p._px=PL+(i+0.5)*stepX;
-      p._py=toY(p.y);
-    });
-    svg+=`<text x="${PL+CW/2}" y="${H-PB+14}" fill="#5a4e7a" font-size="9" text-anchor="middle">← top phrases by mention count →</text>`;
+  // 9 quadrant fills: rows=sat(high→low), cols=volume(low→high)
+  const qx=[PL,toX(xLow),toX(xHigh),W-PR];
+  const qy=[PT,toY(yHigh),toY(yLow),H-PB];
+  // row 0=high sat, row 2=low sat; col 0=low vol, col 2=high vol
+  const qFills=[
+    ['rgba(0,114,178,.06)','rgba(0,158,115,.09)','rgba(0,158,115,.17)'],  // high sat
+    ['rgba(30,20,60,.04)','rgba(30,20,60,.06)','rgba(0,114,178,.08)'],   // med sat
+    ['rgba(30,20,60,.04)','rgba(213,94,0,.08)','rgba(213,94,0,.18)'],    // low sat
+  ];
+  for(let row=0;row<3;row++){
+    for(let col=0;col<3;col++){
+      const x=qx[col],y=qy[row],w=qx[col+1]-qx[col],h=qy[row+1]-qy[row];
+      svg+=`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${qFills[row][col]}" rx="2"/>`;
+    }
   }
 
-  // Draw circles
-  points.forEach(p=>{
-    if(p.isBm) svg+=`<circle cx="${p._px}" cy="${p._py}" r="${R}" fill="none" stroke="${p.color}" stroke-width="1.5" stroke-dasharray="3 2" opacity=".75"/>`;
-    else svg+=`<circle cx="${p._px}" cy="${p._py}" r="${R}" fill="${p.color}" opacity=".85"/>`;
+  // Quadrant corner annotations
+  svg+=`<text x="${W-PR-6}" y="${PT+11}" fill="rgba(0,158,115,.6)" font-size="8.5" text-anchor="end" font-weight="600">★ Best</text>`;
+  svg+=`<text x="${W-PR-6}" y="${H-PB-6}" fill="rgba(213,94,0,.6)" font-size="8.5" text-anchor="end" font-weight="600">↓ Worst</text>`;
+  svg+=`<text x="${PL+5}" y="${PT+11}" fill="rgba(100,90,150,.5)" font-size="7.5">Low vol</text>`;
+  svg+=`<text x="${PL+5}" y="${H-PB-6}" fill="rgba(213,94,0,.4)" font-size="7.5">Low sat + low vol</text>`;
+
+  // Grid dividers
+  [xLow,xHigh].forEach(v=>{
+    const x=toX(v);
+    svg+=`<line x1="${x}" y1="${PT}" x2="${x}" y2="${H-PB}" stroke="rgba(255,255,255,.08)" stroke-width="1" stroke-dasharray="4 3"/>`;
   });
-  // Draw labels (above circle)
-  points.forEach(p=>{
-    const lbl=p.label.length>13?p.label.substring(0,12)+'…':p.label;
-    svg+=`<text x="${p._px}" y="${p._py-R-3}" fill="${p.color}" font-size="8.5" text-anchor="middle" font-weight="500">${lbl}</text>`;
+  [yLow,yHigh].forEach(v=>{
+    const y=toY(v);
+    svg+=`<line x1="${PL}" y1="${y}" x2="${W-PR}" y2="${y}" stroke="rgba(255,255,255,.08)" stroke-width="1" stroke-dasharray="4 3"/>`;
+  });
+
+  // Axes
+  svg+=`<line x1="${PL}" y1="${PT}" x2="${PL}" y2="${H-PB}" stroke="rgba(255,255,255,.1)" stroke-width="1"/>`;
+  svg+=`<line x1="${PL}" y1="${H-PB}" x2="${W-PR}" y2="${H-PB}" stroke="rgba(255,255,255,.1)" stroke-width="1"/>`;
+
+  // Band labels (right)
+  svg+=`<text x="${W-PR+5}" y="${(PT+qy[1])/2+4}" fill="#009e73" font-size="8.5" font-weight="600">High</text>`;
+  svg+=`<text x="${W-PR+5}" y="${(qy[1]+qy[2])/2+4}" fill="#0072b2" font-size="8.5" font-weight="600">Med</text>`;
+  svg+=`<text x="${W-PR+5}" y="${(qy[2]+H-PB)/2+4}" fill="#d55e00" font-size="8.5" font-weight="600">Low</text>`;
+
+  // Y axis labels
+  [minY,Math.round(yLow),Math.round(yHigh),maxY].forEach(v=>{
+    svg+=`<text x="${PL-4}" y="${toY(v)+4}" fill="#4a3f6b" font-size="8" text-anchor="end">${v}%</text>`;
+  });
+
+  // X axis labels (actual mention counts)
+  [0,xLow,xHigh,maxX].map(v=>Math.round(v)).forEach(v=>{
+    const x=toX(v);
+    const lbl=v>=1000?Math.round(v/1000)+'k':v;
+    svg+=`<text x="${x}" y="${H-PB+12}" fill="#4a3f6b" font-size="8" text-anchor="middle">${lbl}</text>`;
+  });
+
+  // Axis titles
+  svg+=`<text x="${PL+CW/2}" y="${H-PB+24}" fill="#5a4e7a" font-size="9" text-anchor="middle">Mention Count →</text>`;
+  svg+=`<text x="11" y="${PT+CH/2}" fill="#5a4e7a" font-size="9" text-anchor="middle" transform="rotate(-90,11,${PT+CH/2})">+ve Sentiment % ↑</text>`;
+
+  // Jitter overlapping bubbles: group by proximity, nudge within group
+  const placed=[];
+  const jittered=points.map(p=>{
+    let px=toX(p.x), py=toY(p.y);
+    // Find already-placed bubbles too close
+    const close=placed.filter(q=>Math.hypot(q.px-px,q.py-py)<R*2.4);
+    if(close.length>0){
+      // Nudge in a spiral: offset by entity index to separate predictably
+      const angle=(p.entityIdx/(allStats.length))*2*Math.PI + close.length*1.2;
+      const dist=R*2.3*Math.ceil(close.length/allStats.length);
+      px+=Math.cos(angle)*dist;
+      py+=Math.sin(angle)*dist;
+    }
+    const out={...p,px,py};
+    placed.push(out);
+    return out;
+  });
+
+  // Draw circles
+  jittered.forEach(p=>{
+    if(p.isBm){
+      svg+=`<circle cx="${p.px}" cy="${p.py}" r="${R}" fill="none" stroke="${p.color}" stroke-width="1.5" stroke-dasharray="3 2" opacity=".8"/>`;
+    }else{
+      svg+=`<circle cx="${p.px}" cy="${p.py}" r="${R}" fill="${p.color}" opacity=".85"/>`;
+    }
+  });
+  // Labels (above)
+  jittered.forEach(p=>{
+    const lbl=p.label.length>12?p.label.substring(0,11)+'…':p.label;
+    svg+=`<text x="${p.px}" y="${p.py-R-3}" fill="${p.color}" font-size="8.5" text-anchor="middle" font-weight="500">${lbl}</text>`;
   });
 
   // Legend
-  let lx=PL; const ly=H-5;
-  allStats.filter(s=>!s.isBm).forEach(s=>{
-    svg+=`<circle cx="${lx+4}" cy="${ly}" r="4" fill="${s.color}"/>`;
-    svg+=`<text x="${lx+11}" y="${ly+4}" fill="${s.color}" font-size="8.5">${s.name}</text>`;
-    lx+=Math.max(76,s.name.length*5+14);
+  let lx=PL; const ly=H-6;
+  allStats.forEach(s=>{
+    if(s.isBm){
+      svg+=`<circle cx="${lx+4}" cy="${ly}" r="4" fill="none" stroke="${s.color}" stroke-width="1.5" stroke-dasharray="3 2"/>`;
+      svg+=`<text x="${lx+11}" y="${ly+4}" fill="${s.color}" font-size="8.5">⌀ ${s.name}</text>`;
+    }else{
+      svg+=`<circle cx="${lx+4}" cy="${ly}" r="4" fill="${s.color}"/>`;
+      svg+=`<text x="${lx+11}" y="${ly+4}" fill="${s.color}" font-size="8.5">${s.name}</text>`;
+    }
+    lx+=Math.max(76,s.name.length*5+18);
   });
+
   svg+='</svg>';
   return svg;
 }
