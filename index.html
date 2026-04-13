@@ -1467,23 +1467,21 @@ function buildTreemapChart(points, allStats, asp){
 
   // Axis bounds
   const rawMaxX = Math.max(...allX);
-  // Cap axis at p95 to avoid one outlier compressing everything, plot outliers at edge
+  // Clamp axis so one outlier doesn't compress everything
   const sortedX = [...allX].sort((a,b)=>a-b);
   const p95x = sortedX[Math.floor(sortedX.length*0.95)] || rawMaxX;
-  const maxX = Math.max(p95x*1.15, rawMaxX > p95x*2 ? p95x*1.3 : rawMaxX*1.1);
+  const maxX = rawMaxX > p95x * 2.5 ? p95x * 1.4 : rawMaxX * 1.1;
 
-  // Y: fixed semantic hotel satisfaction thresholds
   const minY = Math.max(0, Math.floor((Math.min(...allY)-8)/5)*5);
   const maxY = Math.min(100, Math.ceil((Math.max(...allY)+8)/5)*5);
   const yRange = maxY - minY || 1;
-  const yLow = 70;   // Low / Med boundary — below 70% is a real problem
-  const yHigh = 85;  // Med / High boundary — above 85% is strong performance
 
-  // X: p20/p80 of actual data so middle band captures most bubbles
-  const p20x = sortedX[Math.floor(sortedX.length*0.2)] || maxX*0.2;
-  const p80x = sortedX[Math.floor(sortedX.length*0.8)] || maxX*0.7;
-  const xLow = Math.max(maxX*0.05, Math.min(p20x, maxX*0.4));
-  const xHigh = Math.max(xLow*2, Math.min(p80x, maxX*0.85));
+  // EQUAL VISUAL THIRDS — columns always same width regardless of data distribution
+  const xLow  = maxX / 3;
+  const xHigh = 2 * maxX / 3;
+  // Fixed semantic Y thresholds
+  const yLow  = 70;
+  const yHigh = 85;
 
   const W=680,H=360,PL=52,PR=56,PT=24,PB=52;
   const CW=W-PL-PR, CH=H-PT-PB;
