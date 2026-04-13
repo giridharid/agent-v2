@@ -1472,36 +1472,30 @@ function buildTreemapChart(points, allStats, asp){
   if(!allX.length||!allY.length)return'<div class="no-data" style="padding:1rem">No data</div>';
 
   // ── AXIS FORMULA ─────────────────────────────────────────────
-  // X: sqrt scale so low-count (bottom2) items don't all pile at X=0
-  const maxXraw = Math.max(...allX);
-  const sqrtMax = Math.sqrt(maxXraw) * 1.12;
-  const toSqrtX = v => Math.sqrt(v);          // raw -> sqrt space
-  const xLowSq  = sqrtMax / 3;
-  const xHighSq = 2 * sqrtMax / 3;
-  const xLowRaw  = Math.round(xLowSq  * xLowSq);   // for labels
-  const xHighRaw = Math.round(xHighSq * xHighSq);
+  const maxXraw=Math.max(...allX);
+  const sqrtMax=Math.sqrt(maxXraw)*1.12;
+  const toSqrtX=v=>Math.sqrt(Math.max(0,v));
+  const xLowSq=sqrtMax/3, xHighSq=2*sqrtMax/3;
+  const xLowRaw=Math.round(xLowSq*xLowSq), xHighRaw=Math.round(xHighSq*xHighSq);
 
-  // Y: actual data range divided into equal thirds
-  const rawMinY = Math.min(...allY), rawMaxY = Math.max(...allY);
-  const pad = Math.max(2, (rawMaxY - rawMinY) * 0.15);
-  const minY = Math.max(0, rawMinY - pad), maxY = Math.min(100, rawMaxY + pad);
-  const yRange = maxY - minY || 1;
-  const yLow  = minY + yRange / 3;
-  const yHigh = minY + 2 * yRange / 3;
-  // ─────────────────────────────────────────────────────────────
+  const rawMinY=Math.min(...allY), rawMaxY=Math.max(...allY);
+  const pad=Math.max(2,(rawMaxY-rawMinY)*0.15);
+  const minY=Math.max(0,rawMinY-pad), maxY=Math.min(100,rawMaxY+pad);
+  const yRange=maxY-minY||1;
+  const yLow=minY+yRange/3, yHigh=minY+2*yRange/3;
 
-  const W=680, H=400, PL=56, PR=66, PT=18, PB=58;
+  const W=680,H=400,PL=56,PR=66,PT=18,PB=54;
   const CW=W-PL-PR, CH=H-PT-PB;
-  const toX = v => PL + Math.min(1, toSqrtX(v) / sqrtMax) * CW;
-  const toY = v => PT + CH * (1 - Math.max(0, Math.min(1, (v - minY) / yRange)));
-  const R = 7;
+  const toX=v=>PL+Math.min(1,toSqrtX(v)/sqrtMax)*CW;
+  const toY=v=>PT+CH*(1-Math.max(0,Math.min(1,(v-minY)/yRange)));
+  const R=7;
 
   let svg=`<svg width="100%" viewBox="0 0 ${W} ${H}" style="display:block;font-family:inherit">
   <defs><clipPath id="cc"><rect x="${PL}" y="${PT}" width="${CW}" height="${CH}"/></clipPath></defs>`;
 
   // 9 quadrant fills
-  const qx=[PL, PL+CW/3, PL+2*CW/3, W-PR];   // equal visual thirds
-  const qy=[PT, toY(yHigh), toY(yLow), H-PB];
+  const qx=[PL,PL+CW/3,PL+2*CW/3,W-PR];
+  const qy=[PT,toY(yHigh),toY(yLow),H-PB];
   const fills=[
     ['rgba(240,248,240,.04)','rgba(220,240,220,.07)','rgba(0,158,115,.14)'],
     ['rgba(240,240,250,.03)','rgba(240,240,250,.05)','rgba(200,220,240,.07)'],
@@ -1512,8 +1506,7 @@ function buildTreemapChart(points, allStats, asp){
 
   // Divider lines
   [1,2].forEach(i=>{
-    const x=PL+i*CW/3;
-    svg+=`<line x1="${x}" y1="${PT}" x2="${x}" y2="${H-PB}" stroke="rgba(255,255,255,.12)" stroke-width="1" stroke-dasharray="4 3"/>`;
+    svg+=`<line x1="${PL+i*CW/3}" y1="${PT}" x2="${PL+i*CW/3}" y2="${H-PB}" stroke="rgba(255,255,255,.12)" stroke-width="1" stroke-dasharray="4 3"/>`;
   });
   [yLow,yHigh].forEach(v=>{
     const y=toY(v);
@@ -1522,7 +1515,7 @@ function buildTreemapChart(points, allStats, asp){
 
   // Corner labels
   svg+=`<text x="${W-PR-6}" y="${PT+14}" fill="rgba(0,200,130,.8)" font-size="11" text-anchor="end" font-weight="700">★ Best</text>`;
-  svg+=`<text x="${W-PR-6}" y="${H-PB-5}" fill="rgba(213,94,0,.85)" font-size="11" text-anchor="end" font-weight="700">↓ Worst</text>`;
+  svg+=`<text x="${W-PR-6}" y="${H-PB-4}" fill="rgba(213,94,0,.85)" font-size="11" text-anchor="end" font-weight="700">↓ Worst</text>`;
   svg+=`<text x="${W-PR-6}" y="${(PT+qy[1])/2+4}" fill="rgba(0,158,115,.55)" font-size="9" text-anchor="end">High</text>`;
   svg+=`<text x="${W-PR-6}" y="${(qy[1]+qy[2])/2+4}" fill="rgba(0,114,178,.55)" font-size="9" text-anchor="end">Med</text>`;
   svg+=`<text x="${W-PR-6}" y="${(qy[2]+H-PB)/2+4}" fill="rgba(213,94,0,.55)" font-size="9" text-anchor="end">Low</text>`;
@@ -1532,57 +1525,65 @@ function buildTreemapChart(points, allStats, asp){
   svg+=`<line x1="${PL}" y1="${PT}" x2="${PL}" y2="${H-PB}" stroke="rgba(255,255,255,.12)" stroke-width="1"/>`;
   svg+=`<line x1="${PL}" y1="${H-PB}" x2="${W-PR}" y2="${H-PB}" stroke="rgba(255,255,255,.12)" stroke-width="1"/>`;
 
-  // Y labels at actual data boundaries
   [minY,yLow,yHigh,maxY].forEach(v=>{
     const col=v===yLow?'#d55e00':v===yHigh?'#009e73':'#4a3f6b';
-    const fw=v===yLow||v===yHigh?'600':'400';
-    svg+=`<text x="${PL-5}" y="${toY(v)+4}" fill="${col}" font-size="9" text-anchor="end" font-weight="${fw}">${Math.round(v)}%</text>`;
+    svg+=`<text x="${PL-5}" y="${toY(v)+4}" fill="${col}" font-size="9" text-anchor="end" font-weight="${v===yLow||v===yHigh?'600':'400'}">${Math.round(v)}%</text>`;
   });
-
-  // X labels — sqrt scale: show values at column boundaries
-  [0, xLowRaw, xHighRaw, maxXraw].forEach(v=>{
-    const x=toX(Math.max(v,0));
+  [0,xLowRaw,xHighRaw,maxXraw].forEach(v=>{
     const lbl=v>=1000?Math.round(v/1000)+'k':v;
-    svg+=`<text x="${x}" y="${H-PB+13}" fill="#4a3f6b" font-size="9" text-anchor="middle">${lbl}</text>`;
+    svg+=`<text x="${toX(Math.max(v,0))}" y="${H-PB+13}" fill="#4a3f6b" font-size="9" text-anchor="middle">${lbl}</text>`;
   });
-  svg+=`<text x="${PL+CW/2}" y="${H-PB+27}" fill="#4a3f6b" font-size="10" text-anchor="middle">Mention Count → (√ scale)</text>`;
+  svg+=`<text x="${PL+CW/2}" y="${H-PB+27}" fill="#4a3f6b" font-size="10" text-anchor="middle">Mention Count →</text>`;
   svg+=`<text x="12" y="${PT+CH/2}" fill="#4a3f6b" font-size="10" text-anchor="middle" transform="rotate(-90,12,${PT+CH/2})">+ve Sentiment % ↑</text>`;
 
+  // ── BEST PRACTICE: Jitter with spiral, stay in bounds ────────
   const placed=[];
   const jittered=points.map(p=>{
     let px=toX(p.x), py=toY(p.y), attempts=0;
     while(placed.some(q=>Math.hypot(q.px-px,q.py-py)<R*2.1) && attempts<12){
-      const angle=(p.entityIdx/Math.max(allStats.length,1))*2*Math.PI + attempts*0.7;
+      const angle=(p.entityIdx/Math.max(allStats.length,1))*2*Math.PI+attempts*0.7;
       const dist=R*2.2*(1+attempts*0.2);
-      px=Math.max(PL+R, Math.min(W-PR-R, toX(p.x)+Math.cos(angle)*dist));
-      py=Math.max(PT+R+12, Math.min(H-PB-R-6, toY(p.y)+Math.sin(angle)*dist));
+      px=Math.max(PL+R,Math.min(W-PR-R,toX(p.x)+Math.cos(angle)*dist));
+      py=Math.max(PT+R+14,Math.min(H-PB-R-6,toY(p.y)+Math.sin(angle)*dist));
       attempts++;
     }
     const out={...p,px,py}; placed.push(out); return out;
   });
 
-  // Circles with hover tooltip
+  // ── BEST PRACTICE: Z-order — draw in entity order so colors alternate cleanly
+  const sorted=[...jittered].sort((a,b)=>a.entityIdx-b.entityIdx);
+
+  // ── BEST PRACTICE: Opacity 0.72 + white stroke border ────────
   svg+=`<g clip-path="url(#cc)">`;
-  jittered.forEach(p=>{
-    const cnt=p.x>=1000?Math.round(p.x/1000)+'k':Math.round(p.x);
-    const tip=`${p.label}&#10;Mentions: ${cnt}&#10;Satisfaction: ${Math.round(p.y)}%`;
+  sorted.forEach(p=>{
+    const tip=`onmouseover="showTmTip(event,'${p.label.replace(/'/g,"&#39;")}','${p.x>=1000?Math.round(p.x/1000)+'k':Math.round(p.x)}','${Math.round(p.y)}')" onmouseleave="hideTmTip()" style="cursor:pointer"`;
     if(p.isBm){
-      svg+=`<circle cx="${p.px}" cy="${p.py}" r="${R}" fill="none" stroke="${p.color}" stroke-width="2" stroke-dasharray="4 2" opacity=".8"
-        onmouseover="showTmTip(event,'${p.label.replace(/'/g,'&#39;')}','${cnt}','${Math.round(p.y)}')"
-        onmouseleave="hideTmTip()" style="cursor:pointer"/>`;
-    }else{
-      svg+=`<circle cx="${p.px}" cy="${p.py}" r="${R}" fill="${p.color}" opacity=".88"
-        onmouseover="showTmTip(event,'${p.label.replace(/'/g,'&#39;')}','${cnt}','${Math.round(p.y)}')"
-        onmouseleave="hideTmTip()" style="cursor:pointer"/>`;
+      svg+=`<circle cx="${p.px}" cy="${p.py}" r="${R}" fill="none" stroke="${p.color}" stroke-width="2" stroke-dasharray="4 2" opacity=".75" ${tip}/>`;
+    } else {
+      // Stroke = white at low opacity creates visible border even when overlapping
+      svg+=`<circle cx="${p.px}" cy="${p.py}" r="${R}" fill="${p.color}" opacity=".72" stroke="rgba(255,255,255,.35)" stroke-width="1.5" ${tip}/>`;
     }
   });
   svg+=`</g>`;
 
-  // Labels: name only above bubble (coordinates shown on hover)
+  // ── BEST PRACTICE: Smart labels — hide if overlapping, rely on tooltip ──
+  const placedLbls=[];
   svg+=`<g clip-path="url(#cc)">`;
   jittered.forEach(p=>{
-    const lbl=p.label.length>14?p.label.substring(0,13)+'…':p.label;
-    svg+=`<text x="${p.px}" y="${p.py-R-4}" fill="${p.color}" font-size="9" text-anchor="middle" font-weight="600">${lbl}</text>`;
+    const lbl=p.label.length>12?p.label.substring(0,11)+'…':p.label;
+    const estW=lbl.length*5.2;
+    // Try above first, then below
+    const candidates=[p.py-R-10, p.py+R+10, p.py-R-20];
+    let chosen=null;
+    for(const ly of candidates){
+      const overlaps=placedLbls.some(q=>Math.abs(q.x-p.px)<(estW/2+q.w/2+3)&&Math.abs(q.y-ly)<11);
+      if(!overlaps){chosen=ly; break;}
+    }
+    if(chosen!==null){
+      svg+=`<text x="${p.px}" y="${chosen}" fill="${p.color}" font-size="9" text-anchor="middle" font-weight="600" pointer-events="none">${lbl}</text>`;
+      placedLbls.push({x:p.px,y:chosen,w:estW});
+    }
+    // If all positions collide: bubble is visible, tooltip available — no label
   });
   svg+=`</g>`;
 
@@ -1590,7 +1591,7 @@ function buildTreemapChart(points, allStats, asp){
   let lx=PL; const ly=H-8;
   allStats.forEach(s=>{
     if(s.isBm){svg+=`<circle cx="${lx+5}" cy="${ly}" r="4" fill="none" stroke="${s.color}" stroke-width="1.5" stroke-dasharray="3 2"/>`;}
-    else{svg+=`<circle cx="${lx+5}" cy="${ly}" r="4" fill="${s.color}"/>`;}
+    else{svg+=`<circle cx="${lx+5}" cy="${ly}" r="4" fill="${s.color}" opacity=".85" stroke="rgba(255,255,255,.3)" stroke-width="1"/>`;}
     svg+=`<text x="${lx+13}" y="${ly+4}" fill="${s.color}" font-size="8.5">${s.isBm?'⌀ ':''}${s.name}</text>`;
     lx+=Math.max(76,s.name.length*5+16);
   });
