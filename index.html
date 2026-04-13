@@ -1459,14 +1459,24 @@ function buildTreemapChart(points, allStats, asp){
   if(!allX.length||!allY.length)return'<div class="no-data" style="padding:1rem">No data</div>';
 
   // Axis bounds with padding
-  const maxX=Math.max(...allX)*1.15;
+  const maxX=Math.max(...allX)*1.12;
   const minY=Math.max(0,Math.floor((Math.min(...allY)-10)/10)*10);
   const maxY=Math.min(100,Math.ceil((Math.max(...allY)+10)/10)*10);
   const yRange=maxY-minY||1;
 
-  // 3x3 quadrant dividers
-  const xLow=maxX/3, xHigh=2*maxX/3;
-  const yLow=minY+yRange/3, yHigh=minY+2*yRange/3;
+  // Quadrant dividers at ACTUAL DATA PERCENTILES (33rd/67th) — not axis range thirds
+  // This ensures each quadrant has roughly equal numbers of data points
+  const sortedX=[...allX].sort((a,b)=>a-b);
+  const sortedY=[...allY].sort((a,b)=>a-b);
+  const p33x=sortedX[Math.floor(sortedX.length*0.33)]||maxX/3;
+  const p67x=sortedX[Math.floor(sortedX.length*0.67)]||2*maxX/3;
+  const p33y=sortedY[Math.floor(sortedY.length*0.33)]||minY+yRange/3;
+  const p67y=sortedY[Math.floor(sortedY.length*0.67)]||minY+2*yRange/3;
+  // Clamp so dividers are meaningfully inside the chart
+  const xLow=Math.max(maxX*0.1, Math.min(p33x, maxX*0.7));
+  const xHigh=Math.max(xLow*1.2, Math.min(p67x, maxX*0.9));
+  const yLow=Math.max(minY+yRange*0.1, Math.min(p33y, maxY-yRange*0.1));
+  const yHigh=Math.max(yLow+1, Math.min(p67y, maxY-yRange*0.05));
 
   const W=680,H=340,PL=50,PR=56,PT=22,PB=52;
   const CW=W-PL-PR, CH=H-PT-PB;
@@ -1522,13 +1532,13 @@ function buildTreemapChart(points, allStats, asp){
   svg+=`<text x="${W-PR+5}" y="${(qy[1]+qy[2])/2+4}" fill="#0072b2" font-size="8.5" font-weight="600">Med</text>`;
   svg+=`<text x="${W-PR+5}" y="${(qy[2]+H-PB)/2+4}" fill="#d55e00" font-size="8.5" font-weight="600">Low</text>`;
 
-  // Y axis labels
+  // Y axis labels at actual quadrant boundaries
   [minY,Math.round(yLow),Math.round(yHigh),maxY].forEach(v=>{
     svg+=`<text x="${PL-4}" y="${toY(v)+4}" fill="#4a3f6b" font-size="8" text-anchor="end">${v}%</text>`;
   });
 
-  // X axis labels (actual mention counts)
-  [0,xLow,xHigh,maxX].map(v=>Math.round(v)).forEach(v=>{
+  // X axis labels at actual quadrant boundaries
+  [0,xLow,xHigh,maxX*0.95].map(v=>Math.round(v)).forEach(v=>{
     const x=toX(v);
     const lbl=v>=1000?Math.round(v/1000)+'k':v;
     svg+=`<text x="${x}" y="${H-PB+12}" fill="#4a3f6b" font-size="8" text-anchor="middle">${lbl}</text>`;
