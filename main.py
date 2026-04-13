@@ -397,6 +397,54 @@ def load_master_caches():
         set_cache("demo_by_pid", demo_by_pid)
         print(f"[CACHE] Loaded demographics: {len(demo_by_pid)} products")
 
+        # ── Load product_phrases treemap cache ──
+        VALID_ASPECTS = {1:"Dining",2:"Cleanliness",3:"Amenities",4:"Staff",5:"Room",6:"Location",7:"Value for Money"}
+        phrases_df = client.query(f"""
+            SELECT p.product_id, p.aspect_id, p.treemap_name, SUM(p.mention_count) as mention_count,
+                   h.brand_name
+            FROM `{PROJECT}.{DATASET}.product_phrases` p
+            JOIN `{PROJECT}.{DATASET}.hotel_master` h ON p.product_id = h.product_id
+            WHERE p.treemap_name IS NOT NULL AND TRIM(p.treemap_name) != ''
+              AND p.aspect_id IN ({','.join(str(k) for k in VALID_ASPECTS)})
+            GROUP BY p.product_id, p.aspect_id, p.treemap_name, h.brand_name
+            ORDER BY p.product_id, p.aspect_id, mention_count DESC
+        """).to_dataframe()
+
+        treemap_by_pid = {}   # str(product_id) -> {aspect_name: [{treemap_name, mention_count}]}
+        treemap_by_brand = {} # brand_name -> {aspect_name: [{treemap_name, mention_count}]}
+        brand_asp_accum = {}  # brand -> aspect_id -> {treemap_name: total_count}
+
+        for _, row in phrases_df.iterrows():
+            pid = str(int(row['product_id']))
+            asp_id = int(row['aspect_id'])
+            asp_name = VALID_ASPECTS.get(asp_id)
+            if not asp_name: continue
+            tn = str(row['treemap_name'])
+            mc = int(row['mention_count'])
+            brand = str(row['brand_name'] or '')
+
+            # Per product
+            pid_asp = treemap_by_pid.setdefault(pid, {}).setdefault(asp_name, [])
+            if len(pid_asp) < 5:
+                pid_asp.append({"treemap_name": tn, "mention_count": mc})
+
+            # Accumulate per brand
+            brand_asp_accum.setdefault(brand, {}).setdefault(asp_id, {})[tn] = \
+                brand_asp_accum.get(brand, {}).get(asp_id, {}).get(tn, 0) + mc
+
+        # Build top-5 per brand per aspect
+        for brand, asp_map in brand_asp_accum.items():
+            treemap_by_brand[brand] = {}
+            for asp_id, tn_map in asp_map.items():
+                asp_name = VALID_ASPECTS.get(asp_id)
+                if not asp_name: continue
+                top5 = sorted(tn_map.items(), key=lambda x: -x[1])[:5]
+                treemap_by_brand[brand][asp_name] = [{"treemap_name": t, "mention_count": c} for t,c in top5]
+
+        set_cache("treemap_by_pid", treemap_by_pid)
+        set_cache("treemap_by_brand", treemap_by_brand)
+        print(f"[CACHE] Loaded treemap phrases: {len(treemap_by_pid)} products, {len(treemap_by_brand)} brands")
+
     except Exception as e:
         print(f"[CACHE ERROR] {e}")
         traceback.print_exc()
@@ -1362,15 +1410,25 @@ async def get_treemap_phrases(
     brand: Optional[str] = None,
     limit: int = 5
 ):
-    """Top treemap phrases per aspect from product_phrases, excluding General."""
+    """Top treemap phrases per aspect — served from startup cache."""
+    if product_id:
+        cache = get_cache("treemap_by_pid")
+        result = (cache or {}).get(str(product_id), {})
+        if result:
+            print(f"[CACHE HIT] treemap_phrases for product {product_id}")
+            return result
+    elif brand:
+        cache = get_cache("treemap_by_brand")
+        result = (cache or {}).get(brand, {})
+        if result:
+            print(f"[CACHE HIT] treemap_phrases for brand {brand}")
+            return result
+
+    # Fallback to live BQ if cache miss
     client = get_bq()
     if not client:
         return {}
-
     VALID_ASPECTS = {1:"Dining",2:"Cleanliness",3:"Amenities",4:"Staff",5:"Room",6:"Location",7:"Value for Money"}
-
-    results = {}  # aspect_name -> [phrases]
-
     try:
         if product_id:
             query = f"""
@@ -1379,11 +1437,10 @@ async def get_treemap_phrases(
             WHERE product_id = {product_id}
               AND treemap_name IS NOT NULL AND TRIM(treemap_name) != ''
               AND aspect_id IN ({','.join(str(k) for k in VALID_ASPECTS)})
-            GROUP BY aspect_id, treemap_name
-            ORDER BY aspect_id, mention_count DESC
+            GROUP BY aspect_id, treemap_name ORDER BY aspect_id, mention_count DESC
             """
-        elif brand:
-            safe = brand.replace("'", "''")
+        else:
+            safe = brand.replace("'","''")
             query = f"""
             SELECT p.aspect_id, p.treemap_name, SUM(p.mention_count) as mention_count
             FROM `{PROJECT}.{DATASET}.product_phrases` p
@@ -1391,26 +1448,18 @@ async def get_treemap_phrases(
             WHERE h.brand_name = '{safe}'
               AND p.treemap_name IS NOT NULL AND TRIM(p.treemap_name) != ''
               AND p.aspect_id IN ({','.join(str(k) for k in VALID_ASPECTS)})
-            GROUP BY p.aspect_id, p.treemap_name
-            ORDER BY p.aspect_id, mention_count DESC
+            GROUP BY p.aspect_id, p.treemap_name ORDER BY p.aspect_id, mention_count DESC
             """
-        else:
-            return {}
-
         df = client.query(query).to_dataframe()
-
+        results = {}
         for asp_id, asp_name in VALID_ASPECTS.items():
-            asp_rows = df[df['aspect_id'] == asp_id].head(limit)
-            if not asp_rows.empty:
-                results[asp_name] = [
-                    {"treemap_name": str(r['treemap_name']), "mention_count": int(r['mention_count'])}
-                    for _, r in asp_rows.iterrows()
-                ]
-
+            rows = df[df['aspect_id']==asp_id].head(limit)
+            if not rows.empty:
+                results[asp_name] = [{"treemap_name": str(r['treemap_name']), "mention_count": int(r['mention_count'])} for _,r in rows.iterrows()]
+        return results
     except Exception as e:
-        print(f"[TREEMAP_PHRASES ERROR] {e}")
-
-    return results
+        print(f"[TREEMAP_PHRASES FALLBACK ERROR] {e}")
+        return {}
 
 
 @app.get("/api/hotel/{product_id}/segment_aspect")

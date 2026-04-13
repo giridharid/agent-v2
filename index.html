@@ -1463,104 +1463,103 @@ function renderCmpDynamic(asp){
 }
 
 function buildTreemapChart(points, allStats, asp){
-  if(!points.length)return'<div class="no-data" style="padding:1rem">No data for this selection</div>';
+  if(!points.length)return'<div class="no-data" style="padding:1rem">No data</div>';
   const allX=points.map(p=>p.x).filter(v=>v>0);
   const allY=points.map(p=>p.y).filter(v=>v>0);
   if(!allX.length||!allY.length)return'<div class="no-data" style="padding:1rem">No data</div>';
 
-  // ── FORMULA ──────────────────────────────────────────────────
-  // X: 0 → maxX, divided into 3 EQUAL visual thirds
-  const maxX = Math.max(...allX) * 1.12;
-  const xLow  = maxX / 3;
-  const xHigh = 2 * maxX / 3;
+  // ── AXIS FORMULA ─────────────────────────────────────────────
+  // X: sqrt scale so low-count (bottom2) items don't all pile at X=0
+  const maxXraw = Math.max(...allX);
+  const sqrtMax = Math.sqrt(maxXraw) * 1.12;
+  const toSqrtX = v => Math.sqrt(v);          // raw -> sqrt space
+  const xLowSq  = sqrtMax / 3;
+  const xHighSq = 2 * sqrtMax / 3;
+  const xLowRaw  = Math.round(xLowSq  * xLowSq);   // for labels
+  const xHighRaw = Math.round(xHighSq * xHighSq);
 
-  // Y: actual data min→max, divided into 3 equal thirds
-  // Using data range ensures all 9 quadrants always have potential occupants
-  const rawMinY = Math.min(...allY);
-  const rawMaxY = Math.max(...allY);
-  const pad = Math.max(2, (rawMaxY - rawMinY) * 0.12);
-  const minY = Math.max(0,   rawMinY - pad);
-  const maxY = Math.min(100, rawMaxY + pad);
+  // Y: actual data range divided into equal thirds
+  const rawMinY = Math.min(...allY), rawMaxY = Math.max(...allY);
+  const pad = Math.max(2, (rawMaxY - rawMinY) * 0.15);
+  const minY = Math.max(0, rawMinY - pad), maxY = Math.min(100, rawMaxY + pad);
   const yRange = maxY - minY || 1;
-  const yLow  = minY + yRange / 3;    // bottom 1/3 boundary
-  const yHigh = minY + 2 * yRange / 3; // top 1/3 boundary
+  const yLow  = minY + yRange / 3;
+  const yHigh = minY + 2 * yRange / 3;
   // ─────────────────────────────────────────────────────────────
 
-  const W=680, H=400, PL=56, PR=66, PT=16, PB=56;
+  const W=680, H=400, PL=56, PR=66, PT=18, PB=58;
   const CW=W-PL-PR, CH=H-PT-PB;
-  const toX=v=>PL + Math.min(1, v/maxX) * CW;
-  const toY=v=>PT + CH * (1 - Math.max(0, Math.min(1, (v-minY)/yRange)));
-  const R=10; // fixed 10pt radius
+  const toX = v => PL + Math.min(1, toSqrtX(v) / sqrtMax) * CW;
+  const toY = v => PT + CH * (1 - Math.max(0, Math.min(1, (v - minY) / yRange)));
+  const R = 10;
 
   let svg=`<svg width="100%" viewBox="0 0 ${W} ${H}" style="display:block;font-family:inherit">
   <defs><clipPath id="cc"><rect x="${PL}" y="${PT}" width="${CW}" height="${CH}"/></clipPath></defs>`;
 
-  // ── 9 quadrant fills ─────────────────────────────────────────
-  const qx=[PL, toX(xLow), toX(xHigh), W-PR];
+  // 9 quadrant fills
+  const qx=[PL, PL+CW/3, PL+2*CW/3, W-PR];   // equal visual thirds
   const qy=[PT, toY(yHigh), toY(yLow), H-PB];
-  // [row=highSat→lowSat][col=lowVol→highVol]
   const fills=[
-    ['rgba(240,248,240,.04)', 'rgba(220,240,220,.07)', 'rgba(0,158,115,.13)'],  // high sat
-    ['rgba(240,240,250,.03)', 'rgba(240,240,250,.04)', 'rgba(200,220,240,.06)'], // mid sat
-    ['rgba(250,230,220,.04)', 'rgba(213,94,0,.09)',    'rgba(213,94,0,.20)'],    // low sat (worst bottom-right)
+    ['rgba(240,248,240,.04)','rgba(220,240,220,.07)','rgba(0,158,115,.14)'],
+    ['rgba(240,240,250,.03)','rgba(240,240,250,.05)','rgba(200,220,240,.07)'],
+    ['rgba(250,230,220,.04)','rgba(213,94,0,.10)',   'rgba(213,94,0,.22)'],
   ];
-  for(let r=0;r<3;r++) for(let c=0;c<3;c++){
+  for(let r=0;r<3;r++) for(let c=0;c<3;c++)
     svg+=`<rect x="${qx[c]}" y="${qy[r]}" width="${qx[c+1]-qx[c]}" height="${qy[r+1]-qy[r]}" fill="${fills[r][c]}"/>`;
-  }
 
-  // ── Quadrant divider lines ────────────────────────────────────
-  [xLow, xHigh].forEach(v=>{
-    const x=toX(v);
+  // Divider lines
+  [1,2].forEach(i=>{
+    const x=PL+i*CW/3;
     svg+=`<line x1="${x}" y1="${PT}" x2="${x}" y2="${H-PB}" stroke="rgba(255,255,255,.12)" stroke-width="1" stroke-dasharray="4 3"/>`;
   });
-  [yLow, yHigh].forEach(v=>{
+  [yLow,yHigh].forEach(v=>{
     const y=toY(v);
     svg+=`<line x1="${PL}" y1="${y}" x2="${W-PR}" y2="${y}" stroke="rgba(255,255,255,.12)" stroke-width="1" stroke-dasharray="4 3"/>`;
   });
 
-  // ── Quadrant corner labels ────────────────────────────────────
+  // Corner labels
   svg+=`<text x="${W-PR-6}" y="${PT+14}" fill="rgba(0,200,130,.8)" font-size="11" text-anchor="end" font-weight="700">★ Best</text>`;
-  svg+=`<text x="${W-PR-6}" y="${H-PB-6}" fill="rgba(213,94,0,.85)" font-size="11" text-anchor="end" font-weight="700">↓ Worst</text>`;
+  svg+=`<text x="${W-PR-6}" y="${H-PB-5}" fill="rgba(213,94,0,.85)" font-size="11" text-anchor="end" font-weight="700">↓ Worst</text>`;
   svg+=`<text x="${W-PR-6}" y="${(PT+qy[1])/2+4}" fill="rgba(0,158,115,.55)" font-size="9" text-anchor="end">High</text>`;
   svg+=`<text x="${W-PR-6}" y="${(qy[1]+qy[2])/2+4}" fill="rgba(0,114,178,.55)" font-size="9" text-anchor="end">Med</text>`;
   svg+=`<text x="${W-PR-6}" y="${(qy[2]+H-PB)/2+4}" fill="rgba(213,94,0,.55)" font-size="9" text-anchor="end">Low</text>`;
   svg+=`<text x="${PL+6}" y="${PT+13}" fill="rgba(180,170,210,.35)" font-size="8.5">Low vol</text>`;
 
-  // ── Axes ──────────────────────────────────────────────────────
+  // Axes
   svg+=`<line x1="${PL}" y1="${PT}" x2="${PL}" y2="${H-PB}" stroke="rgba(255,255,255,.12)" stroke-width="1"/>`;
   svg+=`<line x1="${PL}" y1="${H-PB}" x2="${W-PR}" y2="${H-PB}" stroke="rgba(255,255,255,.12)" stroke-width="1"/>`;
 
-  // Y labels — actual data-relative thresholds
-  [minY, yLow, yHigh, maxY].forEach(v=>{
+  // Y labels at actual data boundaries
+  [minY,yLow,yHigh,maxY].forEach(v=>{
     const col=v===yLow?'#d55e00':v===yHigh?'#009e73':'#4a3f6b';
     const fw=v===yLow||v===yHigh?'600':'400';
     svg+=`<text x="${PL-5}" y="${toY(v)+4}" fill="${col}" font-size="9" text-anchor="end" font-weight="${fw}">${Math.round(v)}%</text>`;
   });
 
-  // X labels — column boundaries
-  [0, Math.round(xLow), Math.round(xHigh)].forEach(v=>{
+  // X labels — sqrt scale: show values at column boundaries
+  [0, xLowRaw, xHighRaw, maxXraw].forEach(v=>{
+    const x=toX(Math.max(v,0));
     const lbl=v>=1000?Math.round(v/1000)+'k':v;
-    svg+=`<text x="${toX(v)}" y="${H-PB+13}" fill="#4a3f6b" font-size="9" text-anchor="middle">${lbl}</text>`;
+    svg+=`<text x="${x}" y="${H-PB+13}" fill="#4a3f6b" font-size="9" text-anchor="middle">${lbl}</text>`;
   });
-  svg+=`<text x="${PL+CW/2}" y="${H-PB+27}" fill="#4a3f6b" font-size="10" text-anchor="middle">Mention Count →</text>`;
+  svg+=`<text x="${PL+CW/2}" y="${H-PB+27}" fill="#4a3f6b" font-size="10" text-anchor="middle">Mention Count → (√ scale)</text>`;
   svg+=`<text x="12" y="${PT+CH/2}" fill="#4a3f6b" font-size="10" text-anchor="middle" transform="rotate(-90,12,${PT+CH/2})">+ve Sentiment % ↑</text>`;
 
-  // ── Jitter: nudge overlapping bubbles while staying in bounds ─
+  // Iterative jitter — spiral by entity index, clamp in bounds
   const placed=[];
   const jittered=points.map(p=>{
-    let px=toX(p.x), py=toY(p.y);
-    let attempts=0;
-    while(placed.some(q=>Math.hypot(q.px-px,q.py-py)<R*2.2) && attempts<12){
-      const angle=(p.entityIdx/Math.max(allStats.length,1))*2*Math.PI + attempts*0.7;
-      const dist=R*2.3;
-      px=Math.max(PL+R, Math.min(W-PR-R, toX(p.x)+Math.cos(angle)*dist*(1+attempts*0.3)));
-      py=Math.max(PT+R, Math.min(H-PB-R-20, toY(p.y)+Math.sin(angle)*dist*(1+attempts*0.3)));
+    let px=toX(p.x), py=toY(p.y), attempts=0;
+    while(placed.some(q=>Math.hypot(q.px-px,q.py-py)<R*2.3) && attempts<14){
+      const angle=(p.entityIdx/Math.max(allStats.length,1))*2*Math.PI + attempts*0.65;
+      const dist=R*2.4*(1+attempts*0.25);
+      px=Math.max(PL+R, Math.min(W-PR-R, toX(p.x)+Math.cos(angle)*dist));
+      py=Math.max(PT+R, Math.min(H-PB-R-20, toY(p.y)+Math.sin(angle)*dist));
       attempts++;
     }
     const out={...p,px,py}; placed.push(out); return out;
   });
 
-  // ── Draw circles (clipped) ────────────────────────────────────
+  // Circles
   svg+=`<g clip-path="url(#cc)">`;
   jittered.forEach(p=>{
     if(p.isBm) svg+=`<circle cx="${p.px}" cy="${p.py}" r="${R}" fill="none" stroke="${p.color}" stroke-width="2" stroke-dasharray="4 2" opacity=".8"/>`;
@@ -1568,7 +1567,7 @@ function buildTreemapChart(points, allStats, asp){
   });
   svg+=`</g>`;
 
-  // ── Labels below each bubble (clipped) ───────────────────────
+  // Labels below: Name\n(count, sat%)
   svg+=`<g clip-path="url(#cc)">`;
   jittered.forEach(p=>{
     const lbl=p.label.length>14?p.label.substring(0,13)+'…':p.label;
@@ -1578,13 +1577,13 @@ function buildTreemapChart(points, allStats, asp){
   });
   svg+=`</g>`;
 
-  // ── Legend ────────────────────────────────────────────────────
+  // Legend
   let lx=PL; const ly=H-8;
   allStats.forEach(s=>{
-    if(s.isBm){ svg+=`<circle cx="${lx+5}" cy="${ly}" r="4" fill="none" stroke="${s.color}" stroke-width="1.5" stroke-dasharray="3 2"/>`; }
-    else       { svg+=`<circle cx="${lx+5}" cy="${ly}" r="4" fill="${s.color}"/>`; }
+    if(s.isBm){svg+=`<circle cx="${lx+5}" cy="${ly}" r="4" fill="none" stroke="${s.color}" stroke-width="1.5" stroke-dasharray="3 2"/>`;}
+    else{svg+=`<circle cx="${lx+5}" cy="${ly}" r="4" fill="${s.color}"/>`;}
     svg+=`<text x="${lx+13}" y="${ly+4}" fill="${s.color}" font-size="8.5">${s.isBm?'⌀ ':''}${s.name}</text>`;
-    lx+=Math.max(76, s.name.length*5+16);
+    lx+=Math.max(76,s.name.length*5+16);
   });
   svg+='</svg>'; return svg;
 }
