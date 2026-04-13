@@ -17,6 +17,7 @@ import threading
 import time
 import asyncio
 import math
+import uuid
 from datetime import datetime
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
@@ -58,6 +59,8 @@ app.add_middleware(
 # ─────────────────────────────────────────
 PROJECT = "gen-lang-client-0143536012"
 DATASET = "smaartanalyst"
+AGENT_ID = os.environ.get("GEMINI_AGENT_ID", "agent_024eedb9-0b86-4101-82a5-f4b3d72c5ee3")
+AGENT_LOCATION = "global"  # Data Analytics Agent uses global, not regional
 
 ASPECT_MAP = {
     1: "Dining", 2: "Cleanliness", 3: "Amenities", 4: "Staff",
@@ -139,126 +142,75 @@ def init_bq_client():
         traceback.print_exc()
         return None
 
-def init_gemini():
-    """
-    Initialize the Gemini Data Analytics Agent (Vertex AI Reasoning Engine).
-    Agent ID: agent_024eedb9-0b86-4101-82a5-f4b3d72c5ee3
-    Falls back to direct GenerativeModel if agent is unavailable.
-    """
-    global gemini_model
-
-    agent_id = os.environ.get("GEMINI_AGENT_ID", "agent_024eedb9-0b86-4101-82a5-f4b3d72c5ee3")
-
-    gcp_creds = os.environ.get("GCP_CREDENTIALS_JSON", "")
-    if not gcp_creds:
-        api_key = os.environ.get("GEMINI_API_KEY", "")
-        if api_key:
-            genai.configure(api_key=api_key)
-            gemini_model = genai.GenerativeModel("gemini-1.5-flash")
-            print("[SUCCESS] Gemini initialised via API key (no GCP creds)")
-        else:
-            print("[WARNING] No Gemini credentials found")
-        return gemini_model
-
-    # Parse GCP service-account credentials
-    gcp_creds = gcp_creds.strip().strip('"').strip("'")
+def get_gcp_credentials():
+    """Parse GCP service-account credentials from env. Returns (creds, project_id) or (None, None)."""
+    raw = os.environ.get("GCP_CREDENTIALS_JSON", "").strip().strip('"').strip("'")
+    if not raw:
+        return None, None
     try:
-        if gcp_creds.startswith("{"):
-            creds_dict = json.loads(gcp_creds)
+        if raw.startswith("{"):
+            d = json.loads(raw)
         else:
-            padding = 4 - len(gcp_creds) % 4
+            padding = 4 - len(raw) % 4
             if padding != 4:
-                gcp_creds += "=" * padding
-            creds_dict = json.loads(base64.b64decode(gcp_creds).decode("utf-8"))
-        credentials = service_account.Credentials.from_service_account_info(creds_dict)
-        project_id = creds_dict.get("project_id", PROJECT)
+                raw += "=" * padding
+            d = json.loads(base64.b64decode(raw).decode("utf-8"))
+        creds = service_account.Credentials.from_service_account_info(d)
+        return creds, d.get("project_id", PROJECT)
     except Exception as e:
-        print(f"[ERROR] GCP creds parse error: {e}")
+        print(f"[ERROR] GCP creds parse: {e}")
+        return None, None
+
+
+def get_data_chat_client():
+    """Return a geminidataanalytics DataChatServiceClient using service-account creds."""
+    try:
+        from google.cloud import geminidataanalytics_v1alpha as gda
+        creds, _ = get_gcp_credentials()
+        if creds:
+            return gda.DataChatServiceClient(credentials=creds)
+        return gda.DataChatServiceClient()   # ADC fallback
+    except Exception as e:
+        print(f"[CHAT CLIENT] geminidataanalytics unavailable: {e}")
         return None
 
-    # ── 1. Try Vertex AI Reasoning Engine (the shared agent) ──────────────
-    try:
-        import vertexai
-        from vertexai.preview import reasoning_engines
 
-        vertexai.init(project=project_id, location="us-central1", credentials=credentials)
-        resource_name = (
-            f"projects/{project_id}/locations/us-central1/reasoningEngines/{agent_id}"
-        )
-        agent = reasoning_engines.ReasoningEngine(resource_name)
-        gemini_model = _AgentWrapper(agent)
-        print(f"[SUCCESS] Gemini Data Analytics Agent initialised: {agent_id}")
-        return gemini_model
+def init_gemini():
+    """
+    Gemini fallback model for when the Data Analytics Agent is unavailable.
+    The main chat path uses get_data_chat_client() + geminidataanalytics_v1alpha.
+    This model is only used if that fails.
+    """
+    global gemini_model
+    creds, project_id = get_gcp_credentials()
 
-    except Exception as e:
-        print(f"[WARN] Reasoning Engine unavailable ({e}), trying GenerativeModel fallback")
+    # Vertex AI GenerativeModel (2.5-flash → 2.0-flash → 1.5-flash)
+    if creds:
+        try:
+            import vertexai
+            from vertexai.generative_models import GenerativeModel
+            vertexai.init(project=project_id, location="us-central1", credentials=creds)
+            for name in ["gemini-2.5-flash-preview-04-17", "gemini-2.0-flash", "gemini-1.5-flash"]:
+                try:
+                    gemini_model = GenerativeModel(name)
+                    print(f"[GEMINI FALLBACK] Vertex AI model: {name}")
+                    return gemini_model
+                except Exception:
+                    pass
+        except Exception as e:
+            print(f"[GEMINI FALLBACK] Vertex AI failed: {e}")
 
-    # ── 2. Fall back to Vertex AI GenerativeModel ──────────────────────────
-    try:
-        import vertexai
-        from vertexai.generative_models import GenerativeModel
-
-        vertexai.init(project=project_id, location="us-central1", credentials=credentials)
-        for model_name in ["gemini-2.0-flash", "gemini-1.5-flash-001", "gemini-1.5-flash"]:
-            try:
-                gemini_model = GenerativeModel(model_name)
-                print(f"[SUCCESS] Gemini GenerativeModel '{model_name}' (Vertex AI fallback)")
-                return gemini_model
-            except Exception as me:
-                print(f"[WARN] {model_name} unavailable: {me}")
-        raise Exception("No Vertex AI model available")
-
-    except Exception as e:
-        print(f"[WARN] Vertex AI GenerativeModel failed ({e}), trying API key")
-
-    # ── 3. Last resort: google-generativeai API key ────────────────────────
+    # API-key fallback
     api_key = os.environ.get("GEMINI_API_KEY", "")
     if api_key:
         genai.configure(api_key=api_key)
-        gemini_model = genai.GenerativeModel("gemini-1.5-flash")
-        print("[SUCCESS] Gemini initialised via API key (last resort)")
+        gemini_model = genai.GenerativeModel("gemini-2.0-flash")
+        print("[GEMINI FALLBACK] API key model")
         return gemini_model
 
-    print("[ERROR] All Gemini init paths failed")
+    print("[WARN] No Gemini fallback available")
     return None
 
-
-class _AgentWrapper:
-    """
-    Thin wrapper so a Vertex AI Reasoning Engine works like GenerativeModel.
-    Tries multiple input shapes — different agents expose different schemas.
-    """
-    def __init__(self, agent):
-        self._agent = agent
-
-    def generate_content(self, prompt: str):
-        attempts = [
-            {"input": prompt},
-            {"message": prompt},
-            {"messages": [{"role": "user", "content": prompt}]},
-        ]
-        last_err = None
-        for inp in attempts:
-            try:
-                resp = self._agent.query(input=inp)
-                if hasattr(resp, "output"):
-                    return _TextResponse(str(resp.output))
-                if hasattr(resp, "text"):
-                    return _TextResponse(str(resp.text))
-                if isinstance(resp, dict):
-                    text = (resp.get("output") or resp.get("text") or
-                            resp.get("response") or resp.get("answer") or str(resp))
-                    return _TextResponse(str(text))
-                return _TextResponse(str(resp))
-            except Exception as err:
-                last_err = err
-        raise RuntimeError(f"Agent query failed. Last error: {last_err}")
-
-
-class _TextResponse:
-    """Minimal response object matching GenerativeModel.generate_content() shape."""
-    def __init__(self, text: str):
-        self.text = text
 
 def get_bq():
     global bq_client
@@ -805,14 +757,14 @@ async def get_hotel_summary(product_id: int):
                FROM `{PROJECT}.{DATASET}.product_pain_delights`
                WHERE product_id = {product_id} AND signal_type = 'pain_point'
                AND phrase IS NOT NULL AND TRIM(phrase) != ''
-               GROUP BY phrase, aspect_name, aspect_id, signal_type, treemap_name, severity_rank
-               ORDER BY mention_count DESC LIMIT 10""",
+               GROUP BY phrase, aspect_name, aspect_id, signal_type, treemap_name, severity_rank, mention_count
+               ORDER BY mention_count DESC LIMIT 20""",
         "delight": f"""SELECT phrase, treemap_name, aspect_id, aspect_name, mention_count, severity_rank
                FROM `{PROJECT}.{DATASET}.product_pain_delights`
                WHERE product_id = {product_id} AND signal_type = 'delight'
                AND phrase IS NOT NULL AND TRIM(phrase) != ''
-               GROUP BY phrase, aspect_name, aspect_id, signal_type, treemap_name, severity_rank
-               ORDER BY mention_count DESC LIMIT 10""",
+               GROUP BY phrase, aspect_name, aspect_id, signal_type, treemap_name, severity_rank, mention_count
+               ORDER BY mention_count DESC LIMIT 20""",
         "rd": f"""SELECT signal_type as rd_signal, phrase, treemap_name, mention_count
                FROM `{PROJECT}.{DATASET}.product_rd_signals`
                WHERE product_id = {product_id} ORDER BY rd_signal, mention_count DESC"""
@@ -1163,23 +1115,16 @@ class ChatRequest(BaseModel):
 
 @app.post("/api/chat")
 async def chat(request: ChatRequest):
-    """Chat with SmaartAnalyst agent"""
-    model = get_gemini()
-    client = get_bq()
-    
-    if not model:
-        return {"response": "Chat service unavailable. Please set GEMINI_API_KEY.", "conversation_id": None}
-    
-    if not client:
-        return {"response": "Database unavailable.", "conversation_id": None}
-    
+    """Chat with SmaartAnalyst — uses geminidataanalytics agent, falls back to GenerativeModel."""
+    if not request.product_id and not request.brand_id:
+        return {"response": "Please select a hotel or brand first, then ask me about it.", "conversation_id": None}
+
     try:
-        # Get context data
         entity_name = ""
         entity_type = ""
         data_context = ""
         if not request.product_id and not request.brand_id:
-            return {"response": "Please select a hotel or brand first, then ask me about it.", "conversation_id": None}
+            pass  # already checked above
         
         if request.product_id:
             # ── Hotel context — pull from cache where possible ──
@@ -1306,20 +1251,8 @@ Overall Satisfaction: {brand_stats['overall_satisfaction']}% | Avg Google Rating
 INSTRUCTION: Use ONLY the exact numbers above. Do not estimate or invent any figure.
 """
         
-        # Check for drill-down request
-        drill_down_keywords = ["show me reviews", "see reviews", "drill down", "actual reviews", 
-                              "what guests said", "guest feedback about", "reviews about"]
-        is_drilldown = any(kw in request.message.lower() for kw in drill_down_keywords)
-        
-        if is_drilldown and request.product_id:
-            # Try to extract phrase from message
-            drilldown_context = "\n\n[User is requesting to see actual reviews. If you can identify a specific phrase or topic, query the review_drilldown table and show 3-5 sample reviews with the sentiment_text highlighted using ==text==.]"
-            data_context += drilldown_context
-        
-        # Get agent prompt based on category
+        # Build full prompt with system instructions + data context + user query
         system_prompt = get_agent_prompt(request.category)
-        
-        # Build full prompt
         full_prompt = f"""{system_prompt}
 
 {data_context}
@@ -1327,15 +1260,66 @@ INSTRUCTION: Use ONLY the exact numbers above. Do not estimate or invent any fig
 === USER QUERY ===
 {request.message}
 
-Remember: Use the EXACT numbers from the data above. Do NOT invent any numbers. If user asks for reviews, indicate that they can click on specific pain points or delights to see actual guest reviews."""
-        
-        # Call Gemini
-        response = model.generate_content(full_prompt)
-        response_text = response.text if response.text else "No response generated."
-        
+Remember: Use the EXACT numbers from the data above. Do NOT invent any numbers. If the user asks to see reviews, tell them to click the relevant pain point or delight on the dashboard."""
+
+        conv_id = request.conversation_id or f"smaart-{uuid.uuid4().hex[:8]}"
+        response_text = ""
+
+        # ── Path 1: geminidataanalytics agent ─────────────────────────────
+        try:
+            from google.cloud import geminidataanalytics_v1alpha as gda
+            cc = get_data_chat_client()
+            if cc:
+                parent = f"projects/{PROJECT}/locations/{AGENT_LOCATION}"
+                agent_path = f"{parent}/dataAgents/{AGENT_ID}"
+                conv_path = cc.conversation_path(PROJECT, AGENT_LOCATION, conv_id)
+
+                # Create conversation if it doesn't exist yet
+                try:
+                    cc.get_conversation(name=conv_path)
+                except Exception:
+                    cc.create_conversation(request=gda.CreateConversationRequest(
+                        parent=parent,
+                        conversation_id=conv_id,
+                        conversation=gda.Conversation(agents=[agent_path])
+                    ))
+
+                stream = cc.chat(request={
+                    "parent": parent,
+                    "conversation_reference": {
+                        "conversation": conv_path,
+                        "data_agent_context": {"data_agent": agent_path}
+                    },
+                    "messages": [{"user_message": {"text": full_prompt}}]
+                })
+
+                for chunk in stream:
+                    if hasattr(chunk, 'system_message') and hasattr(chunk.system_message, 'text'):
+                        for p in chunk.system_message.text.parts:
+                            part = str(p)
+                            if any(part.startswith(c) for c in ['📊','🎯','👔','📢','🛏','🛎','🍽','⚙','👥','♂','🔑','⚠','✓','✗']) or '**' in part:
+                                response_text += part + "\n"
+                    if hasattr(chunk, 'agent_message') and hasattr(chunk.agent_message, 'text'):
+                        for p in chunk.agent_message.text.parts:
+                            response_text += str(p)
+
+                response_text = response_text.replace('💭 ', '').strip()
+                print(f"[CHAT] Agent response length: {len(response_text)}")
+        except Exception as agent_err:
+            print(f"[CHAT] Agent path failed: {agent_err} — falling back to GenerativeModel")
+
+        # ── Path 2: GenerativeModel fallback ──────────────────────────────
+        if not response_text:
+            model = get_gemini()
+            if model:
+                resp = model.generate_content(full_prompt)
+                response_text = resp.text if resp.text else "No response generated."
+            else:
+                response_text = "Chat service unavailable. Please check your credentials."
+
         return {
             "response": response_text,
-            "conversation_id": request.conversation_id,
+            "conversation_id": conv_id,
             "entity": entity_name,
             "entity_type": entity_type
         }

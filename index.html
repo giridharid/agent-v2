@@ -1100,9 +1100,13 @@ function renderDelights(delights){allDelights=dedupeByPhrase(delights);renderFil
 
 function renderFilteredPains(){
   const pid=currentProductId||currentHotel;
-  const filtered=currentPainAspect==='all'?allPainPoints:allPainPoints.filter(p=>(p.aspect_name||'').toLowerCase()===currentPainAspect.toLowerCase());
+  // Filter from the FULL sorted list, then re-sort desc and take top 10
+  const filtered=(currentPainAspect==='all'
+    ?allPainPoints
+    :allPainPoints.filter(p=>(p.aspect_name||'').toLowerCase()===currentPainAspect.toLowerCase())
+  ).sort((a,b)=>(b.mention_count||0)-(a.mention_count||0));
   document.getElementById('painPointsList').innerHTML=filtered.length
-    ?filtered.slice(0,8).map(p=>`<div class="sig-item pain" onclick="openDrilldown(${pid},'${escHtml(p.phrase)}','pain_point')">
+    ?filtered.slice(0,10).map(p=>`<div class="sig-item pain" onclick="openDrilldown(${pid},'${escHtml(p.phrase)}','pain_point')">
         <span class="sig-txt-r">${escHtml(p.phrase)}</span>
         <span style="display:flex;align-items:center;gap:5px">
           ${p.aspect_name?`<span class="sig-meta">${escHtml(p.aspect_name)}</span>`:''}
@@ -1113,9 +1117,13 @@ function renderFilteredPains(){
 
 function renderFilteredDelights(){
   const pid=currentProductId||currentHotel;
-  const filtered=currentDelightAspect==='all'?allDelights:allDelights.filter(d=>(d.aspect_name||'').toLowerCase()===currentDelightAspect.toLowerCase());
+  // Filter from the FULL sorted list, then re-sort desc and take top 10
+  const filtered=(currentDelightAspect==='all'
+    ?allDelights
+    :allDelights.filter(d=>(d.aspect_name||'').toLowerCase()===currentDelightAspect.toLowerCase())
+  ).sort((a,b)=>(b.mention_count||0)-(a.mention_count||0));
   document.getElementById('delightsList').innerHTML=filtered.length
-    ?filtered.slice(0,8).map(d=>`<div class="sig-item delight" onclick="openDrilldown(${pid},'${escHtml(d.phrase)}','delight')">
+    ?filtered.slice(0,10).map(d=>`<div class="sig-item delight" onclick="openDrilldown(${pid},'${escHtml(d.phrase)}','delight')">
         <span class="sig-txt-g">${escHtml(d.phrase)}</span>
         <span style="display:flex;align-items:center;gap:5px">
           ${d.aspect_name?`<span class="sig-meta">${escHtml(d.aspect_name)}</span>`:''}
