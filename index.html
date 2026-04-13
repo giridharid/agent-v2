@@ -953,24 +953,38 @@ async function runHotelComparison(){
 }
 
 // ─── COMPARE PHRASE DRILLDOWN ────────────────────────────────
-async function cmpDrilldown(phrase, entityName, compareBy){
+async function cmpDrilldown(phrase, entityItem, signalType, cmpBy){
   try{
-    // Use existing drilldown modal — show top 3 reviews for this phrase
-    document.getElementById('drilldownTitle').textContent=`"${phrase}" — ${entityName}`;
+    document.getElementById('drilldownTitle').textContent=`"${phrase}"`;
     document.getElementById('drilldownCount').textContent='Loading reviews...';
     document.getElementById('drilldownContent').innerHTML='<div style="text-align:center;padding:2rem;color:#5a4e7a">Fetching reviews…</div>';
     document.getElementById('drilldownFooter').innerHTML='';
     document.getElementById('drilldownOverlay').style.display='flex';
-    const r=await fetch(`/api/reviews?phrase=${encodeURIComponent(phrase)}&limit=3&compare_by=${compareBy}`);
-    const d=await r.json();
-    const reviews=d.reviews||[];
-    document.getElementById('drilldownCount').textContent=`${reviews.length} of ${d.total||'?'} reviews shown`;
-    document.getElementById('drilldownContent').innerHTML=reviews.length
-      ?reviews.map(rv=>`<div class="review-card">
-          <div class="review-meta"><span>⭐ ${rv.rating||'?'}</span><span>${rv.date||''}</span></div>
-          <div class="review-text">${hlSentiment(rv.review_text||rv.text||'',phrase)}</div>
-        </div>`).join('')
-      :'<div class="no-data">No reviews found for this phrase</div>';
+    if(cmpBy==='hotel'){
+      // Use existing drilldown endpoint with product_id
+      const r=await fetch('/api/drilldown',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({product_id:parseInt(entityItem)||entityItem,phrase,signal_type:signalType||'pain_point',limit:20})
+      });
+      const d=await r.json();
+      const reviews=d.reviews||[];
+      document.getElementById('drilldownCount').textContent=`${reviews.length} of ${d.total||reviews.length} reviews`;
+      document.getElementById('drilldownContent').innerHTML=reviews.length
+        ?reviews.map(rv=>`<div class="review-card">
+            <div class="review-meta"><span>⭐ ${rv.rating||'?'}</span><span>${rv.date||''}</span></div>
+            <div class="review-text">${hlSentiment(rv.review_text||rv.text||'',phrase)}</div>
+          </div>`).join('')
+        :'<div class="no-data">No reviews found</div>';
+    } else {
+      // Brand compare — use brand summary endpoint for context
+      document.getElementById('drilldownCount').textContent='Brand-level phrase';
+      document.getElementById('drilldownContent').innerHTML=`<div style="padding:1rem;color:#9d86cc;font-size:13px">
+        Phrase: <strong style="color:#c4b5fd">"${escHtml(phrase)}"</strong><br><br>
+        <span style="color:#6b5ea8;font-size:11px">Select a specific hotel in Hotel View to drill down into reviews for this phrase.</span>
+      </div>`;
+    }
+    drilldownPage=1; drilldownPhrase=phrase;
   }catch(e){
     document.getElementById('drilldownContent').innerHTML='<div class="no-data">Error loading reviews</div>';
   }
@@ -1341,7 +1355,7 @@ async function openParadoxModal(){
 
 // ─── COMPARISON ───────────────────────────────────────────────
 async function loadComparison(items,compareBy){
-  const ENTITY_COLORS=['#e69f00','#56b4e9','#009e73','#cc79a7']; // Okabe-Ito 4 colorblind-safe
+  const ENTITY_COLORS=['#f5a623','#4fc3f7','#69f0ae','#f48fb1']; // Bright, colorblind-friendly
   const BM_COLOR='#9d86cc';
   const ASPECTS=['Dining','Cleanliness','Staff','Room','Location','Value for Money','General'];
   try{
@@ -1468,7 +1482,7 @@ async function loadComparison(items,compareBy){
       tmResults.forEach(s=>tmByItem[s.item]=s.treemap||{});
 
       // Store compare state for aspect-filter re-render
-      window._cmpState={allStats,tmByItem,pdResults,itemStats};
+      window._cmpState={allStats,tmByItem,pdResults,itemStats,compareBy};
 
       // ── Aspect filter bar ─────────────────────────────────────────────
       const ASPECTS_F=['Dining','Cleanliness','Amenities','Staff','Room','Location','Value for Money'];
@@ -1499,7 +1513,7 @@ function setCmpAspect(asp, btn){
 }
 
 function renderCmpDynamic(asp){
-  const{allStats,tmByItem,pdResults,itemStats}=window._cmpState||{};
+  const{allStats,tmByItem,pdResults,itemStats,compareBy}=window._cmpState||{};
   if(!allStats)return;
   const ASPECTS_F=['Dining','Cleanliness','Amenities','Staff','Room','Location','Value for Money'];
 
@@ -1575,9 +1589,9 @@ function renderCmpDynamic(asp){
     dyn+=`<div style="background:rgba(15,11,28,.6);border-radius:9px;padding:12px;border-top:3px solid ${item.color};text-align:center">
       <div style="color:${item.color};font-size:11px;font-weight:700;margin-bottom:8px">${item.name}</div>
       <div style="color:#d55e00;font-size:10px;font-weight:700;margin-bottom:3px">⚠ Pain Points</div>
-      ${fp.length?fp.map(p=>`<div onclick="cmpDrilldown('${escHtml(p.phrase)}','${escHtml(item.name)}','${compareBy}')" style="padding:3px 0;border-bottom:1px solid rgba(45,33,84,.12);color:#fdba74;font-size:10px;display:flex;justify-content:space-between;cursor:pointer;transition:opacity .15s" onmouseover="this.style.opacity='.7'" onmouseleave="this.style.opacity='1'"><span>• ${escHtml(p.phrase)}</span><span style="color:#4a3f6b;font-family:monospace;font-size:9px">${p.mention_count||''}</span></div>`).join(''):`<div style="color:#3d3355;font-size:10px;padding:3px 0">No data</div>`}
+      ${fp.length?fp.map(p=>`<div onclick="cmpDrilldown('${escHtml(p.phrase)}','${escHtml(item.item)}','pain_point','${compareBy||''}')" style="padding:3px 0;border-bottom:1px solid rgba(45,33,84,.12);color:#fdba74;font-size:10px;display:flex;justify-content:space-between;cursor:pointer;transition:opacity .15s" onmouseover="this.style.opacity='.7'" onmouseleave="this.style.opacity='1'"><span>• ${escHtml(p.phrase)}</span><span style="color:#4a3f6b;font-family:monospace;font-size:9px">${p.mention_count||''}</span></div>`).join(''):`<div style="color:#3d3355;font-size:10px;padding:3px 0">No data</div>`}
       <div style="color:#56b4e9;font-size:10px;font-weight:700;margin:7px 0 3px">★ Delights</div>
-      ${fd.length?fd.map(d=>`<div onclick="cmpDrilldown('${escHtml(d.phrase)}','${escHtml(item.name)}','${compareBy}')" style="padding:3px 0;border-bottom:1px solid rgba(45,33,84,.12);color:#93c5fd;font-size:10px;display:flex;justify-content:space-between;cursor:pointer;transition:opacity .15s" onmouseover="this.style.opacity='.7'" onmouseleave="this.style.opacity='1'"><span>• ${escHtml(d.phrase)}</span><span style="color:#4a3f6b;font-family:monospace;font-size:9px">${d.mention_count||''}</span></div>`).join(''):`<div style="color:#3d3355;font-size:10px;padding:3px 0">No data</div>`}
+      ${fd.length?fd.map(d=>`<div onclick="cmpDrilldown('${escHtml(d.phrase)}','${escHtml(item.item)}','delight','${compareBy||''}')" style="padding:3px 0;border-bottom:1px solid rgba(45,33,84,.12);color:#93c5fd;font-size:10px;display:flex;justify-content:space-between;cursor:pointer;transition:opacity .15s" onmouseover="this.style.opacity='.7'" onmouseleave="this.style.opacity='1'"><span>• ${escHtml(d.phrase)}</span><span style="color:#4a3f6b;font-family:monospace;font-size:9px">${d.mention_count||''}</span></div>`).join(''):`<div style="color:#3d3355;font-size:10px;padding:3px 0">No data</div>`}
     </div>`;
   });
   dyn+='</div></div>';
@@ -1700,7 +1714,7 @@ function buildTreemapChart(points, allStats, asp){
   // ── BEST PRACTICE: Z-order — draw in entity order so colors alternate cleanly
   const sorted=[...jittered].sort((a,b)=>a.entityIdx-b.entityIdx);
 
-  // All bubbles hollow: outline only, no fill
+  // All bubbles: translucent fill (15%) + colored stroke — visible on dark bg
   svg+=`<g clip-path="url(#cc)">`;
   sorted.forEach(p=>{
     const tip=`onmouseover="showTmTip(event,'${p.label.replace(/'/g,"&#39;")}','${p.x>=1000?Math.round(p.x/1000)+'k':Math.round(p.x)}','${Math.round(p.y)}')" onmouseleave="hideTmTip()" style="cursor:pointer"`;
@@ -1708,8 +1722,8 @@ function buildTreemapChart(points, allStats, asp){
       // Benchmark: dashed outline, no fill
       svg+=`<circle cx="${p.px}" cy="${p.py}" r="${R}" fill="none" stroke="${p.color}" stroke-width="2" stroke-dasharray="5 3" opacity=".9" ${tip}/>`;
     } else {
-      // Regular: solid outline, no fill — color identifies entity via stroke + label
-      svg+=`<circle cx="${p.px}" cy="${p.py}" r="${R}" fill="none" stroke="${p.color}" stroke-width="2.5" opacity=".9" ${tip}/>`;
+      // Regular: translucent fill + solid stroke — readable on dark bg, color clearly identifies entity
+      svg+=`<circle cx="${p.px}" cy="${p.py}" r="${R}" fill="${p.color}" fill-opacity="0.18" stroke="${p.color}" stroke-width="2.5" opacity=".95" ${tip}/>`;
     }
   });
   svg+=`</g>`;
@@ -1739,13 +1753,13 @@ function buildTreemapChart(points, allStats, asp){
   });
   svg+=`</g>`;
 
-  // Legend — hollow circles matching bubble style
+  // Legend — match bubble style
   let lx=PL; const ly=H-8;
   allStats.forEach(s=>{
     if(s.isBm){
       svg+=`<circle cx="${lx+5}" cy="${ly}" r="4" fill="none" stroke="${s.color}" stroke-width="1.5" stroke-dasharray="3 2"/>`;
     } else {
-      svg+=`<circle cx="${lx+5}" cy="${ly}" r="4" fill="none" stroke="${s.color}" stroke-width="2"/>`;
+      svg+=`<circle cx="${lx+5}" cy="${ly}" r="4" fill="${s.color}" fill-opacity="0.18" stroke="${s.color}" stroke-width="2"/>`;
     }
     svg+=`<text x="${lx+13}" y="${ly+4}" fill="${s.color}" font-size="8.5">${s.isBm?'⌀ ':''}${s.name}</text>`;
     lx+=Math.max(76,s.name.length*5+16);
@@ -1847,7 +1861,7 @@ document.addEventListener('mousemove',e=>{if(document.getElementById('tmTooltip'
 <div class="footer">
   <span>© 2026 Acquink</span>
   <span>Powered by <span class="masi">MASI</span> Technology</span>
-  <span>v2.2 — 2026-04-13</span>
+  <span>v2.32 — 2026-04-13</span>
 </div>
 </body>
 </html>
