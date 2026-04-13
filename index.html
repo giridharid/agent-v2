@@ -280,37 +280,61 @@ body{background:#0a0814;color:#e2e8f0;min-height:100vh;font-family:'DM Sans',sys
   <button class="apply-btn" onclick="applyHotelView()">Apply</button>
 </div>
 
-<div id="compareBrandsSelectors" class="hidden" style="background:#0f0c1d;border-bottom:1px solid rgba(45,33,84,.4);padding:10px 20px">
-  <div style="display:grid;grid-template-columns:70px 1fr 1fr 1fr auto;gap:8px;align-items:center">
-    <span style="color:#5a4e7a;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Brand</span>
-    <select id="compareBrandOnly1" class="fsel"><option value="">Brand 1</option></select>
-    <select id="compareBrandOnly2" class="fsel"><option value="">Brand 2</option></select>
-    <select id="compareBrandOnly3" class="fsel"><option value="">Brand 3</option></select>
+<div id="compareBrandsSelectors" class="hidden" style="background:#0f0c1d;border-bottom:1px solid rgba(45,33,84,.4);padding:14px 20px">
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:12px;align-items:end">
+    <div>
+      <div style="color:#5a4e7a;font-size:9px;text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px;font-weight:600">Hotel 1</div>
+      <select id="compareBrandOnly1" class="fsel" style="width:100%"><option value="">Brand</option></select>
+    </div>
+    <div>
+      <div style="color:#5a4e7a;font-size:9px;text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px;font-weight:600">Hotel 2</div>
+      <select id="compareBrandOnly2" class="fsel" style="width:100%"><option value="">Brand</option></select>
+    </div>
+    <div>
+      <div style="color:#5a4e7a;font-size:9px;text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px;font-weight:600">Hotel 3</div>
+      <select id="compareBrandOnly3" class="fsel" style="width:100%"><option value="">Brand</option></select>
+    </div>
     <button class="compare-run-btn" onclick="runBrandComparison()">Compare →</button>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px;margin-top:10px">
+    <label style="display:flex;align-items:center;gap:6px;color:#6b5ea8;font-size:11px;cursor:pointer">
+      <input type="checkbox" id="benchmarkBrandCheck" onchange="toggleBenchmarkBrand()" style="accent-color:#7c3aed">
+      Add Benchmark Brand
+    </label>
+    <select id="benchmarkBrandSel" class="fsel hidden" style="min-width:160px"><option value="">Select Benchmark</option></select>
   </div>
 </div>
 
-<div id="compareHotelsSelectors" class="hidden" style="background:#0f0c1d;border-bottom:1px solid rgba(45,33,84,.4);padding:10px 20px">
-  <div style="display:grid;grid-template-columns:70px 1fr 1fr 1fr auto;gap:8px;align-items:center;margin-bottom:6px">
-    <span style="color:#5a4e7a;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Brand</span>
-    <select id="compareBrand1" class="fsel" onchange="loadCitiesForCompareSlot(1)"><option value="">Brand 1</option></select>
-    <select id="compareBrand2" class="fsel" onchange="loadCitiesForCompareSlot(2)"><option value="">Brand 2</option></select>
-    <select id="compareBrand3" class="fsel" onchange="loadCitiesForCompareSlot(3)"><option value="">Brand 3</option></select>
-    <div></div>
+<div id="compareHotelsSelectors" class="hidden" style="background:#0f0c1d;border-bottom:1px solid rgba(45,33,84,.4);padding:14px 20px">
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:12px;align-items:end">
+    <div style="background:rgba(20,15,38,.6);border:1px solid rgba(45,33,84,.5);border-radius:9px;padding:12px">
+      <div style="color:#5a4e7a;font-size:9px;text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px;font-weight:600">Hotel 1</div>
+      <select id="compareBrand1" class="fsel" style="width:100%;margin-bottom:6px" onchange="loadCitiesForCompareSlot(1)"><option value="">Brand</option></select>
+      <select id="compareCity1" class="fsel" style="width:100%;margin-bottom:6px" onchange="loadHotelsForCompareSlot(1)"><option value="">City</option></select>
+      <select id="compareHotel1" class="fsel" style="width:100%" onchange="storeProductId(1)"><option value="">Select Hotel</option></select>
+    </div>
+    <div style="background:rgba(20,15,38,.6);border:1px solid rgba(45,33,84,.5);border-radius:9px;padding:12px">
+      <div style="color:#5a4e7a;font-size:9px;text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px;font-weight:600">Hotel 2</div>
+      <select id="compareBrand2" class="fsel" style="width:100%;margin-bottom:6px" onchange="loadCitiesForCompareSlot(2)"><option value="">Brand</option></select>
+      <select id="compareCity2" class="fsel" style="width:100%;margin-bottom:6px" onchange="loadHotelsForCompareSlot(2)"><option value="">City</option></select>
+      <select id="compareHotel2" class="fsel" style="width:100%" onchange="storeProductId(2)"><option value="">Select Hotel</option></select>
+    </div>
+    <div style="background:rgba(20,15,38,.6);border:1px solid rgba(45,33,84,.5);border-radius:9px;padding:12px">
+      <div style="color:#5a4e7a;font-size:9px;text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px;font-weight:600">Hotel 3</div>
+      <select id="compareBrand3" class="fsel" style="width:100%;margin-bottom:6px" onchange="loadCitiesForCompareSlot(3)"><option value="">Brand</option></select>
+      <select id="compareCity3" class="fsel" style="width:100%;margin-bottom:6px" onchange="loadHotelsForCompareSlot(3)"><option value="">City</option></select>
+      <select id="compareHotel3" class="fsel" style="width:100%" onchange="storeProductId(3)"><option value="">Select Hotel</option></select>
+    </div>
+    <button class="compare-run-btn" style="align-self:flex-end" onclick="runHotelComparison()">Compare →</button>
   </div>
-  <div style="display:grid;grid-template-columns:70px 1fr 1fr 1fr auto;gap:8px;align-items:center;margin-bottom:6px">
-    <span style="color:#5a4e7a;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em">City</span>
-    <select id="compareCity1" class="fsel" onchange="loadHotelsForCompareSlot(1)"><option value="">City</option></select>
-    <select id="compareCity2" class="fsel" onchange="loadHotelsForCompareSlot(2)"><option value="">City</option></select>
-    <select id="compareCity3" class="fsel" onchange="loadHotelsForCompareSlot(3)"><option value="">City</option></select>
-    <div></div>
-  </div>
-  <div style="display:grid;grid-template-columns:70px 1fr 1fr 1fr auto;gap:8px;align-items:center">
-    <span style="color:#5a4e7a;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Hotel</span>
-    <select id="compareHotel1" class="fsel" onchange="storeProductId(1)"><option value="">Select Hotel</option></select>
-    <select id="compareHotel2" class="fsel" onchange="storeProductId(2)"><option value="">Select Hotel</option></select>
-    <select id="compareHotel3" class="fsel" onchange="storeProductId(3)"><option value="">Select Hotel</option></select>
-    <button class="compare-run-btn" onclick="runHotelComparison()">Compare →</button>
+  <div style="display:flex;align-items:center;gap:10px;margin-top:10px">
+    <label style="display:flex;align-items:center;gap:6px;color:#6b5ea8;font-size:11px;cursor:pointer">
+      <input type="checkbox" id="benchmarkHotelCheck" onchange="toggleBenchmarkHotel()" style="accent-color:#7c3aed">
+      Add Benchmark Hotel
+    </label>
+    <select id="benchmarkHotelBrand" class="fsel hidden" style="min-width:130px" onchange="loadBenchmarkHotelCities()"><option value="">Brand</option></select>
+    <select id="benchmarkHotelCity" class="fsel hidden" style="min-width:110px" onchange="loadBenchmarkHotels()"><option value="">City</option></select>
+    <select id="benchmarkHotelSel" class="fsel hidden" style="min-width:160px" onchange="storeBenchmarkHotel()"><option value="">Hotel</option></select>
   </div>
 </div>
 
@@ -827,15 +851,40 @@ async function applyHotelView(){
   updateChatContext();
 }
 
-async function runBrandComparison(){
-  const items=[1,2,3].map(i=>document.getElementById(`compareBrandOnly${i}`).value).filter(v=>v);
-  if(items.length<2){alert('Select at least 2 brands');return;}
-  showLoader();await loadComparison(items,'brand');hideLoader();
+// ─── BENCHMARK HELPERS ───────────────────────────────────────
+function toggleBenchmarkBrand(){
+  const on=document.getElementById('benchmarkBrandCheck').checked;
+  document.getElementById('benchmarkBrandSel').classList.toggle('hidden',!on);
+  if(on){const opts=Array.from(document.getElementById('compareBrandOnly1').options).slice(1).map(o=>`<option value="${o.value}">${o.text}</option>`).join('');document.getElementById('benchmarkBrandSel').innerHTML='<option value="">Select Benchmark</option>'+opts;}
+}
+function toggleBenchmarkHotel(){
+  const on=document.getElementById('benchmarkHotelCheck').checked;
+  ['benchmarkHotelBrand','benchmarkHotelCity','benchmarkHotelSel'].forEach(id=>document.getElementById(id).classList.toggle('hidden',!on));
+  if(on){const opts=Array.from(document.getElementById('compareBrand1').options).slice(1).map(o=>`<option value="${o.value}">${o.text}</option>`).join('');document.getElementById('benchmarkHotelBrand').innerHTML='<option value="">Brand</option>'+opts;}
+}
+async function loadBenchmarkHotelCities(){
+  const brand=document.getElementById('benchmarkHotelBrand').value;if(!brand)return;
+  const r=await fetch(`/api/cities?brand=${encodeURIComponent(brand)}`);const d=await r.json();
+  document.getElementById('benchmarkHotelCity').innerHTML='<option value="">City</option>'+(d.cities||[]).map(c=>`<option>${escHtml(c)}</option>`).join('');
+}
+async function loadBenchmarkHotels(){
+  const brand=document.getElementById('benchmarkHotelBrand').value;const city=document.getElementById('benchmarkHotelCity').value;if(!brand||!city)return;
+  const r=await fetch(`/api/hotels?brand=${encodeURIComponent(brand)}&city=${encodeURIComponent(city)}`);const d=await r.json();
+  document.getElementById('benchmarkHotelSel').innerHTML='<option value="">Hotel</option>'+(d.hotels||[]).map(h=>`<option value="${h.product_id}">${escHtml(h.hotel_name)}</option>`).join('');
 }
 
+async function runBrandComparison(){
+  const items=[1,2,3].map(i=>document.getElementById(`compareBrandOnly${i}`).value).filter(v=>v);
+  const bm=document.getElementById('benchmarkBrandCheck')?.checked&&document.getElementById('benchmarkBrandSel').value;
+  if(bm)items.push('__bm__:'+bm);
+  if(items.filter(x=>!x.startsWith('__bm__')).length<2){alert('Select at least 2 brands');return;}
+  showLoader();await loadComparison(items,'brand');hideLoader();
+}
 async function runHotelComparison(){
   const items=[1,2,3].map(i=>document.getElementById(`compareHotel${i}`).dataset.productId).filter(v=>v);
-  if(items.length<2){alert('Select at least 2 hotels');return;}
+  const bm=document.getElementById('benchmarkHotelCheck')?.checked&&document.getElementById('benchmarkHotelSel').value;
+  if(bm)items.push('__bm__:'+bm);
+  if(items.filter(x=>!x.startsWith('__bm__')).length<2){alert('Select at least 2 hotels');return;}
   showLoader();await loadComparison(items,'hotel');hideLoader();
 }
 
@@ -1204,58 +1253,175 @@ async function openParadoxModal(){
 
 // ─── COMPARISON ───────────────────────────────────────────────
 async function loadComparison(items,compareBy){
+  const ENTITY_COLORS=['#e69f00','#56b4e9','#009e73','#d55e00'];
+  const BM_COLOR='#9d86cc';
+  const ASPECTS=['Dining','Cleanliness','Staff','Room','Location','Value for Money','General'];
   try{
-    const r=await fetch(`/api/comparison?items=${encodeURIComponent(items.join('|||'))}&compare_by=${compareBy}`);
+    const regularItems=items.filter(x=>!x.startsWith('__bm__'));
+    const bmRaw=items.find(x=>x.startsWith('__bm__'));
+    const bmItem=bmRaw?bmRaw.replace('__bm__:',''):null;
+    const allQueryItems=[...regularItems,...(bmItem?[bmItem]:[])];
+    const r=await fetch(`/api/comparison?items=${encodeURIComponent(allQueryItems.join('|||'))}&compare_by=${compareBy}`);
     const data=await r.json();
-    const COLORS=['#e69f00','#56b4e9','#009e73'];
-    const ASPECTS=['Dining','Cleanliness','Staff','Room','Location','Value for Money','General'];
-    const itemStats=items.map((item,i)=>{
+    const makeStats=(item,idx,isBm)=>{
       const d=data[item]||{display_name:item,aspects:[],overall:{}};
       const pos=d.overall.positive||0;const neg=d.overall.negative||0;const tot=d.overall.total_mentions||0;
-      return{item,name:d.display_name||item,pos:tot>0?Math.round(pos*100/tot):0,neg:tot>0?Math.round(neg*100/tot):0,tot,aspects:d.aspects||[],color:COLORS[i%3]};
-    });
-    const legendHtml=`<div style="display:flex;align-items:center;gap:6px;font-size:11px;color:#5a4e7a"><span>Low</span><div style="display:flex;gap:2px">${['rgba(127,29,29,.6)','rgba(161,98,7,.5)','rgba(21,128,61,.4)','rgba(13,148,136,.5)','rgba(13,148,136,.7)'].map(c=>`<div style="width:18px;height:10px;background:${c};border-radius:2px"></div>`).join('')}</div><span>High</span></div>`;
-    const hdrCols=itemStats.map(s=>`<th class="item-col" title="${s.name}"><div class="item-header"><div class="dot" style="background:${s.color}"></div><div class="name">${s.name}</div></div></th>`).join('');
-    let html=`<div style="margin-bottom:24px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><h3 style="color:#a855f7;font-size:14px;font-weight:700">Satisfaction Score</h3>${legendHtml}</div>
+      return{item,name:d.display_name||item,pos:tot>0?Math.round(pos*100/tot):0,neg:tot>0?Math.round(neg*100/tot):0,tot,aspects:d.aspects||[],color:isBm?BM_COLOR:ENTITY_COLORS[idx%4],isBm};
+    };
+    const itemStats=regularItems.map((item,i)=>makeStats(item,i,false));
+    const bmStats=bmItem?makeStats(bmItem,0,true):null;
+    const allStats=bmStats?[...itemStats,bmStats]:itemStats;
+    const hdrCols=allStats.map(s=>`<th class="item-col"><div class="item-header"><div class="dot" style="background:${s.color}${s.isBm?";border:2px dashed "+s.color+";background:transparent":""}" ></div><div class="name" style="color:${s.color}">${s.isBm?"⌀ "+s.name:s.name}</div></div></th>`).join("");
+    let html=`<div style="margin-bottom:24px"><h3 style="color:#c4b5fd;font-size:14px;font-weight:700;margin-bottom:10px">Satisfaction Score</h3>
     <table class="data-table"><thead><tr><th></th>${hdrCols}</tr></thead><tbody>
-    <tr><td style="color:#8b7fc0">Review Count</td>${itemStats.map(s=>`<td><span class="heat-cell heat-high">${s.tot.toLocaleString()}</span></td>`).join('')}</tr>
-    <tr><td style="color:#8b7fc0">+ve Sentiment</td>${itemStats.map(s=>`<td><span class="heat-cell ${getHeatClass(s.pos)}">${s.pos}%</span></td>`).join('')}</tr>
-    <tr><td style="color:#8b7fc0">-ve Sentiment</td>${itemStats.map(s=>`<td><span class="heat-cell ${getHeatClassInv(s.neg)}">${s.neg}%</span></td>`).join('')}</tr>
-    <tr><td style="color:#8b7fc0">Net Sentiment</td>${itemStats.map(s=>`<td><span class="heat-cell ${getHeatClass(s.pos-s.neg+50)}">${s.pos-s.neg}%</span></td>`).join('')}</tr>
+    <tr><td style="color:#8b7fc0">Review Count</td>${allStats.map(s=>`<td><span class="heat-cell heat-high">${s.tot.toLocaleString()}</span></td>`).join("")}</tr>
+    <tr><td style="color:#8b7fc0">+ve Sentiment</td>${allStats.map(s=>`<td><span class="heat-cell ${getHeatClass(s.pos)}">${s.pos}%</span></td>`).join("")}</tr>
+    <tr><td style="color:#8b7fc0">-ve Sentiment</td>${allStats.map(s=>`<td><span class="heat-cell ${getHeatClassInv(s.neg)}">${s.neg}%</span></td>`).join("")}</tr>
+    <tr><td style="color:#8b7fc0">Net Sentiment</td>${allStats.map(s=>`<td><span class="heat-cell ${getHeatClass(s.pos-s.neg+50)}">${s.pos-s.neg}%</span></td>`).join("")}</tr>
     </tbody></table></div>`;
-    html+=`<div style="margin-bottom:24px"><h3 style="color:#a855f7;font-size:14px;font-weight:700;margin-bottom:10px">Aspect Satisfaction</h3>
-    <table class="data-table"><thead><tr><th>Aspect</th>${hdrCols}<th style="color:#5a4e7a;font-size:11px;text-align:center">Winner</th></tr></thead><tbody>`;
+    html+=`<div style="margin-bottom:24px"><h3 style="color:#c4b5fd;font-size:14px;font-weight:700;margin-bottom:10px">Aspect Satisfaction</h3>
+    <table class="data-table"><thead><tr><th>Aspect</th>${hdrCols}<th style="color:#5a4e7a;text-align:center;font-size:11px">Winner</th></tr></thead><tbody>`;
     ASPECTS.forEach(asp=>{
-      const vals=itemStats.map(s=>{const a=(s.aspects||[]).find(x=>x.aspect_name===asp);return{name:s.name,val:a?(a.satisfaction_pct||a.satisfaction||0):0,color:s.color};});
-      const maxVal=Math.max(...vals.map(v=>v.val));
-      const winner=maxVal>0?vals.find(v=>v.val===maxVal):null;
+      const vals=allStats.map(s=>{const a=(s.aspects||[]).find(x=>x.aspect_name===asp);return{name:s.name,val:a?(a.satisfaction_pct||a.satisfaction||0):0,color:s.color,isBm:s.isBm};});
+      const maxVal=Math.max(...vals.filter(v=>!v.isBm).map(v=>v.val));
+      const winner=maxVal>0?vals.filter(v=>!v.isBm).find(v=>v.val===maxVal):null;
       html+=`<tr><td style="color:#c4b8d8;font-weight:500">${asp}</td>`;
-      vals.forEach(v=>{html+=`<td>${v.val>0?`<span class="heat-cell ${getHeatClass(v.val)}">${v.val}%</span>`:`<span style="color:#3d3355">—</span>`}</td>`;});
-      html+=`<td style="text-align:center">${winner?`<span style="font-size:11px;color:${winner.color};font-weight:600">${winner.name}</span>`:`<span style="color:#3d3355">—</span>`}</td></tr>`;
+      vals.forEach(v=>{html+=`<td>${v.val>0?`<span class="heat-cell ${getHeatClass(v.val)}" style="${v.isBm?"opacity:.65":""}">${v.val}%</span>`:`<span style="color:#3d3355">—</span>`}</td>`;});
+      html+=`<td style="text-align:center">${winner?`<span style="color:${winner.color};font-size:11px;font-weight:700">▲ ${winner.name}</span>`:"<span style='color:#3d3355'>—</span>"}</td></tr>`;
     });
-    html+='</tbody></table></div>';
-    // Pain points section
+    html+="</tbody></table></div>";
+    // Attribute bubble chart
+    html+=`<div style="margin-bottom:24px"><h3 style="color:#c4b5fd;font-size:14px;font-weight:700;margin-bottom:4px">Attribute Treemap</h3>
+    <p style="color:#5a4e7a;font-size:11px;margin-bottom:10px">X = Review Count · Y = +ve Sentiment % · Bands = Low / Medium / High relative to this dataset</p>
+    ${buildAttributeBubbleChart(allStats,ASPECTS)}</div>`;
+    // Pain & Delights — works for both hotel and brand
     try{
       const pdResults=await Promise.all(itemStats.map(async s=>{
-        if(compareBy!=='hotel')return{name:s.name,color:s.color,pain:[],delights:[]};
-        const r2=await fetch(`/api/hotel/${s.item}/pain_delights`);const d2=await r2.json();
-        return{name:s.name,color:s.color,pain:(d2.pain_points||[]).slice(0,5),delights:(d2.delights||[]).slice(0,5)};
+        let pain=[],delights=[];
+        try{
+          if(compareBy==="hotel"){
+            const r2=await fetch(`/api/hotel/${s.item}/pain_delights`);const d2=await r2.json();
+            pain=(d2.pain_points||[]).sort((a,b)=>(b.mention_count||0)-(a.mention_count||0)).slice(0,5);
+            delights=(d2.delights||[]).sort((a,b)=>(b.mention_count||0)-(a.mention_count||0)).slice(0,5);
+          } else {
+            const r2=await fetch(`/api/brand/${encodeURIComponent(s.item)}/summary`);const d2=await r2.json();
+            pain=(d2.pain_points||[]).slice(0,5);delights=(d2.delights||[]).slice(0,5);
+          }
+        }catch(e){}
+        return{...s,pain,delights};
       }));
-      html+=`<div><h3 style="color:#a855f7;font-size:14px;font-weight:700;margin-bottom:12px">Top Pain Points & Delights</h3>
+      html+=`<div><h3 style="color:#c4b5fd;font-size:14px;font-weight:700;margin-bottom:12px">Top Pain Points & Delights</h3>
       <div style="display:grid;grid-template-columns:repeat(${pdResults.length},1fr);gap:12px">`;
       pdResults.forEach(item=>{
         html+=`<div style="background:rgba(15,11,28,.6);border-radius:10px;padding:14px;border-top:3px solid ${item.color}">
-        <div style="color:#e5e7eb;font-size:12px;font-weight:700;margin-bottom:10px">${item.name}</div>
-        <div style="color:#ef4444;font-size:11px;font-weight:600;margin-bottom:5px">❌ Pain Points</div>
-        ${item.pain.length?item.pain.map(p=>`<div style="padding:4px 0;border-bottom:1px solid rgba(45,33,84,.2);color:#fca5a5;font-size:11px">• ${p.phrase} <span style="color:#3d3355">${p.mention_count||''}</span></div>`).join(''):'<div style="color:#3d3355;font-size:11px">No data</div>'}
-        <div style="color:#22c55e;font-size:11px;font-weight:600;margin:10px 0 5px">✅ Delights</div>
-        ${item.delights.length?item.delights.map(d=>`<div style="padding:4px 0;border-bottom:1px solid rgba(45,33,84,.2);color:#86efac;font-size:11px">• ${d.phrase} <span style="color:#3d3355">${d.mention_count||''}</span></div>`).join(''):'<div style="color:#3d3355;font-size:11px">No data</div>'}
+        <div style="color:${item.color};font-size:12px;font-weight:700;margin-bottom:10px">${item.name}</div>
+        <div style="color:#d55e00;font-size:11px;font-weight:600;margin-bottom:5px">⚠ Pain Points</div>
+        ${item.pain.length?item.pain.map(p=>`<div style="padding:4px 0;border-bottom:1px solid rgba(45,33,84,.2);color:#fdba74;font-size:11px;display:flex;justify-content:space-between"><span>• ${escHtml(p.phrase)}</span><span style="color:#4a3f6b">${p.mention_count||""}</span></div>`).join(""):"<div style='color:#3d3355;font-size:11px;padding:4px 0'>No data</div>"}
+        <div style="color:#56b4e9;font-size:11px;font-weight:600;margin:10px 0 5px">★ Delights</div>
+        ${item.delights.length?item.delights.map(d=>`<div style="padding:4px 0;border-bottom:1px solid rgba(45,33,84,.2);color:#93c5fd;font-size:11px;display:flex;justify-content:space-between"><span>• ${escHtml(d.phrase)}</span><span style="color:#4a3f6b">${d.mention_count||""}</span></div>`).join(""):"<div style='color:#3d3355;font-size:11px;padding:4px 0'>No data</div>"}
         </div>`;
       });
-      html+='</div></div>';
-    }catch(e2){}
-    document.getElementById('comparisonContent').innerHTML=html;
-  }catch(e){document.getElementById('comparisonContent').innerHTML='<div class="no-data" style="text-align:center;padding:2rem">Error loading comparison</div>';}
+      html+="</div></div>";
+    }catch(e2){console.warn("Pain/delight compare:",e2);}
+    document.getElementById("comparisonContent").innerHTML=html;
+  }catch(e){console.error(e);document.getElementById("comparisonContent").innerHTML='<div class="no-data" style="text-align:center;padding:2rem">Error loading comparison</div>';}
+}
+
+function buildAttributeBubbleChart(allStats, aspects){
+  // Collect all data points: one bubble per entity × aspect
+  const points=[];
+  allStats.forEach(s=>{
+    aspects.forEach(asp=>{
+      const a=(s.aspects||[]).find(x=>x.aspect_name===asp);
+      const sat=a?(a.satisfaction_pct||a.satisfaction||0):0;
+      const men=a?(a.total_mentions||0):0;
+      if(sat>0&&men>0) points.push({entity:s,asp,sat,men,color:s.color,isBm:s.isBm});
+    });
+  });
+  if(!points.length)return'<div class="no-data">No aspect data</div>';
+
+  const allSat=points.map(p=>p.sat);
+  const allMen=points.map(p=>p.men);
+  const minSat=Math.max(0,Math.floor((Math.min(...allSat)-5)/10)*10);
+  const maxSat=Math.min(100,Math.ceil((Math.max(...allSat)+5)/10)*10);
+  const maxMen=Math.max(...allMen);
+  const satRange=maxSat-minSat||1;
+
+  // Three horizontal bands based on actual satisfaction range
+  const bandLow=minSat+satRange/3;
+  const bandHigh=minSat+2*satRange/3;
+
+  const W=700,H=400,PL=52,PR=20,PT=20,PB=56;
+  const CW=W-PL-PR, CH=H-PT-PB;
+  const toX=men=>PL+(men/maxMen)*CW;
+  const toY=sat=>PT+CH*(1-(sat-minSat)/satRange);
+  const R=18; // fixed radius — clean like the screenshot
+
+  let svg=`<svg width="100%" viewBox="0 0 ${W} ${H}" style="display:block;overflow:visible">`;
+
+  // Band fills
+  const yHigh=toY(bandHigh), yLow=toY(bandLow), yTop=toY(maxSat), yBot=toY(minSat);
+  svg+=`<rect x="${PL}" y="${yTop}" width="${CW}" height="${yHigh-yTop}" fill="rgba(0,158,115,.07)" rx="2"/>`;
+  svg+=`<rect x="${PL}" y="${yHigh}" width="${CW}" height="${yLow-yHigh}" fill="rgba(0,114,178,.06)" rx="2"/>`;
+  svg+=`<rect x="${PL}" y="${yLow}" width="${CW}" height="${yBot-yLow}" fill="rgba(213,94,0,.06)" rx="2"/>`;
+
+  // Band labels on right edge
+  svg+=`<text x="${W-PR+4}" y="${(yTop+yHigh)/2+4}" fill="#009e73" font-size="9" font-weight="600">High</text>`;
+  svg+=`<text x="${W-PR+4}" y="${(yHigh+yLow)/2+4}" fill="#0072b2" font-size="9" font-weight="600">Med</text>`;
+  svg+=`<text x="${W-PR+4}" y="${(yLow+yBot)/2+4}" fill="#d55e00" font-size="9" font-weight="600">Low</text>`;
+
+  // Y axis grid + labels
+  const yTicks=[minSat, Math.round(bandLow), Math.round(bandHigh), maxSat];
+  yTicks.forEach(v=>{
+    const y=toY(v);
+    svg+=`<line x1="${PL}" y1="${y}" x2="${W-PR}" y2="${y}" stroke="rgba(255,255,255,.06)" stroke-width="1"/>`;
+    svg+=`<text x="${PL-5}" y="${y+4}" fill="#4a3f6b" font-size="9" text-anchor="end">${v}%</text>`;
+  });
+
+  // Axes
+  svg+=`<line x1="${PL}" y1="${PT}" x2="${PL}" y2="${H-PB}" stroke="rgba(255,255,255,.1)" stroke-width="1"/>`;
+  svg+=`<line x1="${PL}" y1="${H-PB}" x2="${W-PR}" y2="${H-PB}" stroke="rgba(255,255,255,.1)" stroke-width="1"/>`;
+
+  // X axis ticks
+  [0,0.25,0.5,0.75,1].forEach(f=>{
+    const x=PL+f*CW;
+    const val=Math.round(f*maxMen);
+    const lbl=val>=1000?Math.round(val/1000)+'k':val;
+    svg+=`<text x="${x}" y="${H-PB+13}" fill="#4a3f6b" font-size="9" text-anchor="middle">${lbl}</text>`;
+  });
+
+  // Axis titles
+  svg+=`<text x="${PL+CW/2}" y="${H-4}" fill="#5a4e7a" font-size="10" text-anchor="middle">Review Count</text>`;
+  svg+=`<text x="12" y="${PT+CH/2}" fill="#5a4e7a" font-size="10" text-anchor="middle" transform="rotate(-90,12,${PT+CH/2})">+ve Sentiment %</text>`;
+
+  // Bubbles
+  points.forEach(p=>{
+    const x=toX(p.men), y=toY(p.sat);
+    const shortAsp=p.asp.replace('Value for Money','Value').replace('Cleanliness','Clean');
+    const label=`${p.entity.name.length>10?p.entity.name.substring(0,9)+'…':p.entity.name} ${shortAsp}`;
+    if(p.isBm){
+      svg+=`<circle cx="${x}" cy="${y}" r="${R}" fill="none" stroke="${p.color}" stroke-width="1.5" stroke-dasharray="4 2" opacity=".8"/>`;
+      svg+=`<text x="${x}" y="${y-R-4}" fill="${p.color}" font-size="9" text-anchor="middle">${label}</text>`;
+    }else{
+      svg+=`<circle cx="${x}" cy="${y}" r="${R}" fill="${p.color}" opacity=".87"/>`;
+      svg+=`<text x="${x}" y="${y-R-4}" fill="${p.color}" font-size="9" text-anchor="middle">${label}</text>`;
+    }
+  });
+
+  // Legend top-center
+  let lx=PL; const legendY=10;
+  allStats.forEach(s=>{
+    if(s.isBm){
+      svg+=`<circle cx="${lx+6}" cy="${legendY}" r="5" fill="none" stroke="${s.color}" stroke-width="1.5" stroke-dasharray="3 2"/>`;
+    }else{
+      svg+=`<circle cx="${lx+6}" cy="${legendY}" r="5" fill="${s.color}"/>`;
+    }
+    svg+=`<text x="${lx+14}" y="${legendY+4}" fill="${s.color}" font-size="9">${s.isBm?'⌀ ':''  }${s.name}</text>`;
+    lx+=Math.max(90, s.name.length*6+20);
+  });
+
+  svg+='</svg>';
+  return svg;
 }
 
 // ─── CHAT ─────────────────────────────────────────────────────
