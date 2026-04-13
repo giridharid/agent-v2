@@ -112,10 +112,10 @@ body{background:#0a0814;color:#e2e8f0;min-height:100vh;font-family:'DM Sans',sys
 .sig-title{font-size:13px;font-weight:600;margin-bottom:10px;display:flex;align-items:center;gap:8px}
 .sig-item{display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:rgba(15,11,28,.6);border-radius:7px;margin-bottom:6px;cursor:pointer;transition:background .15s}
 .sig-item:hover{background:rgba(45,33,84,.6)}
-.sig-item.pain{border-left:2px solid #ef4444;padding-left:10px}
-.sig-item.delight{border-left:2px solid #22c55e;padding-left:10px}
-.sig-txt-r{color:#fca5a5;font-size:12px}
-.sig-txt-g{color:#86efac;font-size:12px}
+.sig-item.pain{border-left:2px solid #d55e00;padding-left:10px}
+.sig-item.delight{border-left:2px solid #0072b2;padding-left:10px}
+.sig-txt-r{color:#fdba74;font-size:12px}
+.sig-txt-g{color:#93c5fd;font-size:12px}
 .sig-cnt{color:#4a3f6b;font-size:11px;font-family:'DM Mono',monospace}
 .sig-meta{color:#5a4e7a;font-size:10px;margin-left:4px}
 
@@ -135,11 +135,11 @@ body{background:#0a0814;color:#e2e8f0;min-height:100vh;font-family:'DM Sans',sys
 
 /* ── Heat cells ────────────────────────────── */
 .heat-cell{display:inline-block;padding:3px 9px;border-radius:5px;font-size:12px;font-weight:600;font-family:'DM Mono',monospace}
-.heat-vlow{background:rgba(127,29,29,.5);color:#fca5a5}
-.heat-low{background:rgba(161,98,7,.35);color:#fcd34d}
-.heat-mid{background:rgba(21,128,61,.28);color:#86efac}
-.heat-high{background:rgba(13,148,136,.35);color:#5eead4}
-.heat-vhigh{background:rgba(13,148,136,.55);color:#2dd4bf}
+.heat-vlow{background:rgba(213,94,0,.4);color:#fdba74}
+.heat-low{background:rgba(230,159,0,.35);color:#fde68a}
+.heat-mid{background:rgba(0,114,178,.25);color:#93c5fd}
+.heat-high{background:rgba(0,114,178,.4);color:#60a5fa}
+.heat-vhigh{background:rgba(0,114,178,.6);color:#bfdbfe}
 
 .data-table{width:100%;border-collapse:separate;border-spacing:0;table-layout:fixed}
 .data-table th{text-align:left;padding:10px 14px;font-weight:500;color:#6b5ea8;font-size:11px;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid rgba(45,33,84,.4)}
@@ -371,7 +371,16 @@ body{background:#0a0814;color:#e2e8f0;min-height:100vh;font-family:'DM Sans',sys
     <div id="emotionsBar"></div>
   </div>
 
-  <!-- Charts row (drivers tab) -->
+  <!-- Subtabs — must come BEFORE chartsRow so tabs sit between emotions and content -->
+  <div id="subTabsRow" class="hidden">
+    <button class="sub-tab active" data-tab="drivers" onclick="showSubTab('drivers')">📊 Drivers</button>
+    <button class="sub-tab" data-tab="satisfaction" onclick="showSubTab('satisfaction')">📄 Satisfaction</button>
+    <button class="sub-tab" data-tab="demographics" onclick="showSubTab('demographics')">👥 Demographics</button>
+    <button class="sub-tab" data-tab="stayPurpose" onclick="showSubTab('stayPurpose')">🏷 Stay Purpose</button>
+    <button class="sub-tab" data-tab="travelerType" onclick="showSubTab('travelerType')">✈️ Traveler Type</button>
+  </div>
+
+  <!-- Charts row (drivers tab content) -->
   <div id="chartsRow" class="hidden">
     <div class="card">
       <div class="card-title">Share of Voice</div>
@@ -383,11 +392,11 @@ body{background:#0a0814;color:#e2e8f0;min-height:100vh;font-family:'DM Sans',sys
     </div>
   </div>
 
-  <!-- Pain & Delights -->
+  <!-- Pain & Delights — colorblind-safe: orange for pain, blue for delights -->
   <div id="painDelightsRow" class="hidden">
     <div class="sig-card">
-      <div class="sig-title" style="color:#ef4444;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px">
-        <span>❌ Pain Points <span style="color:#3d3355;font-size:10px;font-weight:400">click for reviews</span></span>
+      <div class="sig-title" style="color:#f97316;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px">
+        <span>⚠ Pain Points <span style="color:#3d3355;font-size:10px;font-weight:400">click for reviews</span></span>
         <select class="fsel" style="font-size:11px;padding:4px 9px" onchange="currentPainAspect=this.value;renderFilteredPains()">
           <option value="all">All Aspects</option>
           <option value="Dining">Dining</option><option value="Staff">Staff</option>
@@ -399,8 +408,8 @@ body{background:#0a0814;color:#e2e8f0;min-height:100vh;font-family:'DM Sans',sys
       <div id="painPointsList"></div>
     </div>
     <div class="sig-card">
-      <div class="sig-title" style="color:#22c55e;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px">
-        <span>✅ Delights <span style="color:#3d3355;font-size:10px;font-weight:400">click for reviews</span></span>
+      <div class="sig-title" style="color:#56b4e9;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px">
+        <span>★ Delights <span style="color:#3d3355;font-size:10px;font-weight:400">click for reviews</span></span>
         <select class="fsel" style="font-size:11px;padding:4px 9px" onchange="currentDelightAspect=this.value;renderFilteredDelights()">
           <option value="all">All Aspects</option>
           <option value="Dining">Dining</option><option value="Staff">Staff</option>
@@ -418,27 +427,18 @@ body{background:#0a0814;color:#e2e8f0;min-height:100vh;font-family:'DM Sans',sys
     <div class="card-title" style="margin-bottom:10px">🔬 R&D Signals <span style="color:#3d3355;font-size:10px;font-weight:400">click for reviews</span></div>
     <div class="rd-grid">
       <div class="rd-col">
-        <div class="rd-col-title" style="color:#fbbf24">💡 Feature Requests</div>
+        <div class="rd-col-title" style="color:#e69f00">💡 Feature Requests</div>
         <div id="featureRequestsList"></div>
       </div>
       <div class="rd-col">
-        <div class="rd-col-title" style="color:#f87171">💰 Price Feedback</div>
+        <div class="rd-col-title" style="color:#cc79a7">💰 Price Feedback</div>
         <div id="priceFeedbackList"></div>
       </div>
       <div class="rd-col">
-        <div class="rd-col-title" style="color:#fb923c">⚠️ Expectation Gap</div>
+        <div class="rd-col-title" style="color:#d55e00">⚠️ Expectation Gap</div>
         <div id="expectationGapList"></div>
       </div>
     </div>
-  </div>
-
-  <!-- Subtabs -->
-  <div id="subTabsRow" class="hidden">
-    <button class="sub-tab active" data-tab="drivers" onclick="showSubTab('drivers')">📊 Drivers</button>
-    <button class="sub-tab" data-tab="satisfaction" onclick="showSubTab('satisfaction')">📄 Satisfaction</button>
-    <button class="sub-tab" data-tab="demographics" onclick="showSubTab('demographics')">👥 Demographics</button>
-    <button class="sub-tab" data-tab="stayPurpose" onclick="showSubTab('stayPurpose')">🏷 Stay Purpose</button>
-    <button class="sub-tab" data-tab="travelerType" onclick="showSubTab('travelerType')">✈️ Traveler Type</button>
   </div>
 
   <!-- Tab panels -->
@@ -923,7 +923,8 @@ async function loadDrivers(){
     document.getElementById('satisfactionBarsDiv').innerHTML=sortedSat.map(d=>{
       let pct=d.satisfaction||0;
       if(!pct&&(d.positive_count||d.negative_count))pct=Math.round((d.positive_count||0)*100/((d.positive_count||0)+(d.negative_count||1)));
-      const col=pct>=80?'#22c55e':pct>=60?'#f59e0b':'#ef4444';
+      // Okabe-Ito colorblind-safe: blue=good, amber=mid, vermillion=poor
+      const col=pct>=80?'#0072b2':pct>=60?'#e69f00':'#d55e00';
       return `<div class="css-bar-row"><div class="css-bar-lbl">${ASPECT_ICONS[d.aspect_id]||''} ${d.aspect_name}</div><div class="css-bar-track"><div class="css-bar-fill" style="width:${Math.min(pct,100)}%;background:${col}"></div></div><div class="css-bar-val" style="color:${col}">${pct}%</div></div>`;
     }).join('');
     // Always show chartsRow once data is loaded — showSubTab handles visibility
@@ -937,7 +938,7 @@ async function loadSatisfactionTab(){
     if(!data||!data.length)return;
     const sorted=[...data].sort((a,b)=>(a.satisfaction||0)-(b.satisfaction||0));
     document.getElementById('satisfactionChart').innerHTML=sorted.map(d=>{
-      const pct=d.satisfaction||0;const col=pct>=80?'#22c55e':pct>=60?'#f59e0b':'#ef4444';
+      const pct=d.satisfaction||0;const col=pct>=80?'#0072b2':pct>=60?'#e69f00':'#d55e00';
       return `<div class="css-bar-row" style="margin-bottom:11px"><div class="css-bar-lbl" style="width:115px">${ASPECT_ICONS[d.aspect_id]||''} ${d.aspect_name}</div><div class="css-bar-track" style="height:10px"><div class="css-bar-fill" style="width:${pct}%;background:${col}"></div></div><div class="css-bar-val" style="color:${col};font-size:13px;font-weight:600">${pct}%</div></div>`;
     }).join('');
   }catch(e){}
@@ -947,9 +948,9 @@ async function loadDemographics(){
   try{
     const r=await fetch(`/api/demographics?${buildParams()}`);const data=await r.json();
     const colorPalettes={
-      gender:['#3b82f6','#ec4899','#6b7280'],
-      traveler_type:['#a855f7','#3b82f6','#22c55e','#f59e0b','#ef4444','#06b6d4'],
-      stay_purpose:['#14b8a6','#8b5cf6','#f97316','#ec4899','#6366f1']
+      gender:['#0072b2','#cc79a7','#6b7280'],
+      traveler_type:['#56b4e9','#e69f00','#009e73','#d55e00','#cc79a7','#0072b2'],
+      stay_purpose:['#0072b2','#e69f00','#009e73','#56b4e9','#d55e00']
     };
     const renderBars=(cid,items,lk,colors)=>{
       const known=(items||[]).filter(t=>{const l=(t[lk]||'').toLowerCase();return l&&l!=='unknown'&&l!=='none'&&l!=='null'&&(t.review_count||t.count||0)>0;});
@@ -1054,7 +1055,7 @@ async function loadHotelDataV2(productId){
       const sortedSat=[...aspects].sort((a,b)=>(a.satisfaction_pct||0)-(b.satisfaction_pct||0));
       document.getElementById('satisfactionBarsDiv').innerHTML=sortedSat.map(d=>{
         let p=d.satisfaction_pct||0;if(p===0&&(d.positive_count||d.negative_count))p=Math.round((d.positive_count||0)*100/((d.positive_count||0)+(d.negative_count||0)));
-        const col=p>=80?'#22c55e':p>=60?'#f59e0b':'#ef4444';
+        const col=p>=80?'#0072b2':p>=60?'#e69f00':'#d55e00';
         return `<div class="css-bar-row"><div class="css-bar-lbl">${ASPECT_ICONS[d.aspect_id]||''} ${d.aspect_name}</div><div class="css-bar-track"><div class="css-bar-fill" style="width:${Math.min(p,100)}%;background:${col}"></div></div><div class="css-bar-val" style="color:${col}">${p}%</div></div>`;
       }).join('');
       // Always show chartsRow once data is populated (activeTab was reset to 'drivers' before this call)
@@ -1173,7 +1174,7 @@ function loadMoreDrilldown(){drilldownState.showing+=3;renderDrilldownReviews();
 
 async function openDrilldown(productId,phrase,signalType){
   const LABELS={pain_point:'❌ Pain Point',delight:'✅ Delight',rd_signal:'🔬 R&D Signal'};
-  const COLORS={pain_point:'#ef4444',delight:'#22c55e',rd_signal:'#93c5fd'};
+  const COLORS={pain_point:'#d55e00',delight:'#0072b2',rd_signal:'#cc79a7'};
   document.getElementById('drilldownTitle').innerHTML=`<span style="color:${COLORS[signalType]||'#e5e7eb'}">${LABELS[signalType]||signalType}: "${escHtml(phrase)}"</span>`;
   document.getElementById('drilldownCount').textContent='';
   document.getElementById('drilldownContent').innerHTML='<div style="text-align:center;padding:2rem;color:#5a4e7a">Loading reviews...</div>';
@@ -1212,7 +1213,7 @@ async function loadComparison(items,compareBy){
   try{
     const r=await fetch(`/api/comparison?items=${encodeURIComponent(items.join('|||'))}&compare_by=${compareBy}`);
     const data=await r.json();
-    const COLORS=['#f59e0b','#8b5cf6','#10b981'];
+    const COLORS=['#e69f00','#56b4e9','#009e73'];
     const ASPECTS=['Dining','Cleanliness','Staff','Room','Location','Value for Money','General'];
     const itemStats=items.map((item,i)=>{
       const d=data[item]||{display_name:item,aspects:[],overall:{}};

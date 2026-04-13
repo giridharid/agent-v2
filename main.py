@@ -730,6 +730,7 @@ async def get_hotel_summary(product_id: int):
     if not client:
         raise HTTPException(status_code=500, detail="Database unavailable")
 
+    pid_str = str(product_id)
     loop = asyncio.get_event_loop()
 
     def run_query(sql):
@@ -740,65 +741,91 @@ async def get_hotel_summary(product_id: int):
             import pandas as pd
             return pd.DataFrame()
 
-    # Run all queries in parallel using thread pool
-    queries = {
+    # ── Serve from cache where possible ──────────────────────────────────
+    asp_cache   = get_cache("aspects_by_pid")
+    emo_cache   = get_cache("emotions_by_pid")
+    pain_cache  = get_cache("pain_by_pid")
+    del_cache   = get_cache("delight_by_pid")
+    demo_cache  = get_cache("demo_by_pid")
+
+    aspects_cached   = asp_cache.get(pid_str)  if asp_cache  else None
+    emotions_cached  = emo_cache.get(pid_str)  if emo_cache  else None
+    pain_cached      = pain_cache.get(pid_str) if pain_cache else None
+    delights_cached  = del_cache.get(pid_str)  if del_cache  else None
+    demo_cached      = demo_cache.get(pid_str) if demo_cache else None
+
+    # ── Always need hotel_master row + rd_signals from BQ ────────────────
+    bq_queries = {
         "hotel": f"SELECT * FROM `{PROJECT}.{DATASET}.hotel_master` WHERE product_id = {product_id}",
-        "aspects": f"""SELECT aspect_id, aspect_name, positive_count, negative_count,
-               total_mentions, satisfaction_pct, share_of_voice_pct
-               FROM `{PROJECT}.{DATASET}.product_aspect_summary`
-               WHERE product_id = {product_id} ORDER BY total_mentions DESC""",
-        "emotions": f"""SELECT emotion, mention_count as count, pct_of_total as percentage
-               FROM `{PROJECT}.{DATASET}.product_emotions`
-               WHERE product_id = {product_id} ORDER BY mention_count DESC""",
-        "demo": f"""SELECT dimension, dimension_value, review_count as count, pct_of_total
-               FROM `{PROJECT}.{DATASET}.product_demographics`
-               WHERE product_id = {product_id} ORDER BY dimension, review_count DESC""",
-        "pain": f"""SELECT phrase, treemap_name, aspect_id, aspect_name, mention_count, severity_rank
-               FROM `{PROJECT}.{DATASET}.product_pain_delights`
-               WHERE product_id = {product_id} AND signal_type = 'pain_point'
-               AND phrase IS NOT NULL AND TRIM(phrase) != ''
-               GROUP BY phrase, aspect_name, aspect_id, signal_type, treemap_name, severity_rank, mention_count
-               ORDER BY mention_count DESC LIMIT 20""",
-        "delight": f"""SELECT phrase, treemap_name, aspect_id, aspect_name, mention_count, severity_rank
-               FROM `{PROJECT}.{DATASET}.product_pain_delights`
-               WHERE product_id = {product_id} AND signal_type = 'delight'
-               AND phrase IS NOT NULL AND TRIM(phrase) != ''
-               GROUP BY phrase, aspect_name, aspect_id, signal_type, treemap_name, severity_rank, mention_count
-               ORDER BY mention_count DESC LIMIT 20""",
-        "rd": f"""SELECT signal_type as rd_signal, phrase, treemap_name, mention_count
-               FROM `{PROJECT}.{DATASET}.product_rd_signals`
-               WHERE product_id = {product_id} ORDER BY rd_signal, mention_count DESC"""
+        "rd":    f"""SELECT signal_type as rd_signal, phrase, treemap_name, mention_count
+                     FROM `{PROJECT}.{DATASET}.product_rd_signals`
+                     WHERE product_id = {product_id} ORDER BY rd_signal, mention_count DESC"""
     }
 
-    results = await asyncio.gather(*[
-        loop.run_in_executor(None, run_query, sql)
-        for sql in queries.values()
-    ])
-    dfs = dict(zip(queries.keys(), results))
+    # Add BQ fallbacks for anything not yet cached
+    if aspects_cached  is None: bq_queries["aspects"]  = f"""SELECT aspect_id, aspect_name, positive_count, negative_count, total_mentions, satisfaction_pct, share_of_voice_pct FROM `{PROJECT}.{DATASET}.product_aspect_summary` WHERE product_id = {product_id} ORDER BY total_mentions DESC"""
+    if emotions_cached is None: bq_queries["emotions"] = f"""SELECT emotion, mention_count as count, pct_of_total as percentage FROM `{PROJECT}.{DATASET}.product_emotions` WHERE product_id = {product_id} ORDER BY mention_count DESC"""
+    if pain_cached     is None: bq_queries["pain"]     = f"""SELECT phrase, aspect_name, mention_count FROM `{PROJECT}.{DATASET}.product_pain_delights` WHERE product_id = {product_id} AND signal_type = 'pain_point' AND phrase IS NOT NULL AND TRIM(phrase) != '' ORDER BY mention_count DESC LIMIT 20"""
+    if delights_cached is None: bq_queries["delight"]  = f"""SELECT phrase, aspect_name, mention_count FROM `{PROJECT}.{DATASET}.product_pain_delights` WHERE product_id = {product_id} AND signal_type = 'delight' AND phrase IS NOT NULL AND TRIM(phrase) != '' ORDER BY mention_count DESC LIMIT 20"""
+    if demo_cached     is None: bq_queries["demo"]     = f"""SELECT dimension, dimension_value, review_count as count, pct_of_total FROM `{PROJECT}.{DATASET}.product_demographics` WHERE product_id = {product_id} ORDER BY dimension, review_count DESC"""
+
+    results = await asyncio.gather(*[loop.run_in_executor(None, run_query, sql) for sql in bq_queries.values()])
+    dfs = dict(zip(bq_queries.keys(), results))
 
     if dfs["hotel"].empty:
         raise HTTPException(status_code=404, detail="Hotel not found")
 
     hotel_info = clean_row(dfs["hotel"].iloc[0].to_dict())
-    aspects = [clean_row(r) for r in dfs["aspects"].to_dict(orient='records')]
-    emotions = [clean_row(r) for r in dfs["emotions"].to_dict(orient='records')]
 
+    # ── Aspects ───────────────────────────────────────────────────────────
+    if aspects_cached is not None:
+        aspects = aspects_cached
+        print(f"[CACHE HIT] aspects for {pid_str}")
+    else:
+        aspects = [clean_row(r) for r in dfs.get("aspects", __import__('pandas').DataFrame()).to_dict(orient='records')]
+
+    # ── Emotions ──────────────────────────────────────────────────────────
+    if emotions_cached is not None:
+        emotions = [{"emotion": e["emotion"], "count": e.get("count",0), "percentage": e.get("percentage",0)} for e in emotions_cached]
+        print(f"[CACHE HIT] emotions for {pid_str}")
+    else:
+        emotions = [clean_row(r) for r in dfs.get("emotions", __import__('pandas').DataFrame()).to_dict(orient='records')]
+
+    # ── Pain points ───────────────────────────────────────────────────────
+    if pain_cached is not None:
+        pain_points = sorted(pain_cached, key=lambda x: -(x.get("mention_count") or 0))
+        print(f"[CACHE HIT] pain for {pid_str}: {len(pain_points)} items")
+    else:
+        raw = dfs.get("pain", __import__('pandas').DataFrame()).to_dict(orient='records')
+        pain_points = [clean_row(r) for r in raw if r.get("phrase") and str(r.get("phrase")).lower() not in ("nan","none","null","")]
+
+    # ── Delights ──────────────────────────────────────────────────────────
+    if delights_cached is not None:
+        delights = sorted(delights_cached, key=lambda x: -(x.get("mention_count") or 0))
+        print(f"[CACHE HIT] delights for {pid_str}: {len(delights)} items")
+    else:
+        raw = dfs.get("delight", __import__('pandas').DataFrame()).to_dict(orient='records')
+        delights = [clean_row(r) for r in raw if r.get("phrase") and str(r.get("phrase")).lower() not in ("nan","none","null","")]
+
+    # ── Demographics ──────────────────────────────────────────────────────
     demographics = {"traveler_type": [], "gender": [], "stay_purpose": []}
-    for _, row in dfs["demo"].iterrows():
-        dim = str(row.get('dimension', ''))
-        val = row.get('dimension_value')
-        if dim in demographics and val and str(val).lower() not in ('unknown', 'none', 'null', ''):
-            demographics[dim].append({
-                "dimension_value": str(val),
-                "count": int(row['count'] or 0),
-                "pct_of_total": int(row['pct_of_total'] or 0)
-            })
+    if demo_cached is not None:
+        demographics = demo_cached
+        print(f"[CACHE HIT] demo for {pid_str}")
+    else:
+        for _, row in dfs.get("demo", __import__('pandas').DataFrame()).iterrows():
+            dim = str(row.get('dimension', ''))
+            val = row.get('dimension_value')
+            if dim in demographics and val and str(val).lower() not in ('unknown','none','null',''):
+                demographics[dim].append({
+                    "dimension_value": str(val),
+                    "count": int(row['count'] or 0),
+                    "pct_of_total": int(row['pct_of_total'] or 0)
+                })
 
-    pain_points = [clean_row(r) for r in dfs["pain"].to_dict(orient='records') if r.get("phrase") and str(r.get("phrase")).lower() not in ("nan","none","null","")]
-    delights = [clean_row(r) for r in dfs["delight"].to_dict(orient='records') if r.get("phrase") and str(r.get("phrase")).lower() not in ("nan","none","null","")]
-
+    # ── RD Signals (always from BQ — not cached) ──────────────────────────
     rd_signals = {"feature_request": [], "price_feedback": [], "expectation_gap": []}
-    for _, row in dfs["rd"].iterrows():
+    for _, row in dfs.get("rd", __import__('pandas').DataFrame()).iterrows():
         sig = str(row.get('rd_signal', ''))
         if sig in rd_signals:
             rd_signals[sig].append({
