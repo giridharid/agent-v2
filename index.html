@@ -954,13 +954,15 @@ async function runHotelComparison(){
 
 // ─── COMPARE PHRASE DRILLDOWN ────────────────────────────────
 async function cmpDrilldown(phrase, entityItem, signalType, cmpBy){
+  console.log('[cmpDrilldown]', {phrase, entityItem, signalType, cmpBy});
+  console.log('[cmpDrilldown]', {phrase, entityItem, signalType, cmpBy});
   const SIGNAL_COLORS={pain_point:'#f97316',delight:'#56b4e9',rd_signal:'#cc79a7'};
   const col=SIGNAL_COLORS[signalType]||'#c4b5fd';
   document.getElementById('drilldownTitle').innerHTML=`<span style="color:${col}">"${escHtml(phrase)}"</span>`;
   document.getElementById('drilldownCount').textContent='Loading reviews…';
   document.getElementById('drilldownContent').innerHTML='<div style="text-align:center;padding:2rem;color:#5a4e7a">Fetching reviews…</div>';
   document.getElementById('drilldownFooter').innerHTML='';
-  document.getElementById('drilldownOverlay').style.display='flex';
+  document.getElementById('drilldownOverlay').classList.add('open');
 
   if(cmpBy==='brand'){
     try{
@@ -1928,7 +1930,7 @@ document.addEventListener('mousemove',e=>{if(document.getElementById('tmTooltip'
 <div class="footer">
   <span>© 2026 Acquink</span>
   <span>Powered by <span class="masi">MASI</span> Technology</span>
-  <span>v2.36 — 2026-04-13</span>
+  <span>v2.37 — 2026-04-13</span>
 </div>
 </body>
 </html>

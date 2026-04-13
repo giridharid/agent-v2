@@ -1068,11 +1068,13 @@ async def brand_drilldown(request: Request):
     else:
         sentiment_filter = "AND (r.sentiment_type = 'negative' OR r.pain_point = 1)"
 
+    print(f"[BRAND_DRILLDOWN] Received brand='{brand}', phrase='{phrase}', signal_type='{signal_type}'")
+
     try:
-        # First try: exact phrase match across brand
+        # Try 1: exact brand name match (case-insensitive)
         query = f"""
         SELECT r.review_text, r.sentiment_text, r.star_rating, r.reviewer_name,
-               r.review_date, r.traveler_type, h.hotel_name
+               r.review_date, r.traveler_type, h.hotel_name, h.brand_name
         FROM `{PROJECT}.{DATASET}.review_drilldown` r
         JOIN `{PROJECT}.{DATASET}.hotel_master` h ON r.product_id = h.product_id
         WHERE LOWER(h.brand_name) = LOWER('{safe_brand}')
@@ -1081,21 +1083,37 @@ async def brand_drilldown(request: Request):
         LIMIT {limit}
         """
         df = client.query(query).to_dataframe()
+        print(f"[BRAND_DRILLDOWN] Exact match: {len(df)} rows")
 
-        # Fallback: if no results, try LIKE match (phrase might be substring)
+        # Try 2: LIKE brand match (handles "Leela" matching "The Leela Hotels")
         if df.empty:
             query2 = f"""
             SELECT r.review_text, r.sentiment_text, r.star_rating, r.reviewer_name,
-                   r.review_date, r.traveler_type, h.hotel_name
+                   r.review_date, r.traveler_type, h.hotel_name, h.brand_name
             FROM `{PROJECT}.{DATASET}.review_drilldown` r
             JOIN `{PROJECT}.{DATASET}.hotel_master` h ON r.product_id = h.product_id
-            WHERE LOWER(h.brand_name) = LOWER('{safe_brand}')
-              AND LOWER(r.review_text) LIKE LOWER('%{safe_phrase}%')
+            WHERE LOWER(h.brand_name) LIKE LOWER('%{safe_brand}%')
+              AND LOWER(r.phrase) = LOWER('{safe_phrase}')
             ORDER BY r.star_rating ASC
             LIMIT {limit}
             """
             df = client.query(query2).to_dataframe()
-            print(f"[BRAND_DRILLDOWN] Fallback LIKE query returned {len(df)} rows")
+            print(f"[BRAND_DRILLDOWN] LIKE brand match: {len(df)} rows")
+
+        # Try 3: search review_text with LIKE phrase (catches phrase-not-in-phrase-column cases)
+        if df.empty:
+            query3 = f"""
+            SELECT r.review_text, r.sentiment_text, r.star_rating, r.reviewer_name,
+                   r.review_date, r.traveler_type, h.hotel_name, h.brand_name
+            FROM `{PROJECT}.{DATASET}.review_drilldown` r
+            JOIN `{PROJECT}.{DATASET}.hotel_master` h ON r.product_id = h.product_id
+            WHERE LOWER(h.brand_name) LIKE LOWER('%{safe_brand}%')
+              AND LOWER(r.review_text) LIKE LOWER('%{safe_phrase}%')
+            ORDER BY r.star_rating ASC
+            LIMIT {limit}
+            """
+            df = client.query(query3).to_dataframe()
+            print(f"[BRAND_DRILLDOWN] review_text LIKE: {len(df)} rows")
 
         reviews = df.to_dict(orient='records')
         print(f"[BRAND_DRILLDOWN] brand={brand}, phrase={phrase}, rows={len(reviews)}")
