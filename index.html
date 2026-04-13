@@ -610,10 +610,15 @@ async function selectSearchResult(el){
   await loadHotelsFor('hotelView');
   document.getElementById('hotelSelect').value=pid;
   showLoader();
-  showContentAreas();
-  showSubTab('drivers');
-  await loadHotelDataV2(pid);
+  hideContentAreas();
+  activeTab='drivers'; // reset before load
+  const data=await loadHotelDataV2(pid);
+  if(data){
+    showContentAreas();
+    showSubTab('drivers');
+  }
   hideLoader();
+  updateChatContext();
 }
 
 // ─── BRANDS / CITIES / HOTELS CASCADE ────────────────────────
@@ -635,12 +640,18 @@ function resetDownstream(from){
   if(from==='brand'){
     document.getElementById('hotelCitySelect').innerHTML='<option value="">All Cities</option>';
     document.getElementById('citySelect').innerHTML='<option value="">All Cities</option>';
-  }
-  if(from==='brand'||from==='city'){
     document.getElementById('hotelStarSelect').innerHTML='<option value="">All Stars</option>';
     document.getElementById('starSelect').innerHTML='<option value="">All Stars</option>';
+    document.getElementById('hotelSelect').innerHTML='<option value="">Select Hotel</option>';
   }
-  document.getElementById('hotelSelect').innerHTML='<option value="">Select Hotel</option>';
+  if(from==='city'){
+    document.getElementById('hotelStarSelect').innerHTML='<option value="">All Stars</option>';
+    document.getElementById('starSelect').innerHTML='<option value="">All Stars</option>';
+    document.getElementById('hotelSelect').innerHTML='<option value="">Select Hotel</option>';
+  }
+  if(from==='star'){
+    document.getElementById('hotelSelect').innerHTML='<option value="">Select Hotel</option>';
+  }
 }
 
 async function loadCitiesFor(view){
@@ -663,6 +674,8 @@ async function loadStarCategoriesFor(view){
   const brand=document.getElementById(isBrand?'brandSelect':'hotelBrandSelect').value;
   const city=document.getElementById(isBrand?'citySelect':'hotelCitySelect').value;
   const starEl=isBrand?'starSelect':'hotelStarSelect';
+  // Reset downstream (star + hotel) when city changes
+  document.getElementById(starEl).innerHTML='<option value="">All Stars</option>';
   document.getElementById('hotelSelect').innerHTML='<option value="">Select Hotel</option>';
   if(!brand)return;
   try{
@@ -673,7 +686,7 @@ async function loadStarCategoriesFor(view){
     const valid=(stars||[]).filter(s=>s&&s>0);
     document.getElementById(starEl).innerHTML='<option value="">All Stars</option>'+valid.map(s=>`<option value="${s}">${'⭐'.repeat(Math.min(s,5))} ${s}-Star</option>`).join('');
     if(!isBrand)await loadHotelsFor(view);
-  }catch(e){}
+  }catch(e){console.error('loadStarCategoriesFor error:',e);}
 }
 
 async function loadHotelsFor(view){
@@ -724,33 +737,29 @@ function storeProductId(idx){
 
 // ─── SWITCH MODE ──────────────────────────────────────────────
 function switchMode(mode){
-  currentMode=mode; viewMode=mode;
+  currentMode=mode;
   document.querySelectorAll('.mode-tab').forEach(t=>t.classList.remove('active-tab'));
   const tabMap={brand:'brandViewTab',hotel:'hotelViewTab',compareBrands:'compareBrandsTab',compareHotels:'compareHotelsTab'};
   document.getElementById(tabMap[mode])?.classList.add('active-tab');
+
+  // Hide all filter rows and tab panels
   ['brandViewSelectors','hotelViewSelectors','compareBrandsSelectors','compareHotelsSelectors'].forEach(id=>document.getElementById(id).classList.add('hidden'));
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.add('hidden'));
 
+  // ALWAYS clear dashboard on tab switch — data belongs to one mode at a time.
+  // The user must press Apply (or Compare) in the new tab to load fresh data.
+  hideContentAreas();
+
   if(mode==='brand'){
+    viewMode='brand';
     document.getElementById('brandViewSelectors').classList.remove('hidden');
-    if(currentBrand){
-      // REQ-032: reload all data on tab switch
-      showContentAreas();
-      document.getElementById('paradoxBtn').classList.add('hidden');
-      if(activeTab==='drivers'){document.getElementById('chartsRow').classList.remove('hidden');}
-      else{document.getElementById(activeTab+'Tab')?.classList.remove('hidden');}
-    } else hideContentAreas();
   } else if(mode==='hotel'){
+    viewMode='hotel';
     document.getElementById('hotelViewSelectors').classList.remove('hidden');
-    if(currentHotel){
-      showContentAreas();
-      if(activeTab==='drivers'){document.getElementById('chartsRow').classList.remove('hidden');}
-      else{document.getElementById(activeTab+'Tab')?.classList.remove('hidden');}
-    } else hideContentAreas();
   } else if(mode==='compareBrands'||mode==='compareHotels'){
+    viewMode=mode;
     document.getElementById(mode==='compareBrands'?'compareBrandsSelectors':'compareHotelsSelectors').classList.remove('hidden');
     document.getElementById('comparisonTab').classList.remove('hidden');
-    hideContentAreas();
   }
   updateChatContext();
 }
@@ -789,12 +798,14 @@ async function applyBrandView(){
   currentBrand=document.getElementById('brandSelect').value;
   currentCity=document.getElementById('citySelect').value||null;
   currentStar=document.getElementById('starSelect').value||null;
-  currentHotel=null; currentProductId=null; viewMode='brand';
+  // Brand view is brand-only — clear any hotel context
+  currentHotel=null; currentHotelName=null; currentProductId=null;
+  viewMode='brand';
   if(!currentBrand){alert('Please select a brand');return;}
   showLoader();
-  // BUG-004: hide first, then reload
   hideContentAreas();
   document.getElementById('paradoxBtn').classList.add('hidden');
+  activeTab='drivers'; // reset before load
   await loadDashboard();
   await loadBrandSignals(currentBrand);
   showContentAreas();
@@ -811,11 +822,13 @@ async function applyHotelView(){
   viewMode='hotel';
   if(!currentHotel){alert('Please select a hotel');return;}
   showLoader();
-  // BUG-004: hide first, then reload
   hideContentAreas();
-  await loadHotelDataV2(currentHotel);
-  showContentAreas();
-  showSubTab('drivers');
+  activeTab='drivers'; // reset before load so chartsRow shows in loadHotelDataV2
+  const data=await loadHotelDataV2(currentHotel);
+  if(data){
+    showContentAreas();
+    showSubTab('drivers');
+  }
   hideLoader();
   updateChatContext();
 }
@@ -913,8 +926,8 @@ async function loadDrivers(){
       const col=pct>=80?'#22c55e':pct>=60?'#f59e0b':'#ef4444';
       return `<div class="css-bar-row"><div class="css-bar-lbl">${ASPECT_ICONS[d.aspect_id]||''} ${d.aspect_name}</div><div class="css-bar-track"><div class="css-bar-fill" style="width:${Math.min(pct,100)}%;background:${col}"></div></div><div class="css-bar-val" style="color:${col}">${pct}%</div></div>`;
     }).join('');
-    // BUG-001: show chartsRow AFTER data is populated
-    if(activeTab==='drivers')document.getElementById('chartsRow').classList.remove('hidden');
+    // Always show chartsRow once data is loaded — showSubTab handles visibility
+    document.getElementById('chartsRow').classList.remove('hidden');
   }catch(e){console.error('[loadDrivers]',e);}
 }
 
@@ -1044,13 +1057,15 @@ async function loadHotelDataV2(productId){
         const col=p>=80?'#22c55e':p>=60?'#f59e0b':'#ef4444';
         return `<div class="css-bar-row"><div class="css-bar-lbl">${ASPECT_ICONS[d.aspect_id]||''} ${d.aspect_name}</div><div class="css-bar-track"><div class="css-bar-fill" style="width:${Math.min(p,100)}%;background:${col}"></div></div><div class="css-bar-val" style="color:${col}">${p}%</div></div>`;
       }).join('');
-      // BUG-001: only show chartsRow if drivers tab is active
-      if(activeTab==='drivers')document.getElementById('chartsRow').classList.remove('hidden');
+      // Always show chartsRow once data is populated (activeTab was reset to 'drivers' before this call)
+      document.getElementById('chartsRow').classList.remove('hidden');
     }
-    // Pain, delights, RD
+    // Pain, delights, RD — render and explicitly show their rows
     renderPainPoints(data.pain_points||[]);
     renderDelights(data.delights||[]);
     renderRdSignals(data.rd_signals||{});
+    document.getElementById('painDelightsRow').classList.remove('hidden');
+    document.getElementById('rdSignalsRow').classList.remove('hidden');
     // Cache aspects for treemap
     treemapData=aspects;
     return data;
@@ -1254,9 +1269,16 @@ function clearChat(){
 function insertSug(text){document.getElementById('chatInput').value=text;document.getElementById('chatInput').focus();}
 function updateChatContext(){
   const lbl=document.getElementById('chatContextLabel');
-  if(viewMode==='hotel'&&(currentProductId||currentHotel))lbl.textContent=`Analyzing: ${currentHotelName||currentHotel}`;
-  else if(viewMode==='brand'&&currentBrand)lbl.textContent=`Analyzing: ${currentBrand}`;
-  else lbl.textContent='Select a hotel or brand to begin';
+  // Show the most recently loaded context — not tied to current tab/viewMode.
+  // Both hotel and brand may be set simultaneously (hotel belongs to a brand).
+  if(currentHotelName||currentHotel){
+    const suffix=currentBrand?` · ${currentBrand}`:'';
+    lbl.textContent=`Analyzing: ${currentHotelName||'Hotel #'+currentHotel}${suffix}`;
+  } else if(currentBrand){
+    lbl.textContent=`Analyzing: ${currentBrand}`;
+  } else {
+    lbl.textContent='Select a hotel or brand to begin';
+  }
 }
 
 async function sendMessage(msg){
@@ -1273,9 +1295,14 @@ async function sendMessage(msg){
   msgs.innerHTML+=`<div id="${tid}" class="msg-bot"><div class="typing"><span></span><span></span><span></span></div></div>`;
   msgs.scrollTop=msgs.scrollHeight;
   try{
-    const productId=viewMode==='hotel'?(currentProductId||currentHotel||null):null;
-    const brandId=viewMode==='brand'?currentBrand:null;
-    const payload={message:msg,product_id:productId?Number(productId):null,brand_id:brandId,category:'hotels'};
+    // Always send available context — don't depend on viewMode alone
+    const productId=currentProductId||currentHotel;
+    const payload={
+      message:msg,
+      product_id:productId?Number(productId):null,
+      brand_id:currentBrand||null,
+      category:'hotels'
+    };
     const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     const data=await r.json();
     document.getElementById(tid)?.remove();

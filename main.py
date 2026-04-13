@@ -141,67 +141,124 @@ def init_bq_client():
 
 def init_gemini():
     """
-    Initialize Gemini Data Analytics Agent.
-    Uses service account credentials (same as BigQuery).
+    Initialize the Gemini Data Analytics Agent (Vertex AI Reasoning Engine).
     Agent ID: agent_024eedb9-0b86-4101-82a5-f4b3d72c5ee3
+    Falls back to direct GenerativeModel if agent is unavailable.
     """
     global gemini_model
-    
-    # Get agent ID from env or use default
+
     agent_id = os.environ.get("GEMINI_AGENT_ID", "agent_024eedb9-0b86-4101-82a5-f4b3d72c5ee3")
-    
-    try:
-        # Try to use service account credentials for Gemini
-        gcp_creds = os.environ.get("GCP_CREDENTIALS_JSON", "")
-        if gcp_creds:
-            gcp_creds = gcp_creds.strip().strip('"').strip("'")
-            if gcp_creds.startswith("{"):
-                creds_dict = json.loads(gcp_creds)
-            else:
-                padding = 4 - len(gcp_creds) % 4
-                if padding != 4:
-                    gcp_creds += "=" * padding
-                creds_dict = json.loads(base64.b64decode(gcp_creds).decode('utf-8'))
-            
-            # Initialize Vertex AI with project from credentials
-            import vertexai
-            from vertexai.generative_models import GenerativeModel
-            
-            project_id = creds_dict.get('project_id', PROJECT)
-            credentials = service_account.Credentials.from_service_account_info(creds_dict)
-            
-            vertexai.init(project=project_id, location="us-central1", credentials=credentials)
-            
-            # Use gemini-2.0-flash model (agent context will be added via system prompt)
-            gemini_model = GenerativeModel("gemini-2.0-flash-001")
-            print(f"[SUCCESS] Gemini model initialized via Vertex AI (project: {project_id})")
-            return gemini_model
-        else:
-            # Fallback: try API key if available
-            api_key = os.environ.get("GEMINI_API_KEY", "")
-            if api_key:
-                genai.configure(api_key=api_key)
-                gemini_model = genai.GenerativeModel('gemini-2.0-flash')
-                print("[SUCCESS] Gemini model initialized via API key")
-                return gemini_model
-            else:
-                print("[WARNING] No Gemini credentials available")
-                return None
-                
-    except ImportError:
-        # vertexai not installed, try genai
-        print("[INFO] vertexai not installed, trying google-generativeai")
+
+    gcp_creds = os.environ.get("GCP_CREDENTIALS_JSON", "")
+    if not gcp_creds:
         api_key = os.environ.get("GEMINI_API_KEY", "")
         if api_key:
             genai.configure(api_key=api_key)
-            gemini_model = genai.GenerativeModel('gemini-2.0-flash')
-            print("[SUCCESS] Gemini model initialized via API key")
-            return gemini_model
-        return None
+            gemini_model = genai.GenerativeModel("gemini-1.5-flash")
+            print("[SUCCESS] Gemini initialised via API key (no GCP creds)")
+        else:
+            print("[WARNING] No Gemini credentials found")
+        return gemini_model
+
+    # Parse GCP service-account credentials
+    gcp_creds = gcp_creds.strip().strip('"').strip("'")
+    try:
+        if gcp_creds.startswith("{"):
+            creds_dict = json.loads(gcp_creds)
+        else:
+            padding = 4 - len(gcp_creds) % 4
+            if padding != 4:
+                gcp_creds += "=" * padding
+            creds_dict = json.loads(base64.b64decode(gcp_creds).decode("utf-8"))
+        credentials = service_account.Credentials.from_service_account_info(creds_dict)
+        project_id = creds_dict.get("project_id", PROJECT)
     except Exception as e:
-        print(f"[ERROR] Gemini init error: {e}")
-        traceback.print_exc()
+        print(f"[ERROR] GCP creds parse error: {e}")
         return None
+
+    # ── 1. Try Vertex AI Reasoning Engine (the shared agent) ──────────────
+    try:
+        import vertexai
+        from vertexai.preview import reasoning_engines
+
+        vertexai.init(project=project_id, location="us-central1", credentials=credentials)
+        resource_name = (
+            f"projects/{project_id}/locations/us-central1/reasoningEngines/{agent_id}"
+        )
+        agent = reasoning_engines.ReasoningEngine(resource_name)
+        gemini_model = _AgentWrapper(agent)
+        print(f"[SUCCESS] Gemini Data Analytics Agent initialised: {agent_id}")
+        return gemini_model
+
+    except Exception as e:
+        print(f"[WARN] Reasoning Engine unavailable ({e}), trying GenerativeModel fallback")
+
+    # ── 2. Fall back to Vertex AI GenerativeModel ──────────────────────────
+    try:
+        import vertexai
+        from vertexai.generative_models import GenerativeModel
+
+        vertexai.init(project=project_id, location="us-central1", credentials=credentials)
+        for model_name in ["gemini-2.0-flash", "gemini-1.5-flash-001", "gemini-1.5-flash"]:
+            try:
+                gemini_model = GenerativeModel(model_name)
+                print(f"[SUCCESS] Gemini GenerativeModel '{model_name}' (Vertex AI fallback)")
+                return gemini_model
+            except Exception as me:
+                print(f"[WARN] {model_name} unavailable: {me}")
+        raise Exception("No Vertex AI model available")
+
+    except Exception as e:
+        print(f"[WARN] Vertex AI GenerativeModel failed ({e}), trying API key")
+
+    # ── 3. Last resort: google-generativeai API key ────────────────────────
+    api_key = os.environ.get("GEMINI_API_KEY", "")
+    if api_key:
+        genai.configure(api_key=api_key)
+        gemini_model = genai.GenerativeModel("gemini-1.5-flash")
+        print("[SUCCESS] Gemini initialised via API key (last resort)")
+        return gemini_model
+
+    print("[ERROR] All Gemini init paths failed")
+    return None
+
+
+class _AgentWrapper:
+    """
+    Thin wrapper so a Vertex AI Reasoning Engine works like GenerativeModel.
+    Tries multiple input shapes — different agents expose different schemas.
+    """
+    def __init__(self, agent):
+        self._agent = agent
+
+    def generate_content(self, prompt: str):
+        attempts = [
+            {"input": prompt},
+            {"message": prompt},
+            {"messages": [{"role": "user", "content": prompt}]},
+        ]
+        last_err = None
+        for inp in attempts:
+            try:
+                resp = self._agent.query(input=inp)
+                if hasattr(resp, "output"):
+                    return _TextResponse(str(resp.output))
+                if hasattr(resp, "text"):
+                    return _TextResponse(str(resp.text))
+                if isinstance(resp, dict):
+                    text = (resp.get("output") or resp.get("text") or
+                            resp.get("response") or resp.get("answer") or str(resp))
+                    return _TextResponse(str(text))
+                return _TextResponse(str(resp))
+            except Exception as err:
+                last_err = err
+        raise RuntimeError(f"Agent query failed. Last error: {last_err}")
+
+
+class _TextResponse:
+    """Minimal response object matching GenerativeModel.generate_content() shape."""
+    def __init__(self, text: str):
+        self.text = text
 
 def get_bq():
     global bq_client
@@ -507,12 +564,29 @@ async def get_cities(brand: Optional[str] = None):
             filtered = [h for h in filtered if h.get('brand_name','').lower() == brand.lower()]
         cities = sorted(set(h.get('city') for h in filtered if h.get('city')))
         return {"cities": cities}
-    
-    cached_cities = get_cache("cities")
-    if cached_cities:
-        return {"cities": cached_cities}
-    
-    return {"cities": []}
+
+    # Hotels cache not ready — query BQ directly (never fall back to all-cities when brand is set)
+    client = get_bq()
+    if not client:
+        return {"cities": []}
+
+    conditions = ["city IS NOT NULL"]
+    if brand:
+        safe_brand = brand.replace("'", "''")
+        conditions.append(f"LOWER(brand_name) = LOWER('{safe_brand}')")
+
+    query = f"""
+    SELECT DISTINCT city
+    FROM `{PROJECT}.{DATASET}.hotel_master`
+    WHERE {' AND '.join(conditions)}
+    ORDER BY city
+    """
+    try:
+        df = client.query(query).to_dataframe()
+        return {"cities": df['city'].tolist()}
+    except Exception as e:
+        print(f"[get_cities BQ error] {e}")
+        return {"cities": []}
 
 @app.get("/api/search")
 async def search_hotels(q: str = Query(..., min_length=2)):
