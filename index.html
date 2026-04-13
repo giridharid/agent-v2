@@ -963,11 +963,44 @@ async function cmpDrilldown(phrase, entityItem, signalType, cmpBy){
   document.getElementById('drilldownOverlay').style.display='flex';
 
   if(cmpBy==='brand'){
-    document.getElementById('drilldownCount').textContent='Brand-level phrase';
-    document.getElementById('drilldownContent').innerHTML=`<div style="padding:1.5rem;color:#9d86cc;font-size:12px;line-height:1.6">
-      Phrase: <strong style="color:#c4b5fd">"${escHtml(phrase)}"</strong><br><br>
-      <span style="color:#6b5ea8">Switch to Hotel View and select a specific property to drill into individual reviews for this phrase.</span>
-    </div>`;
+    try{
+      const r=await fetch('/api/brand_drilldown',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({brand:entityItem,phrase,signal_type:signalType||'pain_point',limit:20})
+      });
+      const d=await r.json();
+      const reviews=d.reviews||[];
+      document.getElementById('drilldownCount').textContent=`${reviews.length} of ${d.total||reviews.length} reviews across brand`;
+      document.getElementById('drilldownContent').innerHTML=reviews.length
+        ? reviews.slice(0,15).map(rv=>{
+            const stars='⭐'.repeat(Math.min(Math.round(rv.star_rating||0),5));
+            let txt=escHtml(rv.review_text||'');
+            const st=rv.sentiment_text||phrase;
+            if(st){
+              const isPain=signalType==='pain_point';
+              const hlBg=isPain?'rgba(239,68,68,.25)':'rgba(34,197,94,.2)';
+              const hlCol=isPain?'#fca5a5':'#86efac';
+              txt=txt.replace(new RegExp('('+escHtml(st).replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','gi'),
+                `<mark style="background:${hlBg};color:${hlCol};padding:1px 3px;border-radius:3px;font-weight:600">$1</mark>`);
+            }
+            return `<div class="review-card">
+              <div class="review-top">
+                <div class="review-left">
+                  <span class="review-stars">${stars}</span>
+                  <span class="review-name">${escHtml(rv.reviewer_name||'Guest')}</span>
+                  <span class="review-date">${fmtDate(rv.review_date)}</span>
+                  ${rv.hotel_name?`<span class="review-badge">${escHtml(rv.hotel_name)}</span>`:''}
+                </div>
+                ${rv.traveler_type?`<span class="review-badge">${escHtml(rv.traveler_type)}</span>`:''}
+              </div>
+              <div class="review-text">${txt}</div>
+            </div>`;
+          }).join('')
+        : '<div class="no-data">No reviews found for this phrase across the brand</div>';
+    }catch(e){
+      document.getElementById('drilldownContent').innerHTML='<div class="no-data">Error loading brand reviews</div>';
+    }
     return;
   }
 
@@ -1207,17 +1240,14 @@ async function loadHotelDataV2(productId){
     if(sortedA.length){document.getElementById('statStrength').textContent=sortedA[0].aspect_name;document.getElementById('statStrengthScore').textContent=(sortedA[0].satisfaction_pct||0)+'% satisfaction';}
     if(sortedA.length>1){const w=sortedA[sortedA.length-1];document.getElementById('statWeakness').textContent=w.aspect_name;document.getElementById('statWeaknessScore').textContent=(w.satisfaction_pct||0)+'% satisfaction';}
     const demo=data.demographics||{};
-    const knownTypes=(demo.traveler_type||[]).filter(t=>{
-      const v=t.dimension_value||t.traveler_type||'';
-      return v&&v.toLowerCase()!=='unknown'&&(t.count||t.review_count||0)>=5;
-    }).sort((a,b)=>(b.count||b.review_count||0)-(a.count||a.review_count||0));
+    const knownTypes=(demo.traveler_type||[])
+      .map(t=>({val:t.dimension_value||t.traveler_type||'', cnt:+(t.count||t.review_count||0)}))
+      .filter(t=>t.val&&!['unknown','none','null',''].includes(t.val.toLowerCase())&&t.cnt>0)
+      .sort((a,b)=>b.cnt-a.cnt);
     if(knownTypes.length){
-      const total=knownTypes.reduce((s,t)=>s+(t.count||t.review_count||0),0);
-      const top=knownTypes[0];
-      const topVal=top.dimension_value||top.traveler_type||'';
-      const topCnt=top.count||top.review_count||0;
-      document.getElementById('statGuestType').textContent=topVal;
-      document.getElementById('statGuestPct').textContent=Math.round(topCnt*100/total)+'% of guests';
+      const total=knownTypes.reduce((s,t)=>s+t.cnt,0)||1;
+      document.getElementById('statGuestType').textContent=knownTypes[0].val;
+      document.getElementById('statGuestPct').textContent=Math.round(knownTypes[0].cnt*100/total)+'% of guests';
     } else {
       document.getElementById('statGuestType').textContent='--';
       document.getElementById('statGuestPct').textContent='--';
@@ -1898,7 +1928,7 @@ document.addEventListener('mousemove',e=>{if(document.getElementById('tmTooltip'
 <div class="footer">
   <span>© 2026 Acquink</span>
   <span>Powered by <span class="masi">MASI</span> Technology</span>
-  <span>v2.33 — 2026-04-13</span>
+  <span>v2.34 — 2026-04-13</span>
 </div>
 </body>
 </html>

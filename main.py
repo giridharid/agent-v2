@@ -1010,7 +1010,6 @@ async def drilldown(request: DrilldownRequest):
     if not client:
         raise HTTPException(status_code=500, detail="Database unavailable")
     
-    # Build filter based on signal type
     if request.signal_type == "pain_point":
         filter_clause = "pain_point = 1 AND sentiment_type = 'negative'"
     elif request.signal_type == "delight":
@@ -1033,8 +1032,6 @@ async def drilldown(request: DrilldownRequest):
     try:
         df = client.query(query).to_dataframe()
         reviews = df.to_dict(orient='records')
-        
-        # Get total count
         count_query = f"""
         SELECT COUNT(*) as total
         FROM `{PROJECT}.{DATASET}.review_drilldown`
@@ -1044,16 +1041,51 @@ async def drilldown(request: DrilldownRequest):
         """
         count_df = client.query(count_query).to_dataframe()
         total_count = int(count_df.iloc[0]['total'])
-        
-        return {
-            "reviews": reviews,
-            "total_count": total_count,
-            "phrase": request.phrase,
-            "signal_type": request.signal_type
-        }
+        return {"reviews": reviews, "total_count": total_count, "phrase": request.phrase, "signal_type": request.signal_type}
     except Exception as e:
         print(f"[DRILLDOWN ERROR] {e}")
         return {"reviews": [], "total_count": 0, "error": str(e)}
+
+
+@app.post("/api/brand_drilldown")
+async def brand_drilldown(request: Request):
+    """Get reviews for a phrase across all hotels of a brand"""
+    client = get_bq()
+    if not client:
+        raise HTTPException(status_code=500, detail="Database unavailable")
+    body = await request.json()
+    brand = body.get("brand", "")
+    phrase = body.get("phrase", "")
+    signal_type = body.get("signal_type", "pain_point")
+    limit = body.get("limit", 20)
+
+    if signal_type == "pain_point":
+        filter_clause = "r.pain_point = 1 AND r.sentiment_type = 'negative'"
+    elif signal_type == "delight":
+        filter_clause = "r.delight = 1 AND r.sentiment_type = 'positive'"
+    else:
+        filter_clause = "1=1"
+
+    safe_brand = brand.replace("'", "''")
+    safe_phrase = phrase.replace("'", "''")
+    try:
+        query = f"""
+        SELECT r.review_text, r.sentiment_text, r.star_rating, r.reviewer_name,
+               r.review_date, r.traveler_type, h.hotel_name
+        FROM `{PROJECT}.{DATASET}.review_drilldown` r
+        JOIN `{PROJECT}.{DATASET}.hotel_master` h ON r.product_id = h.product_id
+        WHERE h.brand_name = '{safe_brand}'
+          AND LOWER(r.phrase) = LOWER('{safe_phrase}')
+          AND {filter_clause}
+        ORDER BY r.star_rating ASC
+        LIMIT {limit}
+        """
+        df = client.query(query).to_dataframe()
+        reviews = df.to_dict(orient='records')
+        return {"reviews": reviews, "total": len(reviews), "phrase": phrase}
+    except Exception as e:
+        print(f"[BRAND_DRILLDOWN ERROR] {e}")
+        return {"reviews": [], "total": 0, "error": str(e)}
 
 
 @app.get("/api/hotel/{product_id}/paradox")
