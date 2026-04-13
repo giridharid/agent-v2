@@ -1059,29 +1059,46 @@ async def brand_drilldown(request: Request):
     signal_type = body.get("signal_type", "pain_point")
     limit = body.get("limit", 20)
 
-    if signal_type == "pain_point":
-        filter_clause = "r.pain_point = 1 AND r.sentiment_type = 'negative'"
-    elif signal_type == "delight":
-        filter_clause = "r.delight = 1 AND r.sentiment_type = 'positive'"
-    else:
-        filter_clause = "1=1"
-
     safe_brand = brand.replace("'", "''")
     safe_phrase = phrase.replace("'", "''")
+
+    # sentiment filter — applied softly so we still get results even if columns vary
+    if signal_type == "delight":
+        sentiment_filter = "AND (r.sentiment_type = 'positive' OR r.delight = 1)"
+    else:
+        sentiment_filter = "AND (r.sentiment_type = 'negative' OR r.pain_point = 1)"
+
     try:
+        # First try: exact phrase match across brand
         query = f"""
         SELECT r.review_text, r.sentiment_text, r.star_rating, r.reviewer_name,
                r.review_date, r.traveler_type, h.hotel_name
         FROM `{PROJECT}.{DATASET}.review_drilldown` r
         JOIN `{PROJECT}.{DATASET}.hotel_master` h ON r.product_id = h.product_id
-        WHERE h.brand_name = '{safe_brand}'
+        WHERE LOWER(h.brand_name) = LOWER('{safe_brand}')
           AND LOWER(r.phrase) = LOWER('{safe_phrase}')
-          AND {filter_clause}
         ORDER BY r.star_rating ASC
         LIMIT {limit}
         """
         df = client.query(query).to_dataframe()
+
+        # Fallback: if no results, try LIKE match (phrase might be substring)
+        if df.empty:
+            query2 = f"""
+            SELECT r.review_text, r.sentiment_text, r.star_rating, r.reviewer_name,
+                   r.review_date, r.traveler_type, h.hotel_name
+            FROM `{PROJECT}.{DATASET}.review_drilldown` r
+            JOIN `{PROJECT}.{DATASET}.hotel_master` h ON r.product_id = h.product_id
+            WHERE LOWER(h.brand_name) = LOWER('{safe_brand}')
+              AND LOWER(r.review_text) LIKE LOWER('%{safe_phrase}%')
+            ORDER BY r.star_rating ASC
+            LIMIT {limit}
+            """
+            df = client.query(query2).to_dataframe()
+            print(f"[BRAND_DRILLDOWN] Fallback LIKE query returned {len(df)} rows")
+
         reviews = df.to_dict(orient='records')
+        print(f"[BRAND_DRILLDOWN] brand={brand}, phrase={phrase}, rows={len(reviews)}")
         return {"reviews": reviews, "total": len(reviews), "phrase": phrase}
     except Exception as e:
         print(f"[BRAND_DRILLDOWN ERROR] {e}")
