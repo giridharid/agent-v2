@@ -1472,9 +1472,14 @@ function buildTreemapChart(points, allStats, asp){
   const CW=W-PL-PR, CH=H-PT-PB;
   const toX=v=>PL+(v/maxX)*CW;
   const toY=v=>PT+CH*(1-(v-minY)/yRange);
-  const R=11;
+  const R=7; // small, clean
 
-  let svg=`<svg width="100%" viewBox="0 0 ${W} ${H}" style="display:block;font-family:inherit">`;
+  let svg=`<svg width="100%" viewBox="0 0 ${W} ${H}" style="display:block;font-family:inherit">
+  <defs>
+    <clipPath id="chartClip">
+      <rect x="${PL}" y="${PT}" width="${CW}" height="${CH}"/>
+    </clipPath>
+  </defs>`;
 
   // 9 quadrant fills: rows=sat(high→low), cols=volume(low→high)
   const qx=[PL,toX(xLow),toX(xHigh),W-PR];
@@ -1533,37 +1538,40 @@ function buildTreemapChart(points, allStats, asp){
   svg+=`<text x="${PL+CW/2}" y="${H-PB+24}" fill="#5a4e7a" font-size="9" text-anchor="middle">Mention Count →</text>`;
   svg+=`<text x="11" y="${PT+CH/2}" fill="#5a4e7a" font-size="9" text-anchor="middle" transform="rotate(-90,11,${PT+CH/2})">+ve Sentiment % ↑</text>`;
 
-  // Jitter overlapping bubbles: group by proximity, nudge within group
+  // Jitter overlapping bubbles — keep within chart bounds
   const placed=[];
   const jittered=points.map(p=>{
     let px=toX(p.x), py=toY(p.y);
-    // Find already-placed bubbles too close
-    const close=placed.filter(q=>Math.hypot(q.px-px,q.py-py)<R*2.4);
+    const close=placed.filter(q=>Math.hypot(q.px-px,q.py-py)<R*2.6);
     if(close.length>0){
-      // Nudge in a spiral: offset by entity index to separate predictably
-      const angle=(p.entityIdx/(allStats.length))*2*Math.PI + close.length*1.2;
-      const dist=R*2.3*Math.ceil(close.length/allStats.length);
-      px+=Math.cos(angle)*dist;
-      py+=Math.sin(angle)*dist;
+      // Offset by entity index × small step in a fixed direction
+      const angle=(p.entityIdx/Math.max(allStats.length,1))*2*Math.PI;
+      const dist=R*2.4*Math.ceil(close.length/Math.max(allStats.length,1));
+      px=Math.max(PL+R, Math.min(W-PR-R, px+Math.cos(angle)*dist));
+      py=Math.max(PT+R,  Math.min(H-PB-R,  py+Math.sin(angle)*dist));
     }
     const out={...p,px,py};
     placed.push(out);
     return out;
   });
 
-  // Draw circles
+  // Draw circles — clipped to chart area
+  svg+=`<g clip-path="url(#chartClip)">`;
   jittered.forEach(p=>{
     if(p.isBm){
       svg+=`<circle cx="${p.px}" cy="${p.py}" r="${R}" fill="none" stroke="${p.color}" stroke-width="1.5" stroke-dasharray="3 2" opacity=".8"/>`;
     }else{
-      svg+=`<circle cx="${p.px}" cy="${p.py}" r="${R}" fill="${p.color}" opacity=".85"/>`;
+      svg+=`<circle cx="${p.px}" cy="${p.py}" r="${R}" fill="${p.color}" opacity=".88"/>`;
     }
   });
-  // Labels (above)
+  svg+=`</g>`;
+  // Labels above circles — also clipped
+  svg+=`<g clip-path="url(#chartClip)">`;
   jittered.forEach(p=>{
     const lbl=p.label.length>12?p.label.substring(0,11)+'…':p.label;
-    svg+=`<text x="${p.px}" y="${p.py-R-3}" fill="${p.color}" font-size="8.5" text-anchor="middle" font-weight="500">${lbl}</text>`;
+    svg+=`<text x="${p.px}" y="${p.py-R-3}" fill="${p.color}" font-size="8" text-anchor="middle" font-weight="500">${lbl}</text>`;
   });
+  svg+=`</g>`;
 
   // Legend
   let lx=PL; const ly=H-6;
