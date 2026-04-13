@@ -392,6 +392,33 @@ body{background:#0a0814;color:#e2e8f0;min-height:100vh;font-family:'DM Sans',sys
     </div>
   </div>
 
+
+  <!-- Tab panels — must be ABOVE pain/delights so they appear between tabs and the signals rows -->
+  <div id="driversTab" class="tab-panel"></div>
+
+  <div id="satisfactionTab" class="tab-panel hidden demo-tab-panel">
+    <div class="card-title" style="margin-bottom:14px">Satisfaction by Aspect</div>
+    <div id="satisfactionChart"></div>
+  </div>
+
+  <div id="demographicsTab" class="tab-panel hidden demo-tab-panel">
+    <div class="demo-grid">
+      <div class="demo-card"><div class="demo-title">Gender Distribution</div><div id="genderChart"></div></div>
+      <div class="demo-card"><div class="demo-title">Traveler Type</div><div id="travelerChart"></div></div>
+      <div class="demo-card"><div class="demo-title">Stay Purpose</div><div id="purposeChart"></div></div>
+    </div>
+  </div>
+
+  <div id="stayPurposeTab" class="tab-panel hidden demo-tab-panel">
+    <div class="card-title" style="margin-bottom:14px">Stay Purpose × Aspect Satisfaction</div>
+    <div id="stayPurposeContent" style="overflow-x:auto"></div>
+  </div>
+
+  <div id="travelerTypeTab" class="tab-panel hidden demo-tab-panel">
+    <div class="card-title" style="margin-bottom:14px">Traveler Type × Aspect Satisfaction</div>
+    <div id="travelerTypeContent" style="overflow-x:auto"></div>
+  </div>
+
   <!-- Pain & Delights — colorblind-safe: orange for pain, blue for delights -->
   <div id="painDelightsRow" class="hidden">
     <div class="sig-card">
@@ -441,44 +468,11 @@ body{background:#0a0814;color:#e2e8f0;min-height:100vh;font-family:'DM Sans',sys
     </div>
   </div>
 
-  <!-- Tab panels -->
-  <div id="driversTab" class="tab-panel"></div>
-
-  <div id="satisfactionTab" class="tab-panel hidden demo-tab-panel">
-    <div class="card-title" style="margin-bottom:14px">Satisfaction by Aspect</div>
-    <div id="satisfactionChart"></div>
-  </div>
-
-  <div id="demographicsTab" class="tab-panel hidden demo-tab-panel">
-    <div class="demo-grid">
-      <div class="demo-card"><div class="demo-title">Gender Distribution</div><div id="genderChart"></div></div>
-      <div class="demo-card"><div class="demo-title">Traveler Type</div><div id="travelerChart"></div></div>
-      <div class="demo-card"><div class="demo-title">Stay Purpose</div><div id="purposeChart"></div></div>
-    </div>
-  </div>
-
-  <div id="stayPurposeTab" class="tab-panel hidden demo-tab-panel">
-    <div class="card-title" style="margin-bottom:14px">Stay Purpose × Aspect Satisfaction</div>
-    <div id="stayPurposeContent" style="overflow-x:auto"></div>
-  </div>
-
-  <div id="travelerTypeTab" class="tab-panel hidden demo-tab-panel">
-    <div class="card-title" style="margin-bottom:14px">Traveler Type × Aspect Satisfaction</div>
-    <div id="travelerTypeContent" style="overflow-x:auto"></div>
-  </div>
-
   <div id="comparisonTab" class="tab-panel hidden">
     <div id="comparisonContent" style="color:#3d3355;text-align:center;padding:3rem;font-size:13px">Select items above and click Compare</div>
   </div>
 
-</div>
-
-<!-- FOOTER -->
-<div class="footer">
-  <span>© 2026 Acquink Technologies</span>
-  <span>Powered by <span class="masi">MASI</span> Technology</span>
-  <span>v2.2 — 2026-04-12</span>
-</div>
+</div><!-- /main -->
 
 <!-- DRILLDOWN MODAL -->
 <div id="drilldownOverlay" onclick="if(event.target===this)closeDrilldown()">
@@ -1335,5 +1329,12 @@ function fmtDate(s){try{return new Date(s).toLocaleDateString('en-US',{month:'sh
 function getHeatClass(v){if(v>=80)return'heat-vhigh';if(v>=65)return'heat-high';if(v>=50)return'heat-mid';if(v>=35)return'heat-low';return'heat-vlow';}
 function getHeatClassInv(v){if(v<=10)return'heat-vhigh';if(v<=20)return'heat-high';if(v<=35)return'heat-mid';if(v<=50)return'heat-low';return'heat-vlow';}
 </script>
+
+<!-- FOOTER — placed at end so it always renders below all content -->
+<div class="footer">
+  <span>© 2026 Acquink</span>
+  <span>Powered by <span class="masi">MASI</span> Technology</span>
+  <span>v2.2 — 2026-04-13</span>
+</div>
 </body>
 </html>
