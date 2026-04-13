@@ -390,9 +390,9 @@ def load_master_caches():
             entry = demo_by_pid.setdefault(pid, {'gender':[], 'traveler_type':[], 'stay_purpose':[]})
             if dim in entry:
                 entry[dim].append({
-                    dim: val,
-                    'review_count': int(row['review_count'] or 0),
-                    'pct_of_total': int(row['pct_of_total'] or 0),
+                    "dimension_value": val,           # consistent with BQ response
+                    "count": int(row['review_count'] or 0),
+                    "pct_of_total": int(row['pct_of_total'] or 0),
                 })
         set_cache("demo_by_pid", demo_by_pid)
         print(f"[CACHE] Loaded demographics: {len(demo_by_pid)} products")

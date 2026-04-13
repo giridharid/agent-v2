@@ -954,37 +954,60 @@ async function runHotelComparison(){
 
 // ─── COMPARE PHRASE DRILLDOWN ────────────────────────────────
 async function cmpDrilldown(phrase, entityItem, signalType, cmpBy){
+  const SIGNAL_COLORS={pain_point:'#f97316',delight:'#56b4e9',rd_signal:'#cc79a7'};
+  const col=SIGNAL_COLORS[signalType]||'#c4b5fd';
+  document.getElementById('drilldownTitle').innerHTML=`<span style="color:${col}">"${escHtml(phrase)}"</span>`;
+  document.getElementById('drilldownCount').textContent='Loading reviews…';
+  document.getElementById('drilldownContent').innerHTML='<div style="text-align:center;padding:2rem;color:#5a4e7a">Fetching reviews…</div>';
+  document.getElementById('drilldownFooter').innerHTML='';
+  document.getElementById('drilldownOverlay').style.display='flex';
+
+  if(cmpBy==='brand'){
+    document.getElementById('drilldownCount').textContent='Brand-level phrase';
+    document.getElementById('drilldownContent').innerHTML=`<div style="padding:1.5rem;color:#9d86cc;font-size:12px;line-height:1.6">
+      Phrase: <strong style="color:#c4b5fd">"${escHtml(phrase)}"</strong><br><br>
+      <span style="color:#6b5ea8">Switch to Hotel View and select a specific property to drill into individual reviews for this phrase.</span>
+    </div>`;
+    return;
+  }
+
   try{
-    document.getElementById('drilldownTitle').textContent=`"${phrase}"`;
-    document.getElementById('drilldownCount').textContent='Loading reviews...';
-    document.getElementById('drilldownContent').innerHTML='<div style="text-align:center;padding:2rem;color:#5a4e7a">Fetching reviews…</div>';
-    document.getElementById('drilldownFooter').innerHTML='';
-    document.getElementById('drilldownOverlay').style.display='flex';
-    if(cmpBy==='hotel'){
-      // Use existing drilldown endpoint with product_id
-      const r=await fetch('/api/drilldown',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({product_id:parseInt(entityItem)||entityItem,phrase,signal_type:signalType||'pain_point',limit:20})
-      });
-      const d=await r.json();
-      const reviews=d.reviews||[];
-      document.getElementById('drilldownCount').textContent=`${reviews.length} of ${d.total||reviews.length} reviews`;
-      document.getElementById('drilldownContent').innerHTML=reviews.length
-        ?reviews.map(rv=>`<div class="review-card">
-            <div class="review-meta"><span>⭐ ${rv.rating||'?'}</span><span>${rv.date||''}</span></div>
-            <div class="review-text">${hlSentiment(rv.review_text||rv.text||'',phrase)}</div>
-          </div>`).join('')
-        :'<div class="no-data">No reviews found</div>';
-    } else {
-      // Brand compare — use brand summary endpoint for context
-      document.getElementById('drilldownCount').textContent='Brand-level phrase';
-      document.getElementById('drilldownContent').innerHTML=`<div style="padding:1rem;color:#9d86cc;font-size:13px">
-        Phrase: <strong style="color:#c4b5fd">"${escHtml(phrase)}"</strong><br><br>
-        <span style="color:#6b5ea8;font-size:11px">Select a specific hotel in Hotel View to drill down into reviews for this phrase.</span>
-      </div>`;
-    }
-    drilldownPage=1; drilldownPhrase=phrase;
+    const r=await fetch('/api/drilldown',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({product_id:parseInt(entityItem)||0,phrase,signal_type:signalType||'pain_point',limit:30})
+    });
+    const d=await r.json();
+    const reviews=d.reviews||[];
+    document.getElementById('drilldownCount').textContent=`${reviews.length} of ${d.total||reviews.length} reviews`;
+    document.getElementById('drilldownContent').innerHTML=reviews.length
+      ? reviews.slice(0,10).map(rv=>{
+          const stars='⭐'.repeat(Math.min(Math.round(rv.star_rating||0),5));
+          // Highlight sentiment_text: red for pain, green for delight
+          let txt=escHtml(rv.review_text||'');
+          const st=rv.sentiment_text||phrase;
+          if(st){
+            const isPain=signalType==='pain_point';
+            const hlBg=isPain?'rgba(239,68,68,.25)':'rgba(34,197,94,.2)';
+            const hlCol=isPain?'#fca5a5':'#86efac';
+            txt=txt.replace(
+              new RegExp('('+escHtml(st).replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','gi'),
+              `<mark style="background:${hlBg};color:${hlCol};padding:1px 3px;border-radius:3px;font-weight:600">$1</mark>`
+            );
+          }
+          return `<div class="review-card">
+            <div class="review-top">
+              <div class="review-left">
+                <span class="review-stars">${stars}</span>
+                <span class="review-name">${escHtml(rv.reviewer_name||'Guest')}</span>
+                <span class="review-date">${fmtDate(rv.review_date)}</span>
+              </div>
+              ${rv.traveler_type?`<span class="review-badge">${escHtml(rv.traveler_type)}</span>`:''}
+            </div>
+            <div class="review-text">${txt}</div>
+          </div>`;
+        }).join('')
+      : '<div class="no-data">No reviews found for this phrase</div>';
   }catch(e){
     document.getElementById('drilldownContent').innerHTML='<div class="no-data">Error loading reviews</div>';
   }
@@ -1184,9 +1207,21 @@ async function loadHotelDataV2(productId){
     if(sortedA.length){document.getElementById('statStrength').textContent=sortedA[0].aspect_name;document.getElementById('statStrengthScore').textContent=(sortedA[0].satisfaction_pct||0)+'% satisfaction';}
     if(sortedA.length>1){const w=sortedA[sortedA.length-1];document.getElementById('statWeakness').textContent=w.aspect_name;document.getElementById('statWeaknessScore').textContent=(w.satisfaction_pct||0)+'% satisfaction';}
     const demo=data.demographics||{};
-    const knownTypes=(demo.traveler_type||[]).filter(t=>t.dimension_value&&t.dimension_value.toLowerCase()!=='unknown');
-    if(knownTypes.length){const kt=knownTypes.reduce((s,t)=>s+t.count,0);document.getElementById('statGuestType').textContent=knownTypes[0].dimension_value;document.getElementById('statGuestPct').textContent=Math.round(knownTypes[0].count*100/kt)+'% of guests';}
-    else{document.getElementById('statGuestType').textContent='--';document.getElementById('statGuestPct').textContent='--';}
+    const knownTypes=(demo.traveler_type||[]).filter(t=>{
+      const v=t.dimension_value||t.traveler_type||'';
+      return v&&v.toLowerCase()!=='unknown'&&(t.count||t.review_count||0)>=5;
+    }).sort((a,b)=>(b.count||b.review_count||0)-(a.count||a.review_count||0));
+    if(knownTypes.length){
+      const total=knownTypes.reduce((s,t)=>s+(t.count||t.review_count||0),0);
+      const top=knownTypes[0];
+      const topVal=top.dimension_value||top.traveler_type||'';
+      const topCnt=top.count||top.review_count||0;
+      document.getElementById('statGuestType').textContent=topVal;
+      document.getElementById('statGuestPct').textContent=Math.round(topCnt*100/total)+'% of guests';
+    } else {
+      document.getElementById('statGuestType').textContent='--';
+      document.getElementById('statGuestPct').textContent='--';
+    }
     // Emotions
     renderEmotions(data.emotions||[]);
     // Aspect charts — populate before showing
@@ -1778,7 +1813,9 @@ function clearChat(){
       <span class="chat-sug" onclick="insertSug('What do guests love most?')">Guest delights</span>
     </div></div>`;
 }
-function insertSug(text){document.getElementById('chatInput').value=text;document.getElementById('chatInput').focus();}
+function insertSug(text){
+  sendMessage(text);  // Auto-send immediately — no need to press send button
+}
 function updateChatContext(){
   const lbl=document.getElementById('chatContextLabel');
   // Show the most recently loaded context — not tied to current tab/viewMode.
