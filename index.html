@@ -1402,9 +1402,40 @@ async function loadComparison(items,compareBy){
     // Fetch treemap phrases + pain/delights in parallel
     try{
       const [tmResults, pdResults] = await Promise.all([
-        // Treemap: top 5 treemap_names per aspect from product_phrases
+        // Treemap: fetch for ALL entities including benchmark — average if combined
         Promise.all(allStats.map(async s=>{
-          if(s.isBm) return{...s,treemap:{}};
+          if(s.isBm){
+            // Fetch treemap for each original benchmark item and average
+            try{
+              const bmOriginals=bmRaws.filter(item=>item); // original bm items
+              if(!bmOriginals.length) return{...s,treemap:{}};
+              const fetched=await Promise.all(bmOriginals.map(async item=>{
+                const url=compareBy==='hotel'
+                  ?`/api/treemap_phrases?product_id=${item}`
+                  :`/api/treemap_phrases?brand=${encodeURIComponent(item)}`;
+                const r=await fetch(url); return await r.json();
+              }));
+              // Average mention counts per aspect per treemap_name
+              const merged={};
+              fetched.forEach(d=>{
+                Object.entries(d||{}).forEach(([asp,phrases])=>{
+                  if(!merged[asp])merged[asp]={};
+                  (phrases||[]).forEach(ph=>{
+                    merged[asp][ph.treemap_name]=(merged[asp][ph.treemap_name]||0)+ph.mention_count;
+                  });
+                });
+              });
+              const avgd={};
+              Object.entries(merged).forEach(([asp,tnMap])=>{
+                const n=fetched.length||1;
+                avgd[asp]=Object.entries(tnMap)
+                  .map(([tn,cnt])=>({treemap_name:tn,mention_count:Math.round(cnt/n)}))
+                  .sort((a,b)=>b.mention_count-a.mention_count)
+                  .slice(0,5);
+              });
+              return{...s,treemap:avgd};
+            }catch(e){return{...s,treemap:{}};}
+          }
           try{
             const url=compareBy==='hotel'
               ?`/api/treemap_phrases?product_id=${s.item}`
@@ -1669,15 +1700,16 @@ function buildTreemapChart(points, allStats, asp){
   // ── BEST PRACTICE: Z-order — draw in entity order so colors alternate cleanly
   const sorted=[...jittered].sort((a,b)=>a.entityIdx-b.entityIdx);
 
-  // ── BEST PRACTICE: Opacity 0.72 + white stroke border ────────
+  // All bubbles hollow: outline only, no fill
   svg+=`<g clip-path="url(#cc)">`;
   sorted.forEach(p=>{
     const tip=`onmouseover="showTmTip(event,'${p.label.replace(/'/g,"&#39;")}','${p.x>=1000?Math.round(p.x/1000)+'k':Math.round(p.x)}','${Math.round(p.y)}')" onmouseleave="hideTmTip()" style="cursor:pointer"`;
     if(p.isBm){
-      svg+=`<circle cx="${p.px}" cy="${p.py}" r="${R}" fill="none" stroke="${p.color}" stroke-width="2" stroke-dasharray="4 2" opacity=".75" ${tip}/>`;
+      // Benchmark: dashed outline, no fill
+      svg+=`<circle cx="${p.px}" cy="${p.py}" r="${R}" fill="none" stroke="${p.color}" stroke-width="2" stroke-dasharray="5 3" opacity=".9" ${tip}/>`;
     } else {
-      // Stroke = white at low opacity creates visible border even when overlapping
-      svg+=`<circle cx="${p.px}" cy="${p.py}" r="${R}" fill="${p.color}" opacity=".72" stroke="rgba(255,255,255,.35)" stroke-width="1.5" ${tip}/>`;
+      // Regular: solid outline, no fill — color identifies entity via stroke + label
+      svg+=`<circle cx="${p.px}" cy="${p.py}" r="${R}" fill="none" stroke="${p.color}" stroke-width="2.5" opacity=".9" ${tip}/>`;
     }
   });
   svg+=`</g>`;
@@ -1707,11 +1739,14 @@ function buildTreemapChart(points, allStats, asp){
   });
   svg+=`</g>`;
 
-  // Legend
+  // Legend — hollow circles matching bubble style
   let lx=PL; const ly=H-8;
   allStats.forEach(s=>{
-    if(s.isBm){svg+=`<circle cx="${lx+5}" cy="${ly}" r="4" fill="none" stroke="${s.color}" stroke-width="1.5" stroke-dasharray="3 2"/>`;}
-    else{svg+=`<circle cx="${lx+5}" cy="${ly}" r="4" fill="${s.color}" opacity=".85" stroke="rgba(255,255,255,.3)" stroke-width="1"/>`;}
+    if(s.isBm){
+      svg+=`<circle cx="${lx+5}" cy="${ly}" r="4" fill="none" stroke="${s.color}" stroke-width="1.5" stroke-dasharray="3 2"/>`;
+    } else {
+      svg+=`<circle cx="${lx+5}" cy="${ly}" r="4" fill="none" stroke="${s.color}" stroke-width="2"/>`;
+    }
     svg+=`<text x="${lx+13}" y="${ly+4}" fill="${s.color}" font-size="8.5">${s.isBm?'⌀ ':''}${s.name}</text>`;
     lx+=Math.max(76,s.name.length*5+16);
   });
