@@ -231,6 +231,10 @@ body{background:#0a0814;color:#e2e8f0;min-height:100vh;font-family:'DM Sans',sys
 /* ── Paradox button ────────────────────────── */
 .paradox-btn{background:transparent;border:1px solid rgba(239,68,68,.4);color:#fca5a5;padding:4px 11px;border-radius:6px;font-size:11px;cursor:pointer;display:flex;align-items:center;gap:5px;font-family:inherit;margin-top:8px;transition:all .2s}
 .paradox-btn:hover{background:rgba(239,68,68,.1);border-color:rgba(239,68,68,.6)}
+/* ── Compare aspect filter ─────────────────── */
+.cmp-asp-btn{background:rgba(30,22,52,.6);border:1px solid rgba(45,33,84,.5);color:#6b5ea8;padding:4px 12px;border-radius:20px;font-size:11px;cursor:pointer;font-family:inherit;transition:all .2s}
+.cmp-asp-btn:hover{color:#c4b5fd;border-color:rgba(168,85,247,.3)}
+.cmp-asp-btn.active{background:linear-gradient(135deg,#7c3aed,#5b21b6);color:#fff;border-color:transparent}
 </style>
 </head>
 <body>
@@ -1290,134 +1294,206 @@ async function loadComparison(items,compareBy){
       html+=`<td style="text-align:center">${winner?`<span style="color:${winner.color};font-size:11px;font-weight:700">▲ ${winner.name}</span>`:"<span style='color:#3d3355'>—</span>"}</td></tr>`;
     });
     html+="</tbody></table></div>";
-    // Attribute bubble chart
-    html+=`<div style="margin-bottom:24px"><h3 style="color:#c4b5fd;font-size:14px;font-weight:700;margin-bottom:4px">Attribute Treemap</h3>
-    <p style="color:#5a4e7a;font-size:11px;margin-bottom:10px">X = Review Count · Y = +ve Sentiment % · Bands = Low / Medium / High relative to this dataset</p>
-    ${buildAttributeBubbleChart(allStats,ASPECTS)}</div>`;
-    // Pain & Delights — works for both hotel and brand
+    // Fetch treemap phrases + pain/delights in parallel
     try{
-      const pdResults=await Promise.all(itemStats.map(async s=>{
-        let pain=[],delights=[];
-        try{
-          if(compareBy==="hotel"){
-            const r2=await fetch(`/api/hotel/${s.item}/pain_delights`);const d2=await r2.json();
-            pain=(d2.pain_points||[]).sort((a,b)=>(b.mention_count||0)-(a.mention_count||0)).slice(0,5);
-            delights=(d2.delights||[]).sort((a,b)=>(b.mention_count||0)-(a.mention_count||0)).slice(0,5);
-          } else {
-            const r2=await fetch(`/api/brand/${encodeURIComponent(s.item)}/summary`);const d2=await r2.json();
-            pain=(d2.pain_points||[]).slice(0,5);delights=(d2.delights||[]).slice(0,5);
-          }
-        }catch(e){}
-        return{...s,pain,delights};
-      }));
-      html+=`<div><h3 style="color:#c4b5fd;font-size:14px;font-weight:700;margin-bottom:12px">Top Pain Points & Delights</h3>
-      <div style="display:grid;grid-template-columns:repeat(${pdResults.length},1fr);gap:12px">`;
-      pdResults.forEach(item=>{
-        html+=`<div style="background:rgba(15,11,28,.6);border-radius:10px;padding:14px;border-top:3px solid ${item.color}">
-        <div style="color:${item.color};font-size:12px;font-weight:700;margin-bottom:10px">${item.name}</div>
-        <div style="color:#d55e00;font-size:11px;font-weight:600;margin-bottom:5px">⚠ Pain Points</div>
-        ${item.pain.length?item.pain.map(p=>`<div style="padding:4px 0;border-bottom:1px solid rgba(45,33,84,.2);color:#fdba74;font-size:11px;display:flex;justify-content:space-between"><span>• ${escHtml(p.phrase)}</span><span style="color:#4a3f6b">${p.mention_count||""}</span></div>`).join(""):"<div style='color:#3d3355;font-size:11px;padding:4px 0'>No data</div>"}
-        <div style="color:#56b4e9;font-size:11px;font-weight:600;margin:10px 0 5px">★ Delights</div>
-        ${item.delights.length?item.delights.map(d=>`<div style="padding:4px 0;border-bottom:1px solid rgba(45,33,84,.2);color:#93c5fd;font-size:11px;display:flex;justify-content:space-between"><span>• ${escHtml(d.phrase)}</span><span style="color:#4a3f6b">${d.mention_count||""}</span></div>`).join(""):"<div style='color:#3d3355;font-size:11px;padding:4px 0'>No data</div>"}
-        </div>`;
-      });
-      html+="</div></div>";
-    }catch(e2){console.warn("Pain/delight compare:",e2);}
-    document.getElementById("comparisonContent").innerHTML=html;
-  }catch(e){console.error(e);document.getElementById("comparisonContent").innerHTML='<div class="no-data" style="text-align:center;padding:2rem">Error loading comparison</div>';}
+      const [tmResults, pdResults] = await Promise.all([
+        // Treemap: top 5 treemap_names per aspect from product_phrases
+        Promise.all(allStats.map(async s=>{
+          if(s.isBm) return{...s,treemap:{}};
+          try{
+            const url=compareBy==='hotel'
+              ?`/api/treemap_phrases?product_id=${s.item}`
+              :`/api/treemap_phrases?brand=${encodeURIComponent(s.item)}`;
+            const r=await fetch(url); const d=await r.json();
+            return{...s,treemap:d||{}};
+          }catch(e){return{...s,treemap:{}};}
+        })),
+        // Pain/delights
+        Promise.all(itemStats.map(async s=>{
+          let pain=[],delights=[],rd={feature_request:[],price_feedback:[],expectation_gap:[]};
+          try{
+            if(compareBy==='hotel'){
+              const r2=await fetch(`/api/hotel/${s.item}/pain_delights`);const d2=await r2.json();
+              pain=(d2.pain_points||[]).sort((a,b)=>(b.mention_count||0)-(a.mention_count||0));
+              delights=(d2.delights||[]).sort((a,b)=>(b.mention_count||0)-(a.mention_count||0));
+              const r3=await fetch(`/api/hotel/${s.item}/rd_signals`);const d3=await r3.json();
+              rd=d3.rd_signals||rd;
+            } else {
+              const r2=await fetch(`/api/brand/${encodeURIComponent(s.item)}/summary`);const d2=await r2.json();
+              pain=d2.pain_points||[];delights=d2.delights||[];rd=d2.rd_signals||rd;
+            }
+          }catch(e){}
+          return{...s,pain,delights,rd};
+        }))
+      ]);
+
+      // Merge treemap data into allStats
+      const tmByItem={};
+      tmResults.forEach(s=>tmByItem[s.item]=s.treemap||{});
+
+      // Store compare state for aspect-filter re-render
+      window._cmpState={allStats,tmByItem,pdResults,itemStats};
+
+      // ── Aspect filter bar ─────────────────────────────────────────────
+      const ASPECTS_F=['Dining','Cleanliness','Amenities','Staff','Room','Location','Value for Money'];
+      html+=`<div id="cmpAspectBar" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;padding:10px 0;border-bottom:1px solid rgba(45,33,84,.3)">
+        <span style="color:#5a4e7a;font-size:11px;font-weight:600;align-self:center;margin-right:4px">Filter:</span>
+        <button class="cmp-asp-btn active" onclick="setCmpAspect('all',this)">All Aspects</button>
+        ${ASPECTS_F.map(a=>`<button class="cmp-asp-btn" onclick="setCmpAspect('${a}',this)">${a}</button>`).join('')}
+      </div>`;
+
+      // Initial render with 'all' selected
+      html+=`<div id="cmpDynamicSection"></div>`;
+
+      document.getElementById('comparisonContent').innerHTML=html;
+      renderCmpDynamic('all');
+
+    }catch(e2){
+      console.warn('Compare dynamic section:',e2);
+      document.getElementById('comparisonContent').innerHTML=html;
+    }
+  }catch(e){console.error(e);document.getElementById('comparisonContent').innerHTML='<div class="no-data" style="text-align:center;padding:2rem">Error loading comparison</div>';}
 }
 
-function buildAttributeBubbleChart(allStats, aspects){
-  // Collect all data points: one bubble per entity × aspect
+// ─── COMPARE ASPECT FILTER ────────────────────────────────────
+function setCmpAspect(asp, btn){
+  document.querySelectorAll('.cmp-asp-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  renderCmpDynamic(asp);
+}
+
+function renderCmpDynamic(asp){
+  const{allStats,tmByItem,pdResults,itemStats}=window._cmpState||{};
+  if(!allStats)return;
+  const ASPECTS_F=['Dining','Cleanliness','Amenities','Staff','Room','Location','Value for Money'];
+
+  // ── Treemap ──────────────────────────────────────────────────
+  // Build points: one bubble per entity per treemap_name in selected aspect
   const points=[];
   allStats.forEach(s=>{
-    aspects.forEach(asp=>{
-      const a=(s.aspects||[]).find(x=>x.aspect_name===asp);
-      const sat=a?(a.satisfaction_pct||a.satisfaction||0):0;
-      const men=a?(a.total_mentions||0):0;
-      if(sat>0&&men>0) points.push({entity:s,asp,sat,men,color:s.color,isBm:s.isBm});
+    const tm=tmByItem[s.item]||{};
+    const aspKeys=asp==='all'?ASPECTS_F:[asp];
+    aspKeys.forEach(aspName=>{
+      const aspSat=((s.aspects||[]).find(a=>a.aspect_name===aspName)||{}).satisfaction_pct||
+                   ((s.aspects||[]).find(a=>a.aspect_name===aspName)||{}).satisfaction||0;
+      (tm[aspName]||[]).forEach(ph=>{
+        if(!ph.treemap_name||!ph.mention_count)return;
+        points.push({label:ph.treemap_name, x:ph.mention_count, y:aspSat||0,
+                     color:s.color, isBm:s.isBm, asp:aspName});
+      });
     });
   });
-  if(!points.length)return'<div class="no-data">No aspect data</div>';
 
-  const allSat=points.map(p=>p.sat);
-  const allMen=points.map(p=>p.men);
-  const minSat=Math.max(0,Math.floor((Math.min(...allSat)-5)/10)*10);
-  const maxSat=Math.min(100,Math.ceil((Math.max(...allSat)+5)/10)*10);
-  const maxMen=Math.max(...allMen);
+  // ── Pain / Delight / RD filtered lists ───────────────────────
+  const nonBmPd=pdResults.filter(s=>!s.isBm);
+  const filterByAsp=(arr)=>asp==='all'?arr:arr.filter(p=>(p.aspect_name||'').toLowerCase()===(asp||'').toLowerCase());
+
+  let dyn='';
+
+  // Treemap chart
+  dyn+=`<div style="margin-bottom:20px"><h3 style="color:#c4b5fd;font-size:13px;font-weight:700;margin-bottom:4px">Attribute Treemap ${asp!=='all'?'— '+asp:''}</h3>
+  <p style="color:#5a4e7a;font-size:10px;margin-bottom:8px">X = Mention count · Y = Aspect satisfaction % · Label = treemap name · Color = entity</p>
+  ${buildTreemapChart(points,allStats)}</div>`;
+
+  // Pain / Delights
+  dyn+=`<div style="margin-bottom:20px"><h3 style="color:#c4b5fd;font-size:13px;font-weight:700;margin-bottom:10px">Pain Points & Delights ${asp!=='all'?'— '+asp:''}</h3>
+  <div style="display:grid;grid-template-columns:repeat(${nonBmPd.length},1fr);gap:10px">`;
+  nonBmPd.forEach(item=>{
+    const fp=filterByAsp(item.pain||[]).slice(0,5);
+    const fd=filterByAsp(item.delights||[]).slice(0,5);
+    dyn+=`<div style="background:rgba(15,11,28,.6);border-radius:10px;padding:12px;border-top:3px solid ${item.color}">
+      <div style="color:${item.color};font-size:12px;font-weight:700;margin-bottom:9px">${item.name}</div>
+      <div style="color:#d55e00;font-size:10px;font-weight:700;margin-bottom:4px">⚠ Pain Points</div>
+      ${fp.length?fp.map(p=>`<div style="padding:3px 0;border-bottom:1px solid rgba(45,33,84,.15);color:#fdba74;font-size:10px;display:flex;justify-content:space-between"><span>• ${escHtml(p.phrase)}</span><span style="color:#4a3f6b;font-family:monospace">${p.mention_count||''}</span></div>`).join(''):`<div style="color:#3d3355;font-size:10px;padding:3px 0">No data</div>`}
+      <div style="color:#56b4e9;font-size:10px;font-weight:700;margin:8px 0 4px">★ Delights</div>
+      ${fd.length?fd.map(d=>`<div style="padding:3px 0;border-bottom:1px solid rgba(45,33,84,.15);color:#93c5fd;font-size:10px;display:flex;justify-content:space-between"><span>• ${escHtml(d.phrase)}</span><span style="color:#4a3f6b;font-family:monospace">${d.mention_count||''}</span></div>`).join(''):`<div style="color:#3d3355;font-size:10px;padding:3px 0">No data</div>`}
+    </div>`;
+  });
+  dyn+='</div></div>';
+
+  // RD Signals
+  dyn+=`<div><h3 style="color:#c4b5fd;font-size:13px;font-weight:700;margin-bottom:10px">R&D Signals ${asp!=='all'?'— '+asp:''}</h3>
+  <div style="display:grid;grid-template-columns:repeat(${nonBmPd.length},1fr);gap:10px">`;
+  nonBmPd.forEach(item=>{
+    const rd=item.rd||{};
+    dyn+=`<div style="background:rgba(15,11,28,.6);border-radius:10px;padding:12px;border-top:3px solid ${item.color}">
+      <div style="color:${item.color};font-size:12px;font-weight:700;margin-bottom:9px">${item.name}</div>
+      <div style="color:#e69f00;font-size:10px;font-weight:700;margin-bottom:4px">💡 Feature Requests</div>
+      ${(rd.feature_request||[]).slice(0,4).map(r=>`<div style="color:#fde68a;font-size:10px;padding:2px 0;border-bottom:1px solid rgba(45,33,84,.15)">• ${escHtml(r.phrase)}</div>`).join('')||`<div style="color:#3d3355;font-size:10px">No data</div>`}
+      <div style="color:#cc79a7;font-size:10px;font-weight:700;margin:7px 0 3px">💰 Price Feedback</div>
+      ${(rd.price_feedback||[]).slice(0,4).map(r=>`<div style="color:#f0abca;font-size:10px;padding:2px 0;border-bottom:1px solid rgba(45,33,84,.15)">• ${escHtml(r.phrase)}</div>`).join('')||`<div style="color:#3d3355;font-size:10px">No data</div>`}
+    </div>`;
+  });
+  dyn+='</div></div>';
+
+  document.getElementById('cmpDynamicSection').innerHTML=dyn;
+}
+
+function buildTreemapChart(points, allStats){
+  if(!points.length)return'<div class="no-data" style="padding:1rem">No treemap data for this selection</div>';
+
+  const allSat=points.map(p=>p.y).filter(v=>v>0);
+  const allMen=points.map(p=>p.x).filter(v=>v>0);
+  if(!allSat.length||!allMen.length)return'<div class="no-data" style="padding:1rem">No data</div>';
+
+  const minSat=Math.max(0,Math.floor((Math.min(...allSat)-8)/10)*10);
+  const maxSat=Math.min(100,Math.ceil((Math.max(...allSat)+8)/10)*10);
+  const maxMen=Math.max(...allMen)||1;
   const satRange=maxSat-minSat||1;
+  const bandLow=minSat+satRange/3, bandHigh=minSat+2*satRange/3;
 
-  // Three horizontal bands based on actual satisfaction range
-  const bandLow=minSat+satRange/3;
-  const bandHigh=minSat+2*satRange/3;
-
-  const W=700,H=400,PL=52,PR=20,PT=20,PB=56;
+  const W=680,H=340,PL=46,PR=56,PT=24,PB=42;
   const CW=W-PL-PR, CH=H-PT-PB;
-  const toX=men=>PL+(men/maxMen)*CW;
-  const toY=sat=>PT+CH*(1-(sat-minSat)/satRange);
-  const R=18; // fixed radius — clean like the screenshot
+  const toX=v=>PL+(v/maxMen)*CW;
+  const toY=v=>PT+CH*(1-(v-minSat)/satRange);
+  const R=10; // Small fixed radius
 
-  let svg=`<svg width="100%" viewBox="0 0 ${W} ${H}" style="display:block;overflow:visible">`;
+  let svg=`<svg width="100%" viewBox="0 0 ${W} ${H}" style="display:block">`;
 
-  // Band fills
-  const yHigh=toY(bandHigh), yLow=toY(bandLow), yTop=toY(maxSat), yBot=toY(minSat);
-  svg+=`<rect x="${PL}" y="${yTop}" width="${CW}" height="${yHigh-yTop}" fill="rgba(0,158,115,.07)" rx="2"/>`;
-  svg+=`<rect x="${PL}" y="${yHigh}" width="${CW}" height="${yLow-yHigh}" fill="rgba(0,114,178,.06)" rx="2"/>`;
-  svg+=`<rect x="${PL}" y="${yLow}" width="${CW}" height="${yBot-yLow}" fill="rgba(213,94,0,.06)" rx="2"/>`;
+  // Bands
+  const yH=toY(bandHigh),yL=toY(bandLow),yT=toY(maxSat),yB=toY(minSat);
+  svg+=`<rect x="${PL}" y="${yT}" width="${CW}" height="${yH-yT}" fill="rgba(0,158,115,.08)"/>`;
+  svg+=`<rect x="${PL}" y="${yH}" width="${CW}" height="${yL-yH}" fill="rgba(0,114,178,.07)"/>`;
+  svg+=`<rect x="${PL}" y="${yL}" width="${CW}" height="${yB-yL}" fill="rgba(213,94,0,.07)"/>`;
+  svg+=`<text x="${W-PR+5}" y="${(yT+yH)/2+4}" fill="#009e73" font-size="9" font-weight="600">High</text>`;
+  svg+=`<text x="${W-PR+5}" y="${(yH+yL)/2+4}" fill="#0072b2" font-size="9" font-weight="600">Med</text>`;
+  svg+=`<text x="${W-PR+5}" y="${(yL+yB)/2+4}" fill="#d55e00" font-size="9" font-weight="600">Low</text>`;
 
-  // Band labels on right edge
-  svg+=`<text x="${W-PR+4}" y="${(yTop+yHigh)/2+4}" fill="#009e73" font-size="9" font-weight="600">High</text>`;
-  svg+=`<text x="${W-PR+4}" y="${(yHigh+yLow)/2+4}" fill="#0072b2" font-size="9" font-weight="600">Med</text>`;
-  svg+=`<text x="${W-PR+4}" y="${(yLow+yBot)/2+4}" fill="#d55e00" font-size="9" font-weight="600">Low</text>`;
-
-  // Y axis grid + labels
-  const yTicks=[minSat, Math.round(bandLow), Math.round(bandHigh), maxSat];
-  yTicks.forEach(v=>{
+  // Grid + Y axis labels
+  [minSat,Math.round(bandLow),Math.round(bandHigh),maxSat].forEach(v=>{
     const y=toY(v);
-    svg+=`<line x1="${PL}" y1="${y}" x2="${W-PR}" y2="${y}" stroke="rgba(255,255,255,.06)" stroke-width="1"/>`;
-    svg+=`<text x="${PL-5}" y="${y+4}" fill="#4a3f6b" font-size="9" text-anchor="end">${v}%</text>`;
+    svg+=`<line x1="${PL}" y1="${y}" x2="${W-PR}" y2="${y}" stroke="rgba(255,255,255,.05)" stroke-width="1"/>`;
+    svg+=`<text x="${PL-4}" y="${y+4}" fill="#4a3f6b" font-size="8" text-anchor="end">${v}%</text>`;
   });
+  svg+=`<line x1="${PL}" y1="${PT}" x2="${PL}" y2="${H-PB}" stroke="rgba(255,255,255,.08)" stroke-width="1"/>`;
+  svg+=`<line x1="${PL}" y1="${H-PB}" x2="${W-PR}" y2="${H-PB}" stroke="rgba(255,255,255,.08)" stroke-width="1"/>`;
 
-  // Axes
-  svg+=`<line x1="${PL}" y1="${PT}" x2="${PL}" y2="${H-PB}" stroke="rgba(255,255,255,.1)" stroke-width="1"/>`;
-  svg+=`<line x1="${PL}" y1="${H-PB}" x2="${W-PR}" y2="${H-PB}" stroke="rgba(255,255,255,.1)" stroke-width="1"/>`;
-
-  // X axis ticks
+  // X ticks
   [0,0.25,0.5,0.75,1].forEach(f=>{
-    const x=PL+f*CW;
-    const val=Math.round(f*maxMen);
-    const lbl=val>=1000?Math.round(val/1000)+'k':val;
-    svg+=`<text x="${x}" y="${H-PB+13}" fill="#4a3f6b" font-size="9" text-anchor="middle">${lbl}</text>`;
+    const x=PL+f*CW, val=Math.round(f*maxMen);
+    svg+=`<text x="${x}" y="${H-PB+12}" fill="#4a3f6b" font-size="8" text-anchor="middle">${val>=1000?Math.round(val/1000)+'k':val}</text>`;
   });
+  svg+=`<text x="${PL+CW/2}" y="${H-2}" fill="#4a3f6b" font-size="9" text-anchor="middle">Mention Count</text>`;
+  svg+=`<text x="10" y="${PT+CH/2}" fill="#4a3f6b" font-size="9" text-anchor="middle" transform="rotate(-90,10,${PT+CH/2})">Satisfaction %</text>`;
 
-  // Axis titles
-  svg+=`<text x="${PL+CW/2}" y="${H-4}" fill="#5a4e7a" font-size="10" text-anchor="middle">Review Count</text>`;
-  svg+=`<text x="12" y="${PT+CH/2}" fill="#5a4e7a" font-size="10" text-anchor="middle" transform="rotate(-90,12,${PT+CH/2})">+ve Sentiment %</text>`;
-
-  // Bubbles
+  // Draw bubbles (circles first)
   points.forEach(p=>{
-    const x=toX(p.men), y=toY(p.sat);
-    const shortAsp=p.asp.replace('Value for Money','Value').replace('Cleanliness','Clean');
-    const label=`${p.entity.name.length>10?p.entity.name.substring(0,9)+'…':p.entity.name} ${shortAsp}`;
-    if(p.isBm){
-      svg+=`<circle cx="${x}" cy="${y}" r="${R}" fill="none" stroke="${p.color}" stroke-width="1.5" stroke-dasharray="4 2" opacity=".8"/>`;
-      svg+=`<text x="${x}" y="${y-R-4}" fill="${p.color}" font-size="9" text-anchor="middle">${label}</text>`;
-    }else{
-      svg+=`<circle cx="${x}" cy="${y}" r="${R}" fill="${p.color}" opacity=".87"/>`;
-      svg+=`<text x="${x}" y="${y-R-4}" fill="${p.color}" font-size="9" text-anchor="middle">${label}</text>`;
-    }
+    const x=toX(p.x),y=toY(p.y);
+    svg+=`<circle cx="${x}" cy="${y}" r="${R}" fill="${p.color}" opacity=".82"/>`;
+  });
+  // Labels above each bubble (treemap_name only)
+  points.forEach(p=>{
+    const x=toX(p.x),y=toY(p.y);
+    const lbl=p.label.length>14?p.label.substring(0,13)+'…':p.label;
+    svg+=`<text x="${x}" y="${y-R-3}" fill="${p.color}" font-size="8.5" text-anchor="middle" font-weight="500">${lbl}</text>`;
   });
 
-  // Legend top-center
-  let lx=PL; const legendY=10;
-  allStats.forEach(s=>{
-    if(s.isBm){
-      svg+=`<circle cx="${lx+6}" cy="${legendY}" r="5" fill="none" stroke="${s.color}" stroke-width="1.5" stroke-dasharray="3 2"/>`;
-    }else{
-      svg+=`<circle cx="${lx+6}" cy="${legendY}" r="5" fill="${s.color}"/>`;
-    }
-    svg+=`<text x="${lx+14}" y="${legendY+4}" fill="${s.color}" font-size="9">${s.isBm?'⌀ ':''  }${s.name}</text>`;
-    lx+=Math.max(90, s.name.length*6+20);
+  // Legend bottom
+  let lx=PL; const ly=H-4;
+  allStats.filter(s=>!s.isBm).forEach(s=>{
+    svg+=`<circle cx="${lx+4}" cy="${ly}" r="4" fill="${s.color}"/>`;
+    svg+=`<text x="${lx+11}" y="${ly+4}" fill="${s.color}" font-size="8.5">${s.name}</text>`;
+    lx+=Math.max(80,s.name.length*5+16);
   });
 
   svg+='</svg>';

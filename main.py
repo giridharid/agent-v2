@@ -1356,9 +1356,63 @@ Remember: Use the EXACT numbers from the data above. Do NOT invent any numbers. 
         traceback.print_exc()
         return {"response": f"Error: {str(e)}", "conversation_id": None}
 
-# ─────────────────────────────────────────
-# SEGMENT APIs (for heatmaps)
-# ─────────────────────────────────────────
+@app.get("/api/treemap_phrases")
+async def get_treemap_phrases(
+    product_id: Optional[int] = None,
+    brand: Optional[str] = None,
+    limit: int = 5
+):
+    """Top treemap phrases per aspect from product_phrases, excluding General."""
+    client = get_bq()
+    if not client:
+        return {}
+
+    VALID_ASPECTS = {1:"Dining",2:"Cleanliness",3:"Amenities",4:"Staff",5:"Room",6:"Location",7:"Value for Money"}
+
+    results = {}  # aspect_name -> [phrases]
+
+    try:
+        if product_id:
+            query = f"""
+            SELECT aspect_id, treemap_name, SUM(mention_count) as mention_count
+            FROM `{PROJECT}.{DATASET}.product_phrases`
+            WHERE product_id = {product_id}
+              AND treemap_name IS NOT NULL AND TRIM(treemap_name) != ''
+              AND aspect_id IN ({','.join(str(k) for k in VALID_ASPECTS)})
+            GROUP BY aspect_id, treemap_name
+            ORDER BY aspect_id, mention_count DESC
+            """
+        elif brand:
+            safe = brand.replace("'", "''")
+            query = f"""
+            SELECT p.aspect_id, p.treemap_name, SUM(p.mention_count) as mention_count
+            FROM `{PROJECT}.{DATASET}.product_phrases` p
+            JOIN `{PROJECT}.{DATASET}.hotel_master` h ON p.product_id = h.product_id
+            WHERE h.brand_name = '{safe}'
+              AND p.treemap_name IS NOT NULL AND TRIM(p.treemap_name) != ''
+              AND p.aspect_id IN ({','.join(str(k) for k in VALID_ASPECTS)})
+            GROUP BY p.aspect_id, p.treemap_name
+            ORDER BY p.aspect_id, mention_count DESC
+            """
+        else:
+            return {}
+
+        df = client.query(query).to_dataframe()
+
+        for asp_id, asp_name in VALID_ASPECTS.items():
+            asp_rows = df[df['aspect_id'] == asp_id].head(limit)
+            if not asp_rows.empty:
+                results[asp_name] = [
+                    {"treemap_name": str(r['treemap_name']), "mention_count": int(r['mention_count'])}
+                    for _, r in asp_rows.iterrows()
+                ]
+
+    except Exception as e:
+        print(f"[TREEMAP_PHRASES ERROR] {e}")
+
+    return results
+
+
 @app.get("/api/hotel/{product_id}/segment_aspect")
 async def get_segment_aspect(product_id: int):
     """Get segment x aspect matrix for heatmaps"""
