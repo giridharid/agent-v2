@@ -302,6 +302,19 @@ body.light .sub-tab{color:var(--text3);border-color:var(--border)}
 body.light .sub-tab.active{background:var(--accent);color:#fff}
 body.light .logo-name{color:var(--accent)}
 body.light .logo-sub{color:var(--text3)}
+body.light .cmp-asp-btn{background:rgba(124,58,237,.08);color:#5b21b6;border-color:rgba(124,58,237,.25)}
+body.light .cmp-asp-btn:hover{background:rgba(124,58,237,.15);color:#4c1d95}
+body.light .cmp-asp-btn.active{background:linear-gradient(135deg,#7c3aed,#5b21b6);color:#fff}
+body.light .sig-card{background:var(--card-bg);border:1px solid var(--card-border)}
+body.light .sig-item{border-bottom:1px solid var(--card-border)}
+body.light .sig-item.pain{border-left:2px solid #d55e00}
+body.light .sig-item.delight{border-left:2px solid #0072b2}
+body.light .sig-meta{color:var(--text3)!important}
+body.light .sig-cnt{color:var(--text4)!important}
+body.light .rd-col-title{color:var(--text2)!important}
+body.light .rd-item{color:var(--text2)!important}
+body.light .no-data{color:var(--text4)}
+body.light #tmTooltip{background:var(--bg4);border-color:var(--border2);box-shadow:0 4px 20px var(--shadow)}
 .paradox-btn{background:transparent;border:1px solid rgba(239,68,68,.4);color:#fca5a5;padding:4px 11px;border-radius:6px;font-size:11px;cursor:pointer;display:flex;align-items:center;gap:5px;font-family:inherit;margin-top:8px;transition:all .2s}
 .paradox-btn:hover{background:rgba(239,68,68,.1);border-color:rgba(239,68,68,.6)}
 /* ── Compare aspect filter ─────────────────── */
@@ -1027,6 +1040,11 @@ async function runHotelComparison(){
 }
 
 // ─── COMPARE PHRASE DRILLDOWN ────────────────────────────────
+function handleBrandDrill(el, signalType){
+  const phrase=el.dataset.phrase||el.closest('[data-phrase]')?.dataset.phrase||'';
+  const brand=el.dataset.brand||el.closest('[data-brand]')?.dataset.brand||currentBrand||'';
+  if(phrase&&brand) cmpDrilldown(phrase, brand, signalType, 'brand');
+}
 async function cmpDrilldown(phrase, entityItem, signalType, cmpBy){
   console.log('[cmpDrilldown]', {phrase, entityItem, signalType, cmpBy});
   const SIGNAL_COLORS={pain_point:'#f97316',delight:'#56b4e9',rd_signal:'#cc79a7'};
@@ -1399,9 +1417,9 @@ function renderFilteredPains(){
   ).sort((a,b)=>(b.mention_count||0)-(a.mention_count||0));
   document.getElementById('painPointsList').innerHTML=filtered.length
     ?filtered.slice(0,10).map(p=>{
-      const fn=isBrand?`cmpDrilldown('${escHtml(p.phrase)}','${escHtml(currentBrand)}','pain_point','brand')`:
-                       `openDrilldown(${pid},'${escHtml(p.phrase)}','pain_point')`;
-      return `<div class="sig-item pain" onclick="${fn}">
+      const d=JSON.stringify(p.phrase).replace(/'/g,"&#39;");
+      const fn=isBrand?`handleBrandDrill(this,'pain_point')`:`openDrilldown(${pid},this.dataset.phrase,'pain_point')`;
+      return `<div class="sig-item pain" onclick="${fn}" data-phrase='${p.phrase.replace(/'/g,"&#39;")}' data-brand='${(currentBrand||'').replace(/'/g,"&#39;")}'>
         <span class="sig-txt-r">${escHtml(p.phrase)}</span>
         <span style="display:flex;align-items:center;gap:5px">
           ${p.aspect_name?`<span class="sig-meta">${escHtml(p.aspect_name)}</span>`:''}
@@ -1419,9 +1437,8 @@ function renderFilteredDelights(){
   ).sort((a,b)=>(b.mention_count||0)-(a.mention_count||0));
   document.getElementById('delightsList').innerHTML=filtered.length
     ?filtered.slice(0,10).map(d=>{
-      const fn=isBrand?`cmpDrilldown('${escHtml(d.phrase)}','${escHtml(currentBrand)}','delight','brand')`:
-                       `openDrilldown(${pid},'${escHtml(d.phrase)}','delight')`;
-      return `<div class="sig-item delight" onclick="${fn}">
+      const fn=isBrand?`handleBrandDrill(this,'delight')`:`openDrilldown(${pid},this.dataset.phrase,'delight')`;
+      return `<div class="sig-item delight" onclick="${fn}" data-phrase='${d.phrase.replace(/'/g,"&#39;")}' data-brand='${(currentBrand||'').replace(/'/g,"&#39;")}'>
         <span class="sig-txt-g">${escHtml(d.phrase)}</span>
         <span style="display:flex;align-items:center;gap:5px">
           ${d.aspect_name?`<span class="sig-meta">${escHtml(d.aspect_name)}</span>`:''}
@@ -2034,7 +2051,7 @@ document.addEventListener('mousemove',e=>{if(document.getElementById('tmTooltip'
 <div class="footer">
   <span>© 2026 Acquink</span>
   <span>Powered by <span class="masi">MASI</span> Technology</span>
-  <span>v2.46 — 2026-04-13</span>
+  <span>v2.47 — 2026-04-13</span>
 </div>
 </body>
 </html>
