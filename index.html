@@ -682,12 +682,15 @@ body.light #tmTooltip{background:var(--bg4);border-color:var(--border2);box-shad
 
   <!-- Action Items by Department -->
   <div id="rdSignalsRow" class="hidden">
-    <div class="card-title" style="margin-bottom:10px">🎯 Action Items <span style="color:#3d3355;font-size:10px;font-weight:400">by department</span></div>
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
-      <div class="rd-col" id="featureRequestsList"></div>
-      <div class="rd-col" id="priceFeedbackList" style="display:none"></div>
-      <div class="rd-col" id="expectationGapList" style="display:none"></div>
+    <div class="card-title" style="margin-bottom:10px">🎯 Action Items <span style="color:var(--text5);font-size:10px;font-weight:400">AI-generated department insights</span></div>
+    <div id="actionItemsContent">
+      <button id="getActionInsightsBtn" onclick="getActionInsights()" style="width:100%;padding:14px;background:linear-gradient(135deg,rgba(124,58,237,.15),rgba(99,102,241,.1));border:1px dashed rgba(168,85,247,.35);border-radius:10px;color:var(--accent2);font-size:13px;cursor:pointer;font-family:inherit;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:8px">
+        <span>✨</span><span>Get Action Insights by Department</span>
+      </button>
     </div>
+    <div id="featureRequestsList" style="display:none"></div>
+    <div id="priceFeedbackList" style="display:none"></div>
+    <div id="expectationGapList" style="display:none"></div>
   </div>
 
   <div id="comparisonTab" class="tab-panel hidden">
@@ -2190,7 +2193,19 @@ function fmtDate(s){try{return new Date(s).toLocaleDateString('en-US',{month:'sh
 function getHeatClass(v){if(v>=80)return'heat-vhigh';if(v>=65)return'heat-high';if(v>=50)return'heat-mid';if(v>=35)return'heat-low';return'heat-vlow';}
 function getHeatClassInv(v){if(v<=10)return'heat-vhigh';if(v<=20)return'heat-high';if(v<=35)return'heat-mid';if(v<=50)return'heat-low';return'heat-vlow';}
 
-// ── Theme toggle ──────────────────────────────────────────────
+// ── Action Insights ─────────────────────────────────────────
+async function getActionInsights(){
+  const btn=document.getElementById('getActionInsightsBtn');
+  if(btn){btn.textContent='⏳ Generating insights…';btn.disabled=true;}
+  // Build context from cached rd signals
+  const entity=currentHotelName||currentBrand||'this property';
+  const msg=`Based on the R&D signals and guest feedback for ${entity}, provide department-by-department action items. For each department (F&B, Housekeeping, Guest Relations, Operations, Revenue), list the top 2-3 specific actions the team should take, with urgency level. Be concise and operational.`;
+  // Open chat panel and send
+  openChat();
+  await new Promise(r=>setTimeout(r,300)); // let panel open
+  await sendMessage(msg);
+  if(btn){btn.textContent='✨ Get Action Insights by Department';btn.disabled=false;}
+}
 function applyTheme(light){
   document.body.classList.toggle('light', light);
   const btn=document.getElementById('themeToggle');
@@ -2227,7 +2242,7 @@ document.addEventListener('mousemove',e=>{if(document.getElementById('tmTooltip'
 <div class="footer">
   <span>© 2026 Acquink</span>
   <span>Powered by <span class="masi">MASI</span> Technology</span>
-  <span>v2.57 — 2026-04-14</span>
+  <span>v2.58 — 2026-04-14</span>
 </div>
 </body>
 </html>
