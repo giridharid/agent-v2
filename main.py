@@ -1015,39 +1015,46 @@ async def drilldown(request: DrilldownRequest):
     client = get_bq()
     if not client:
         raise HTTPException(status_code=500, detail="Database unavailable")
-    
+
+    safe_phrase = request.phrase.replace("'", "''")
+
     if request.signal_type == "pain_point":
-        filter_clause = "pain_point = 1 AND sentiment_type = 'negative'"
+        sentiment_filter = "AND sentiment_type = 'negative'"
     elif request.signal_type == "delight":
-        filter_clause = "delight = 1 AND sentiment_type = 'positive'"
-    elif request.signal_type == "rd_signal":
-        filter_clause = "rd_signal IS NOT NULL"
+        sentiment_filter = "AND sentiment_type = 'positive'"
     else:
-        filter_clause = "1=1"
-    
-    query = f"""
-    SELECT review_text, sentiment_text, star_rating, reviewer_name,
-           review_date, traveler_type, stay_purpose, emotion
-    FROM `{PROJECT}.{DATASET}.review_drilldown`
-    WHERE CAST(product_id AS STRING) = CAST({request.product_id} AS STRING)
-      AND LOWER(phrase) = LOWER('{request.phrase.replace("'", "''")}') 
-      AND {filter_clause}
-    LIMIT {request.limit}
-    """
-    
+        sentiment_filter = ""
+
     try:
-        df = client.query(query).to_dataframe()
-        reviews = df.to_dict(orient='records')
-        count_query = f"""
-        SELECT COUNT(*) as total
+        # Try 1: phrase column match (fast, exact)
+        query = f"""
+        SELECT review_text, sentiment_text, star_rating, reviewer_name,
+               review_date, traveler_type, stay_purpose, emotion
         FROM `{PROJECT}.{DATASET}.review_drilldown`
-        WHERE CAST(product_id AS STRING) = CAST({request.product_id} AS STRING)
-          AND LOWER(phrase) = LOWER('{request.phrase.replace("'", "''")}')
-          AND {filter_clause}
+        WHERE CAST(product_id AS STRING) = '{request.product_id}'
+          AND LOWER(phrase) = LOWER('{safe_phrase}')
+          {sentiment_filter}
+        LIMIT {request.limit}
         """
-        count_df = client.query(count_query).to_dataframe()
-        total_count = int(count_df.iloc[0]['total'])
-        return {"reviews": reviews, "total_count": total_count, "phrase": request.phrase, "signal_type": request.signal_type}
+        df = client.query(query).to_dataframe()
+
+        # Try 2: review_text LIKE fallback (phrase column may not match)
+        if df.empty:
+            query2 = f"""
+            SELECT review_text, sentiment_text, star_rating, reviewer_name,
+                   review_date, traveler_type, stay_purpose, emotion
+            FROM `{PROJECT}.{DATASET}.review_drilldown`
+            WHERE CAST(product_id AS STRING) = '{request.product_id}'
+              AND LOWER(review_text) LIKE LOWER('%{safe_phrase}%')
+              {sentiment_filter}
+            LIMIT {request.limit}
+            """
+            df = client.query(query2).to_dataframe()
+            print(f"[DRILLDOWN] LIKE fallback: {len(df)} rows for pid={request.product_id} phrase='{request.phrase}'")
+
+        reviews = df.to_dict(orient='records')
+        return {"reviews": reviews, "total": len(reviews), "total_count": len(reviews),
+                "phrase": request.phrase, "signal_type": request.signal_type}
     except Exception as e:
         print(f"[DRILLDOWN ERROR] {e}")
         return {"reviews": [], "total_count": 0, "error": str(e)}
@@ -1055,7 +1062,8 @@ async def drilldown(request: DrilldownRequest):
 
 @app.post("/api/brand_drilldown")
 async def brand_drilldown(request: Request):
-    """Get reviews for a phrase across all hotels of a brand — uses product_ids for reliability"""
+    """Get reviews mentioning a phrase across all hotels of a brand.
+    Uses review_text LIKE search — avoids phrase column mismatch issues."""
     client = get_bq()
     if not client:
         raise HTTPException(status_code=500, detail="Database unavailable")
@@ -1069,52 +1077,36 @@ async def brand_drilldown(request: Request):
     print(f"[BRAND_DRILLDOWN] brand='{brand}', phrase='{phrase}'")
 
     try:
-        # Step 1: Get all product_ids for this brand (exact + LIKE fallback)
-        pid_query = f"""
-        SELECT CAST(product_id AS STRING) as product_id FROM `{PROJECT}.{DATASET}.hotel_master`
-        WHERE LOWER(brand_name) = LOWER('{safe_brand}')
-           OR LOWER(brand_name) LIKE LOWER('%{safe_brand}%')
-        """
-        pid_df = client.query(pid_query).to_dataframe()
-        if pid_df.empty:
-            print(f"[BRAND_DRILLDOWN] No products found for brand '{brand}'")
-            return {"reviews": [], "total": 0, "phrase": phrase}
-
-        product_ids = pid_df['product_id'].tolist()
-        pid_list = ','.join(f"'{p}'" for p in product_ids)
-        print(f"[BRAND_DRILLDOWN] Found {len(product_ids)} hotels for brand '{brand}'")
-
-        # Step 2: Query review_drilldown by product_ids + phrase match
+        # Phrase column match first (same as what working drilldown uses)
         query = f"""
         SELECT r.review_text, r.sentiment_text, r.star_rating, r.reviewer_name,
                r.review_date, r.traveler_type, h.hotel_name
         FROM `{PROJECT}.{DATASET}.review_drilldown` r
-        JOIN `{PROJECT}.{DATASET}.hotel_master` h ON r.product_id = h.product_id
-        WHERE CAST(r.product_id AS STRING) IN ({pid_list})
+        JOIN `{PROJECT}.{DATASET}.hotel_master` h
+          ON CAST(r.product_id AS STRING) = CAST(h.product_id AS STRING)
+        WHERE LOWER(h.brand_name) = LOWER('{safe_brand}')
           AND LOWER(r.phrase) = LOWER('{safe_phrase}')
         ORDER BY r.star_rating ASC
         LIMIT {limit}
         """
         df = client.query(query).to_dataframe()
-        print(f"[BRAND_DRILLDOWN] Exact phrase match: {len(df)} rows")
-
-        # Fallback: search review_text for the phrase
+        print(f"[BRAND_DRILLDOWN] phrase match rows={len(df)}")
+        # Fallback: search review_text
         if df.empty:
-            query2 = f"""
+            query = f"""
             SELECT r.review_text, r.sentiment_text, r.star_rating, r.reviewer_name,
                    r.review_date, r.traveler_type, h.hotel_name
             FROM `{PROJECT}.{DATASET}.review_drilldown` r
-            JOIN `{PROJECT}.{DATASET}.hotel_master` h ON r.product_id = h.product_id
-            WHERE CAST(r.product_id AS STRING) IN ({pid_list})
+            JOIN `{PROJECT}.{DATASET}.hotel_master` h
+              ON CAST(r.product_id AS STRING) = CAST(h.product_id AS STRING)
+            WHERE LOWER(h.brand_name) = LOWER('{safe_brand}')
               AND LOWER(r.review_text) LIKE LOWER('%{safe_phrase}%')
             ORDER BY r.star_rating ASC
             LIMIT {limit}
             """
-            df = client.query(query2).to_dataframe()
-            print(f"[BRAND_DRILLDOWN] review_text LIKE: {len(df)} rows")
-
-        reviews = df.to_dict(orient='records')
-        return {"reviews": reviews, "total": len(reviews), "phrase": phrase}
+            df = client.query(query).to_dataframe()
+            print(f"[BRAND_DRILLDOWN] text fallback rows={len(df)}")
+        return {"reviews": df.to_dict(orient='records'), "total": len(df), "phrase": phrase}
 
     except Exception as e:
         print(f"[BRAND_DRILLDOWN ERROR] {e}")
