@@ -1071,7 +1071,7 @@ async def brand_drilldown(request: Request):
     try:
         # Step 1: Get all product_ids for this brand (exact + LIKE fallback)
         pid_query = f"""
-        SELECT CAST(product_id AS INT64) as product_id FROM `{PROJECT}.{DATASET}.hotel_master`
+        SELECT CAST(product_id AS STRING) as product_id FROM `{PROJECT}.{DATASET}.hotel_master`
         WHERE LOWER(brand_name) = LOWER('{safe_brand}')
            OR LOWER(brand_name) LIKE LOWER('%{safe_brand}%')
         """
@@ -1081,7 +1081,7 @@ async def brand_drilldown(request: Request):
             return {"reviews": [], "total": 0, "phrase": phrase}
 
         product_ids = pid_df['product_id'].tolist()
-        pid_list = ','.join(str(p) for p in product_ids)
+        pid_list = ','.join(f"'{p}'" for p in product_ids)
         print(f"[BRAND_DRILLDOWN] Found {len(product_ids)} hotels for brand '{brand}'")
 
         # Step 2: Query review_drilldown by product_ids + phrase match
@@ -1090,7 +1090,7 @@ async def brand_drilldown(request: Request):
                r.review_date, r.traveler_type, h.hotel_name
         FROM `{PROJECT}.{DATASET}.review_drilldown` r
         JOIN `{PROJECT}.{DATASET}.hotel_master` h ON r.product_id = h.product_id
-        WHERE r.product_id IN ({pid_list})
+        WHERE CAST(r.product_id AS STRING) IN ({pid_list})
           AND LOWER(r.phrase) = LOWER('{safe_phrase}')
         ORDER BY r.star_rating ASC
         LIMIT {limit}
@@ -1105,7 +1105,7 @@ async def brand_drilldown(request: Request):
                    r.review_date, r.traveler_type, h.hotel_name
             FROM `{PROJECT}.{DATASET}.review_drilldown` r
             JOIN `{PROJECT}.{DATASET}.hotel_master` h ON r.product_id = h.product_id
-            WHERE r.product_id IN ({pid_list})
+            WHERE CAST(r.product_id AS STRING) IN ({pid_list})
               AND LOWER(r.review_text) LIKE LOWER('%{safe_phrase}%')
             ORDER BY r.star_rating ASC
             LIMIT {limit}
@@ -1132,11 +1132,11 @@ async def debug_drilldown(brand: str = "", phrase: str = ""):
     safe_phrase = phrase.replace("'","''")
     try:
         # Get product_ids for brand
-        pids_df = client.query(f"SELECT CAST(product_id AS INT64) as product_id FROM `{PROJECT}.{DATASET}.hotel_master` WHERE LOWER(brand_name)=LOWER('{safe_brand}')").to_dataframe()
+        pids_df = client.query(f"SELECT CAST(product_id AS STRING) as product_id FROM `{PROJECT}.{DATASET}.hotel_master` WHERE LOWER(brand_name)=LOWER('{safe_brand}')").to_dataframe()
         pids = pids_df['product_id'].tolist()
         if not pids: return {"error": f"No products for brand '{brand}'", "brand": brand}
-        pid_list = ','.join(str(p) for p in pids[:5])  # sample first 5
-        all_pid_list = ','.join(str(p) for p in pids)
+        pid_list = ','.join(f"'{p}'" for p in pids[:5])  # sample first 5
+        all_pid_list = ','.join(f"'{p}'" for p in pids)
         # Check phrases in review_drilldown for these products
         sample = client.query(f"SELECT DISTINCT phrase FROM `{PROJECT}.{DATASET}.review_drilldown` WHERE product_id IN ({pid_list}) AND phrase IS NOT NULL LIMIT 20").to_dataframe()
         match = client.query(f"SELECT COUNT(*) as cnt FROM `{PROJECT}.{DATASET}.review_drilldown` WHERE product_id IN ({all_pid_list}) AND LOWER(phrase)=LOWER('{safe_phrase}')").to_dataframe()
@@ -1150,6 +1150,7 @@ async def debug_drilldown(brand: str = "", phrase: str = ""):
         return {"error": str(e)}
 
 
+@app.get("/api/hotel/{product_id}/paradox")
 async def get_paradox_reviews(product_id: int, limit: int = 50):
     """5-star reviews with negative sentiment — the paradox reviews"""
     client = get_bq()
