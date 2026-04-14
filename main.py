@@ -1071,7 +1071,7 @@ async def brand_drilldown(request: Request):
     try:
         # Step 1: Get all product_ids for this brand (exact + LIKE fallback)
         pid_query = f"""
-        SELECT product_id FROM `{PROJECT}.{DATASET}.hotel_master`
+        SELECT CAST(product_id AS INT64) as product_id FROM `{PROJECT}.{DATASET}.hotel_master`
         WHERE LOWER(brand_name) = LOWER('{safe_brand}')
            OR LOWER(brand_name) LIKE LOWER('%{safe_brand}%')
         """
@@ -1132,13 +1132,14 @@ async def debug_drilldown(brand: str = "", phrase: str = ""):
     safe_phrase = phrase.replace("'","''")
     try:
         # Get product_ids for brand
-        pids = client.query(f"SELECT product_id FROM `{PROJECT}.{DATASET}.hotel_master` WHERE LOWER(brand_name)=LOWER('{safe_brand}')").to_dataframe()['product_id'].tolist()
+        pids_df = client.query(f"SELECT CAST(product_id AS INT64) as product_id FROM `{PROJECT}.{DATASET}.hotel_master` WHERE LOWER(brand_name)=LOWER('{safe_brand}')").to_dataframe()
+        pids = pids_df['product_id'].tolist()
         if not pids: return {"error": f"No products for brand '{brand}'", "brand": brand}
         pid_list = ','.join(str(p) for p in pids[:5])  # sample first 5
+        all_pid_list = ','.join(str(p) for p in pids)
         # Check phrases in review_drilldown for these products
         sample = client.query(f"SELECT DISTINCT phrase FROM `{PROJECT}.{DATASET}.review_drilldown` WHERE product_id IN ({pid_list}) AND phrase IS NOT NULL LIMIT 20").to_dataframe()
-        # Check if our specific phrase exists
-        match = client.query(f"SELECT COUNT(*) as cnt FROM `{PROJECT}.{DATASET}.review_drilldown` WHERE product_id IN ({','.join(str(p) for p in pids)}) AND LOWER(phrase)=LOWER('{safe_phrase}')").to_dataframe()
+        match = client.query(f"SELECT COUNT(*) as cnt FROM `{PROJECT}.{DATASET}.review_drilldown` WHERE product_id IN ({all_pid_list}) AND LOWER(phrase)=LOWER('{safe_phrase}')").to_dataframe()
         return {
             "brand": brand, "phrase": phrase,
             "product_count": len(pids),
