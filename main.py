@@ -738,8 +738,8 @@ async def get_brand_summary(brand_id: str, city: Optional[str] = None, star: Opt
     """
     try:
         pain_brand_df = client.query(pain_brand_query).to_dataframe()
-        brand_pain = [{"phrase":r["phrase"],"aspect_name":r["aspect_name"],"mention_count":int(r["mention_count"])} for _,r in pain_brand_df[pain_brand_df["signal_type"]=="pain_point"].head(10).iterrows()]
-        brand_delights = [{"phrase":r["phrase"],"aspect_name":r["aspect_name"],"mention_count":int(r["mention_count"])} for _,r in pain_brand_df[pain_brand_df["signal_type"]=="delight"].head(10).iterrows()]
+        brand_pain = [{"phrase":r["phrase"],"aspect_name":r["aspect_name"],"mention_count":int(r["mention_count"])} for _,r in pain_brand_df[pain_brand_df["signal_type"]=="pain_point"].head(30).iterrows()]
+        brand_delights = [{"phrase":r["phrase"],"aspect_name":r["aspect_name"],"mention_count":int(r["mention_count"])} for _,r in pain_brand_df[pain_brand_df["signal_type"]=="delight"].head(30).iterrows()]
     except:
         brand_pain, brand_delights = [], []
 
