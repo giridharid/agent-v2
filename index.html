@@ -166,7 +166,7 @@ body{background:var(--bg);color:var(--text);min-height:100vh;font-family:'DM San
 #rdSignalsRow{background:var(--bg4);border:1px solid var(--border);border-radius:12px;padding:16px 20px;margin-bottom:12px}
 .rd-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:4px}
 .rd-col{background:var(--card-bg);border-radius:9px;padding:14px}
-.rd-col-title{font-size:11px;font-weight:700;margin-bottom:10px;letter-spacing:.02em}
+.rd-col-title{font-size:12px;font-weight:700;margin-bottom:10px;letter-spacing:.02em}
 .rd-item{color:var(--text3);font-size:13px;padding:6px 0;cursor:pointer;display:flex;justify-content:space-between;border-bottom:1px solid rgba(45,33,84,.2)}
 .rd-item:last-child{border:none}
 .rd-item:hover{color:var(--accent2)}
@@ -325,7 +325,7 @@ body.light .sig-item.pain{border-left:2px solid #d55e00;background:rgba(213,94,0
 body.light .sig-item.delight{border-left:2px solid #0072b2;background:rgba(0,114,178,.04)}
 body.light .sig-txt-r{color:#9a3200}
 body.light #comparisonContent .sig-txt-r,[data-light] .pain-phrase{color:#9a3200}
-body.light .sig-txt-g{color:#00517a}
+body.light .sig-txt-g{color:#0055a0;font-weight:600}
 body.light .sig-cnt{font-size:12px;color:#9080c0}
 body.light .sig-meta{background:rgba(109,40,217,.1);color:#5b21b6}
 /* R&D signals */
@@ -388,7 +388,12 @@ body.light .sig-item.delight{border-left:2px solid #0072b2}
 body.light .sig-meta{color:var(--text3)!important}
 body.light .sig-cnt{font-size:12px;color:var(--text4)!important}
 body.light .rd-col-title{color:var(--text2)!important}
-body.light .rd-item{color:var(--text2)!important}
+body.light .rd-item{color:#3d3060!important;font-weight:500}
+body.light .rd-col-title[style*="color:#e69f00"]{color:#b45309!important}
+body.light .rd-col-title[style*="color:#f59e0b"]{color:#b45309!important}
+body.light .rd-col-title[style*="color:#ec4899"]{color:#9d174d!important}
+body.light [style*="color:#e69f00"]{color:#b45309!important}
+body.light [style*="color:#f59e0b"]{color:#b45309!important}
 body.light .no-data{color:var(--text4)}
 body.light #tmTooltip{background:var(--bg4);border-color:var(--border2);box-shadow:0 4px 20px var(--shadow)}
 .paradox-btn{background:transparent;border:1px solid rgba(239,68,68,.4);color:#fca5a5;padding:4px 11px;border-radius:6px;font-size:11px;cursor:pointer;display:flex;align-items:center;gap:5px;font-family:inherit;margin-top:8px;transition:all .2s}
@@ -2068,16 +2073,32 @@ async function sendMessage(msg){
   if(!currentHotel&&!currentBrand&&allHotelsCache.length){
     const msgLow=msg.toLowerCase();
     // Find best matching hotel — check if any hotel name is contained in the message
-    const match=allHotelsCache.find(h=>{
+    // Strategy 1: exact hotel name substring
+    let match=allHotelsCache.find(h=>{
       const name=(h.hotel_name||'').toLowerCase();
       return name.length>4&&msgLow.includes(name);
-    }) || allHotelsCache.find(h=>{
-      // Partial match: all words of hotel name appear in message
-      const words=(h.hotel_name||'').toLowerCase().split(/\s+/).filter(w=>w.length>3);
-      return words.length>=2&&words.filter(w=>msgLow.includes(w)).length>=2;
     });
+    // Strategy 2: most words of hotel name appear in message
+    if(!match) match=allHotelsCache.find(h=>{
+      const words=(h.hotel_name||'').toLowerCase().split(/\s+/).filter(w=>w.length>3);
+      return words.length>=2&&words.filter(w=>msgLow.includes(w)).length>=words.length-1;
+    });
+    // Strategy 3: brand name appears in message
+    if(!match){
+      const brands=[...new Set(allHotelsCache.map(h=>h.brand_name).filter(Boolean))];
+      const foundBrand=brands.find(b=>b&&msgLow.includes(b.toLowerCase()));
+      if(foundBrand){
+        currentBrand=foundBrand; viewMode='brand'; updateChatContext();
+      }
+    }
+    // Strategy 4: any distinctive word (>5 chars) from a hotel name appears in message
+    if(!match&&!currentBrand){
+      match=allHotelsCache.find(h=>{
+        const words=(h.hotel_name||'').toLowerCase().split(/\s+/).filter(w=>w.length>5&&!['hotel','hotels','palace','resort','luxury','grand'].includes(w));
+        return words.some(w=>msgLow.includes(w));
+      });
+    }
     if(match){
-      // Auto-load this hotel
       const msgs=document.getElementById('chatMessages');
       msgs.innerHTML+=`<div class="msg-bot" style="border-color:rgba(109,40,217,.2)">🔍 Found: <strong>${escHtml(match.hotel_name)}</strong> — loading data…</div>`;
       msgs.scrollTop=msgs.scrollHeight;
@@ -2095,9 +2116,10 @@ async function sendMessage(msg){
     }
   }
 
+  // Don't block — pass to agent even without context; agent will ask for clarification
   if(!currentHotel&&!currentBrand){
     const msgs=document.getElementById('chatMessages');
-    msgs.innerHTML+=`<div class="msg-bot" style="border-color:rgba(245,158,11,.2)">⚠️ Please select a hotel or brand first, or mention the hotel name in your message.</div>`;
+    msgs.innerHTML+=`<div class="msg-bot" style="border-color:rgba(245,158,11,.2)">⚠️ I couldn't find that hotel. Try the search bar (top right) to select a hotel first, or mention the exact hotel name.</div>`;
     msgs.scrollTop=msgs.scrollHeight;return;
   }
   document.getElementById('chatInput').value='';
@@ -2175,7 +2197,7 @@ document.addEventListener('mousemove',e=>{if(document.getElementById('tmTooltip'
 <div class="footer">
   <span>© 2026 Acquink</span>
   <span>Powered by <span class="masi">MASI</span> Technology</span>
-  <span>v2.50 — 2026-04-14</span>
+  <span>v2.52 — 2026-04-14</span>
 </div>
 </body>
 </html>
