@@ -1077,7 +1077,8 @@ async def brand_drilldown(request: Request):
     print(f"[BRAND_DRILLDOWN] brand='{brand}', phrase='{phrase}'")
 
     try:
-        # Phrase column match first (same as what working drilldown uses)
+        # Match by phrase column (same as hotel drilldown) — no sentiment_type filter
+        # sentiment_type is unreliable across rows; phrase column is the ground truth
         query = f"""
         SELECT r.review_text, r.sentiment_text, r.star_rating, r.reviewer_name,
                r.review_date, r.traveler_type, h.hotel_name
@@ -1091,8 +1092,8 @@ async def brand_drilldown(request: Request):
         """
         df = client.query(query).to_dataframe()
         print(f"[BRAND_DRILLDOWN] phrase match rows={len(df)}")
-        # Fallback: search review_text
         if df.empty:
+            # Fallback: review_text LIKE search
             query = f"""
             SELECT r.review_text, r.sentiment_text, r.star_rating, r.reviewer_name,
                    r.review_date, r.traveler_type, h.hotel_name
