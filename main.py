@@ -621,17 +621,29 @@ async def search_hotels(q: str = Query(..., min_length=2)):
 # BRAND-LEVEL APIs
 # ─────────────────────────────────────────
 @app.get("/api/brand/{brand_id}/summary")
-async def get_brand_summary(brand_id: str):
-    """Get aggregated brand-level summary"""
+async def get_brand_summary(brand_id: str, city: Optional[str] = None, star: Optional[str] = None):
+    """Get aggregated brand-level summary, optionally filtered by city and star category"""
     client = get_bq()
     if not client:
         raise HTTPException(status_code=500, detail="Database unavailable")
-    
+
+    safe_brand = brand_id.replace("'", "''")
+    safe_city = city.replace("'", "''") if city else None
+    safe_star = star.replace("'", "''") if star else None
+
+    # Build product_id subquery with optional city/star filter
+    pid_filter = f"brand_name = '{safe_brand}'"
+    if safe_city:
+        pid_filter += f" AND city = '{safe_city}'"
+    if safe_star:
+        pid_filter += f" AND star_category = '{safe_star}'"
+    pid_subquery = f"SELECT product_id FROM `{PROJECT}.{DATASET}.hotel_master` WHERE {pid_filter}"
+
     # Brand info
     brand_query = f"""
     SELECT brand_id, brand_name
     FROM `{PROJECT}.{DATASET}.brand_master`
-    WHERE brand_name = '{brand_id}' OR CAST(brand_id AS STRING) = '{brand_id}'
+    WHERE brand_name = '{safe_brand}' OR CAST(brand_id AS STRING) = '{safe_brand}'
     LIMIT 1
     """
     brand_df = client.query(brand_query).to_dataframe()
@@ -639,31 +651,31 @@ async def get_brand_summary(brand_id: str):
         brand_info = {"brand_id": brand_id, "brand_name": brand_id}
     else:
         brand_info = clean_row(brand_df.iloc[0].to_dict())
-    
-    # Hotel count and review count
+
+    # Hotel count and review count — filtered
     hotels_query = f"""
     SELECT COUNT(*) as hotel_count, SUM(review_count) as total_reviews,
            ROUND(AVG(overall_satisfaction)) as overall_satisfaction,
            ROUND(AVG(google_rating),1) as avg_rating
     FROM `{PROJECT}.{DATASET}.hotel_master`
-    WHERE brand_name = '{brand_id}'
+    WHERE {pid_filter}
     """
     hotels_df = client.query(hotels_query).to_dataframe()
     stats = hotels_df.iloc[0].to_dict() if not hotels_df.empty else {'hotel_count':0,'total_reviews':0,'overall_satisfaction':0,'avg_rating':0}
-    
-    # Aspects aggregated
+
+    # Aspects aggregated — filtered by product_ids
     aspects_query = f"""
     SELECT aspect_id, aspect_name,
            SUM(positive_count) as positive_count,
            SUM(negative_count) as negative_count,
            SUM(total_mentions) as total_mentions
     FROM `{PROJECT}.{DATASET}.product_aspect_summary`
-    WHERE brand_id IN (SELECT DISTINCT brand_id FROM `{PROJECT}.{DATASET}.hotel_master` WHERE brand_name = '{brand_id}')
+    WHERE product_id IN ({pid_subquery})
     GROUP BY aspect_id, aspect_name
     ORDER BY total_mentions DESC
     """
     aspects_df = client.query(aspects_query).to_dataframe()
-    
+
     aspects = []
     total_mentions = aspects_df['total_mentions'].sum()
     for _, row in aspects_df.iterrows():
@@ -679,14 +691,13 @@ async def get_brand_summary(brand_id: str):
             "share_of_voice_pct": sov,
             "total_mentions": int(total)
         })
-    
-    # Emotions aggregated
+
+    # Emotions aggregated — filtered
     emotions_query = f"""
     SELECT emotion, SUM(mention_count) as count
     FROM `{PROJECT}.{DATASET}.product_emotions`
-    WHERE brand_id IN (SELECT DISTINCT brand_id FROM `{PROJECT}.{DATASET}.hotel_master` WHERE brand_name = '{brand_id}')
-    GROUP BY emotion
-    ORDER BY count DESC
+    WHERE product_id IN ({pid_subquery})
+    GROUP BY emotion ORDER BY count DESC
     """
     emotions_df = client.query(emotions_query).to_dataframe()
     total_emotion = emotions_df['count'].sum()
@@ -695,36 +706,33 @@ async def get_brand_summary(brand_id: str):
          "percentage": round(row['count'] * 100 / total_emotion) if total_emotion > 0 else 0}
         for _, row in emotions_df.iterrows()
     ]
-    
-    # Demographics aggregated
+
+    # Demographics aggregated — filtered
     demo_query = f"""
     SELECT dimension, dimension_value, SUM(review_count) as count
     FROM `{PROJECT}.{DATASET}.product_demographics`
-    WHERE brand_id IN (SELECT DISTINCT brand_id FROM `{PROJECT}.{DATASET}.hotel_master` WHERE brand_name = '{brand_id}')
-    GROUP BY dimension, dimension_value
-    ORDER BY dimension, count DESC
+    WHERE product_id IN ({pid_subquery})
+    GROUP BY dimension, dimension_value ORDER BY dimension, count DESC
     """
     demo_df = client.query(demo_query).to_dataframe()
-    
     demographics = {"traveler_type": [], "gender": [], "stay_purpose": []}
     for dim in ["traveler_type", "gender", "stay_purpose"]:
         dim_data = demo_df[demo_df['dimension'] == dim]
         total_dim = dim_data['count'].sum()
         for _, row in dim_data.iterrows():
-            if row['dimension_value'] and row['dimension_value'].strip():
+            if row['dimension_value'] and str(row['dimension_value']).strip():
                 demographics[dim].append({
                     "dimension_value": row['dimension_value'],
                     "count": int(row['count']),
                     "pct_of_total": round(row['count'] * 100 / total_dim) if total_dim > 0 else 0
                 })
-    
-    # Pain points aggregated
+
+    # Pain points & delights — filtered
     pain_brand_query = f"""
     SELECT p.phrase, p.aspect_name, SUM(p.mention_count) as mention_count, p.signal_type
     FROM `{PROJECT}.{DATASET}.product_pain_delights` p
-    JOIN `{PROJECT}.{DATASET}.hotel_master` h ON p.product_id = h.product_id
-    WHERE h.brand_name = '{brand_id}'
-    AND p.phrase IS NOT NULL AND TRIM(p.phrase) != ''
+    WHERE p.product_id IN ({pid_subquery})
+      AND p.phrase IS NOT NULL AND TRIM(p.phrase) != ''
     GROUP BY p.phrase, p.aspect_name, p.signal_type
     ORDER BY mention_count DESC
     """
@@ -735,14 +743,12 @@ async def get_brand_summary(brand_id: str):
     except:
         brand_pain, brand_delights = [], []
 
-    # RD signals aggregated
+    # RD signals — filtered
     rd_brand_query = f"""
     SELECT r.signal_type as rd_signal, r.phrase, SUM(r.mention_count) as mention_count
     FROM `{PROJECT}.{DATASET}.product_rd_signals` r
-    JOIN `{PROJECT}.{DATASET}.hotel_master` h ON r.product_id = h.product_id
-    WHERE h.brand_name = '{brand_id}'
-    GROUP BY r.signal_type, r.phrase
-    ORDER BY mention_count DESC
+    WHERE r.product_id IN ({pid_subquery})
+    GROUP BY r.signal_type, r.phrase ORDER BY mention_count DESC
     """
     try:
         rd_brand_df = client.query(rd_brand_query).to_dataframe()
@@ -1049,7 +1055,7 @@ async def drilldown(request: DrilldownRequest):
 
 @app.post("/api/brand_drilldown")
 async def brand_drilldown(request: Request):
-    """Get reviews for a phrase across all hotels of a brand"""
+    """Get reviews for a phrase across all hotels of a brand — uses product_ids for reliability"""
     client = get_bq()
     if not client:
         raise HTTPException(status_code=500, detail="Database unavailable")
@@ -1058,69 +1064,63 @@ async def brand_drilldown(request: Request):
     phrase = body.get("phrase", "")
     signal_type = body.get("signal_type", "pain_point")
     limit = body.get("limit", 20)
-
     safe_brand = brand.replace("'", "''")
     safe_phrase = phrase.replace("'", "''")
-
-    # sentiment filter — applied softly so we still get results even if columns vary
-    if signal_type == "delight":
-        sentiment_filter = "AND (r.sentiment_type = 'positive' OR r.delight = 1)"
-    else:
-        sentiment_filter = "AND (r.sentiment_type = 'negative' OR r.pain_point = 1)"
-
-    print(f"[BRAND_DRILLDOWN] Received brand='{brand}', phrase='{phrase}', signal_type='{signal_type}'")
+    print(f"[BRAND_DRILLDOWN] brand='{brand}', phrase='{phrase}'")
 
     try:
-        # Try 1: exact brand name match (case-insensitive)
+        # Step 1: Get all product_ids for this brand (exact + LIKE fallback)
+        pid_query = f"""
+        SELECT product_id FROM `{PROJECT}.{DATASET}.hotel_master`
+        WHERE LOWER(brand_name) = LOWER('{safe_brand}')
+           OR LOWER(brand_name) LIKE LOWER('%{safe_brand}%')
+        """
+        pid_df = client.query(pid_query).to_dataframe()
+        if pid_df.empty:
+            print(f"[BRAND_DRILLDOWN] No products found for brand '{brand}'")
+            return {"reviews": [], "total": 0, "phrase": phrase}
+
+        product_ids = pid_df['product_id'].tolist()
+        pid_list = ','.join(str(p) for p in product_ids)
+        print(f"[BRAND_DRILLDOWN] Found {len(product_ids)} hotels for brand '{brand}'")
+
+        # Step 2: Query review_drilldown by product_ids + phrase match
         query = f"""
         SELECT r.review_text, r.sentiment_text, r.star_rating, r.reviewer_name,
-               r.review_date, r.traveler_type, h.hotel_name, h.brand_name
+               r.review_date, r.traveler_type, h.hotel_name
         FROM `{PROJECT}.{DATASET}.review_drilldown` r
         JOIN `{PROJECT}.{DATASET}.hotel_master` h ON r.product_id = h.product_id
-        WHERE LOWER(h.brand_name) = LOWER('{safe_brand}')
+        WHERE r.product_id IN ({pid_list})
           AND LOWER(r.phrase) = LOWER('{safe_phrase}')
         ORDER BY r.star_rating ASC
         LIMIT {limit}
         """
         df = client.query(query).to_dataframe()
-        print(f"[BRAND_DRILLDOWN] Exact match: {len(df)} rows")
+        print(f"[BRAND_DRILLDOWN] Exact phrase match: {len(df)} rows")
 
-        # Try 2: LIKE brand match (handles "Leela" matching "The Leela Hotels")
+        # Fallback: search review_text for the phrase
         if df.empty:
             query2 = f"""
             SELECT r.review_text, r.sentiment_text, r.star_rating, r.reviewer_name,
-                   r.review_date, r.traveler_type, h.hotel_name, h.brand_name
+                   r.review_date, r.traveler_type, h.hotel_name
             FROM `{PROJECT}.{DATASET}.review_drilldown` r
             JOIN `{PROJECT}.{DATASET}.hotel_master` h ON r.product_id = h.product_id
-            WHERE LOWER(h.brand_name) LIKE LOWER('%{safe_brand}%')
-              AND LOWER(r.phrase) = LOWER('{safe_phrase}')
-            ORDER BY r.star_rating ASC
-            LIMIT {limit}
-            """
-            df = client.query(query2).to_dataframe()
-            print(f"[BRAND_DRILLDOWN] LIKE brand match: {len(df)} rows")
-
-        # Try 3: search review_text with LIKE phrase (catches phrase-not-in-phrase-column cases)
-        if df.empty:
-            query3 = f"""
-            SELECT r.review_text, r.sentiment_text, r.star_rating, r.reviewer_name,
-                   r.review_date, r.traveler_type, h.hotel_name, h.brand_name
-            FROM `{PROJECT}.{DATASET}.review_drilldown` r
-            JOIN `{PROJECT}.{DATASET}.hotel_master` h ON r.product_id = h.product_id
-            WHERE LOWER(h.brand_name) LIKE LOWER('%{safe_brand}%')
+            WHERE r.product_id IN ({pid_list})
               AND LOWER(r.review_text) LIKE LOWER('%{safe_phrase}%')
             ORDER BY r.star_rating ASC
             LIMIT {limit}
             """
-            df = client.query(query3).to_dataframe()
+            df = client.query(query2).to_dataframe()
             print(f"[BRAND_DRILLDOWN] review_text LIKE: {len(df)} rows")
 
         reviews = df.to_dict(orient='records')
-        print(f"[BRAND_DRILLDOWN] brand={brand}, phrase={phrase}, rows={len(reviews)}")
         return {"reviews": reviews, "total": len(reviews), "phrase": phrase}
+
     except Exception as e:
         print(f"[BRAND_DRILLDOWN ERROR] {e}")
         return {"reviews": [], "total": 0, "error": str(e)}
+
+
 
 
 @app.get("/api/hotel/{product_id}/paradox")
@@ -1576,7 +1576,8 @@ async def get_star_categories(brand: Optional[str] = None, city: Optional[str] =
     return [int(r['star_category']) for _, r in df.iterrows() if r['star_category']]
 
 @app.get("/api/hotel_details")
-async def hotel_details_alias(product_id: Optional[int] = None, brand: Optional[str] = None):
+async def hotel_details_alias(product_id: Optional[int] = None, brand: Optional[str] = None,
+                               city: Optional[str] = None, star: Optional[str] = None):
     client = get_bq()
     if not client:
         raise HTTPException(status_code=500, detail="Database unavailable")
@@ -1584,13 +1585,17 @@ async def hotel_details_alias(product_id: Optional[int] = None, brand: Optional[
         return await get_hotel_summary(product_id)
     elif brand:
         try:
+            safe_brand = brand.replace("'","''")
+            where = f"brand_name = '{safe_brand}'"
+            if city: where += f" AND city = '{city.replace(chr(39),chr(39)*2)}'"
+            if star: where += f" AND star_category = '{star.replace(chr(39),chr(39)*2)}'"
             query = f"""
             SELECT COUNT(*) as hotel_count, SUM(review_count) as total_reviews,
                    ROUND(AVG(overall_satisfaction)) as overall_satisfaction,
                    ROUND(AVG(google_rating),1) as avg_rating,
-                   '{brand}' as brand_name
+                   '{safe_brand}' as brand_name
             FROM `{PROJECT}.{DATASET}.hotel_master`
-            WHERE brand_name = '{brand}'
+            WHERE {where}
             """
             df = client.query(query).to_dataframe()
             if df.empty:
@@ -1604,11 +1609,13 @@ async def hotel_details_alias(product_id: Optional[int] = None, brand: Optional[
                 "avg_rating": float(row['avg_rating'] or 0)
             }
         except Exception as e:
+            print(f"[hotel_details ERROR] {e}")
             return {"brand_name": brand, "hotel_count": 0, "review_count": 0}
     return {}
 
 @app.get("/api/drivers")
-async def drivers_alias(product_id: Optional[int] = None, brand: Optional[str] = None):
+async def drivers_alias(product_id: Optional[int] = None, brand: Optional[str] = None,
+                         city: Optional[str] = None, star: Optional[str] = None):
     ASPECT_ICONS = {1:"🍽️",2:"🧹",3:"🏊",4:"👨‍💼",5:"🛏️",6:"📍",7:"💰",8:"⭐"}
 
     if product_id:
@@ -1626,13 +1633,14 @@ async def drivers_alias(product_id: Optional[int] = None, brand: Optional[str] =
                                    'icon': ASPECT_ICONS.get(r['aspect_id'], '⭐')})
                 return result
 
-    elif brand:
+    elif brand and not city and not star:
+        # Only use cache when no city/star filter
         cached = get_cache("aspects_by_brand")
         if cached and brand in cached:
             rows = cached[brand]
             return [{**r, 'icon': ASPECT_ICONS.get(r['aspect_id'], '⭐')} for r in rows]
 
-    # Fallback to BQ if cache miss
+    # Fallback to BQ
     client = get_bq()
     if not client:
         raise HTTPException(status_code=500, detail="Database unavailable")
@@ -1644,6 +1652,10 @@ async def drivers_alias(product_id: Optional[int] = None, brand: Optional[str] =
         WHERE product_id = {product_id} ORDER BY total_mentions DESC
         """
     elif brand:
+        safe_brand = brand.replace("'","''")
+        where = f"h.brand_name = '{safe_brand}'"
+        if city: where += f" AND h.city = '{city.replace(chr(39),chr(39)*2)}'"
+        if star: where += f" AND h.star_category = '{star.replace(chr(39),chr(39)*2)}'"
         query = f"""
         SELECT a.aspect_id, a.aspect_name,
                SUM(a.positive_count) as positive_count, SUM(a.negative_count) as negative_count,
@@ -1652,7 +1664,7 @@ async def drivers_alias(product_id: Optional[int] = None, brand: Optional[str] =
                ROUND(SUM(a.total_mentions)*100/NULLIF(SUM(SUM(a.total_mentions)) OVER(),0)) as share_of_voice
         FROM `{PROJECT}.{DATASET}.product_aspect_summary` a
         JOIN `{PROJECT}.{DATASET}.hotel_master` h ON a.product_id = h.product_id
-        WHERE h.brand_name = '{brand}' GROUP BY a.aspect_id, a.aspect_name ORDER BY total_mentions DESC
+        WHERE {where} GROUP BY a.aspect_id, a.aspect_name ORDER BY total_mentions DESC
         """
     else:
         return []

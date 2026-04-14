@@ -1204,7 +1204,13 @@ async function loadTravelerTypePreferences(){
 async function loadBrandSignals(brand){
   if(!brand)return;
   try{
-    const r=await fetch(`/api/brand/${encodeURIComponent(brand)}/summary`);
+    // Pass city+star filters so brand view is scoped to the selected portfolio
+    let url=`/api/brand/${encodeURIComponent(brand)}/summary`;
+    const params=[];
+    if(currentCity)params.push(`city=${encodeURIComponent(currentCity)}`);
+    if(currentStar)params.push(`star=${encodeURIComponent(currentStar)}`);
+    if(params.length)url+='?'+params.join('&');
+    const r=await fetch(url);
     if(!r.ok)return;
     const data=await r.json();
     renderEmotions(data.emotions||[]);
@@ -1313,47 +1319,58 @@ function renderDelights(delights){allDelights=dedupeByPhrase(delights);renderFil
 
 function renderFilteredPains(){
   const pid=currentProductId||currentHotel;
-  // Filter from the FULL sorted list, then re-sort desc and take top 10
+  const isBrand=viewMode==='brand'&&!pid;
   const filtered=(currentPainAspect==='all'
     ?allPainPoints
     :allPainPoints.filter(p=>(p.aspect_name||'').toLowerCase()===currentPainAspect.toLowerCase())
   ).sort((a,b)=>(b.mention_count||0)-(a.mention_count||0));
   document.getElementById('painPointsList').innerHTML=filtered.length
-    ?filtered.slice(0,10).map(p=>`<div class="sig-item pain" onclick="openDrilldown(${pid},'${escHtml(p.phrase)}','pain_point')">
+    ?filtered.slice(0,10).map(p=>{
+      const fn=isBrand?`cmpDrilldown('${escHtml(p.phrase)}','${escHtml(currentBrand)}','pain_point','brand')`:
+                       `openDrilldown(${pid},'${escHtml(p.phrase)}','pain_point')`;
+      return `<div class="sig-item pain" onclick="${fn}">
         <span class="sig-txt-r">${escHtml(p.phrase)}</span>
         <span style="display:flex;align-items:center;gap:5px">
           ${p.aspect_name?`<span class="sig-meta">${escHtml(p.aspect_name)}</span>`:''}
           <span class="sig-cnt">${p.mention_count||''} →</span>
-        </span></div>`).join('')
+        </span></div>`;}).join('')
     :'<div class="no-data">No pain points for this aspect</div>';
 }
 
 function renderFilteredDelights(){
   const pid=currentProductId||currentHotel;
-  // Filter from the FULL sorted list, then re-sort desc and take top 10
+  const isBrand=viewMode==='brand'&&!pid;
   const filtered=(currentDelightAspect==='all'
     ?allDelights
     :allDelights.filter(d=>(d.aspect_name||'').toLowerCase()===currentDelightAspect.toLowerCase())
   ).sort((a,b)=>(b.mention_count||0)-(a.mention_count||0));
   document.getElementById('delightsList').innerHTML=filtered.length
-    ?filtered.slice(0,10).map(d=>`<div class="sig-item delight" onclick="openDrilldown(${pid},'${escHtml(d.phrase)}','delight')">
+    ?filtered.slice(0,10).map(d=>{
+      const fn=isBrand?`cmpDrilldown('${escHtml(d.phrase)}','${escHtml(currentBrand)}','delight','brand')`:
+                       `openDrilldown(${pid},'${escHtml(d.phrase)}','delight')`;
+      return `<div class="sig-item delight" onclick="${fn}">
         <span class="sig-txt-g">${escHtml(d.phrase)}</span>
         <span style="display:flex;align-items:center;gap:5px">
           ${d.aspect_name?`<span class="sig-meta">${escHtml(d.aspect_name)}</span>`:''}
           <span class="sig-cnt">${d.mention_count||''} →</span>
-        </span></div>`).join('')
+        </span></div>`;}).join('')
     :'<div class="no-data">No delights for this aspect</div>';
 }
 
 function renderRdSignals(rd){
-  const renderList=(items,cid)=>{
+  const pid=currentProductId||currentHotel;
+  const isBrand=viewMode==='brand'&&!pid;
+  const renderList=(items,cid,sig)=>{
     document.getElementById(cid).innerHTML=(items&&items.length)
-      ?items.slice(0,5).map(i=>`<div class="rd-item" onclick="openDrilldown(${currentProductId},'${escHtml(i.phrase)}','rd_signal')">• ${escHtml(i.phrase)} <span style="color:#3d3355">→</span></div>`).join('')
+      ?items.slice(0,5).map(i=>{
+        const fn=isBrand?`cmpDrilldown('${escHtml(i.phrase)}','${escHtml(currentBrand)}','${sig}','brand')`:
+                         `openDrilldown(${pid},'${escHtml(i.phrase)}','rd_signal')`;
+        return `<div class="rd-item" onclick="${fn}">• ${escHtml(i.phrase)} <span style="color:#3d3355">→</span></div>`;}).join('')
       :'<div class="no-data">No data</div>';
   };
-  renderList(rd.feature_request,'featureRequestsList');
-  renderList(rd.price_feedback,'priceFeedbackList');
-  renderList(rd.expectation_gap,'expectationGapList');
+  renderList(rd.feature_request,'featureRequestsList','rd_signal');
+  renderList(rd.price_feedback,'priceFeedbackList','rd_signal');
+  renderList(rd.expectation_gap,'expectationGapList','rd_signal');
 }
 
 // ─── DRILLDOWN ────────────────────────────────────────────────
@@ -1930,7 +1947,7 @@ document.addEventListener('mousemove',e=>{if(document.getElementById('tmTooltip'
 <div class="footer">
   <span>© 2026 Acquink</span>
   <span>Powered by <span class="masi">MASI</span> Technology</span>
-  <span>v2.37 — 2026-04-13</span>
+  <span>v2.39 — 2026-04-13</span>
 </div>
 </body>
 </html>
