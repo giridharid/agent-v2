@@ -154,20 +154,20 @@ body{background:var(--bg);color:var(--text);min-height:100vh;font-family:'DM San
 #painDelightsRow{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
 .sig-card{background:var(--bg4);border:1px solid var(--border);border-radius:12px;padding:16px 18px}
 .sig-title{font-size:13px;font-weight:600;margin-bottom:10px;display:flex;align-items:center;gap:8px}
-.sig-item{display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:var(--card-bg);border-radius:7px;margin-bottom:6px;cursor:pointer;transition:background .15s}
+.sig-item{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:var(--card-bg);border-radius:7px;margin-bottom:6px;cursor:pointer;transition:background .15s}
 .sig-item:hover{background:rgba(45,33,84,.6)}
 .sig-item.pain{border-left:2px solid #d55e00;padding-left:10px}
 .sig-item.delight{border-left:2px solid #0072b2;padding-left:10px}
-.sig-txt-r{color:#fdba74;font-size:12px}
-.sig-txt-g{color:#93c5fd;font-size:12px}
-.sig-cnt{color:var(--text5);font-size:11px;font-family:'DM Mono',monospace}
+.sig-txt-r{color:#fdba74;font-size:13px;font-weight:500}
+.sig-txt-g{color:#93c5fd;font-size:13px;font-weight:500}
+.sig-cnt{font-size:12px;color:var(--text5);font-size:11px;font-family:'DM Mono',monospace}
 .sig-meta{color:var(--text4);font-size:10px;margin-left:4px}
 
 #rdSignalsRow{background:var(--bg4);border:1px solid var(--border);border-radius:12px;padding:16px 20px;margin-bottom:12px}
 .rd-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:4px}
 .rd-col{background:var(--card-bg);border-radius:9px;padding:14px}
 .rd-col-title{font-size:11px;font-weight:700;margin-bottom:10px;letter-spacing:.02em}
-.rd-item{color:var(--text3);font-size:12px;padding:5px 0;cursor:pointer;display:flex;justify-content:space-between;border-bottom:1px solid rgba(45,33,84,.2)}
+.rd-item{color:var(--text3);font-size:13px;padding:6px 0;cursor:pointer;display:flex;justify-content:space-between;border-bottom:1px solid rgba(45,33,84,.2)}
 .rd-item:last-child{border:none}
 .rd-item:hover{color:var(--accent2)}
 
@@ -324,8 +324,9 @@ body.light .heat-vlow{background:rgba(213,94,0,.15);color:#7a2a00}
 body.light .sig-item.pain{border-left:2px solid #d55e00;background:rgba(213,94,0,.04)}
 body.light .sig-item.delight{border-left:2px solid #0072b2;background:rgba(0,114,178,.04)}
 body.light .sig-txt-r{color:#9a3200}
+body.light #comparisonContent .sig-txt-r,[data-light] .pain-phrase{color:#9a3200}
 body.light .sig-txt-g{color:#00517a}
-body.light .sig-cnt{color:#9080c0}
+body.light .sig-cnt{font-size:12px;color:#9080c0}
 body.light .sig-meta{background:rgba(109,40,217,.1);color:#5b21b6}
 /* R&D signals */
 body.light .rd-item{color:#3d3060;border-bottom:1px solid #ede9f8}
@@ -385,7 +386,7 @@ body.light .sig-item{border-bottom:1px solid var(--card-border)}
 body.light .sig-item.pain{border-left:2px solid #d55e00}
 body.light .sig-item.delight{border-left:2px solid #0072b2}
 body.light .sig-meta{color:var(--text3)!important}
-body.light .sig-cnt{color:var(--text4)!important}
+body.light .sig-cnt{font-size:12px;color:var(--text4)!important}
 body.light .rd-col-title{color:var(--text2)!important}
 body.light .rd-item{color:var(--text2)!important}
 body.light .no-data{color:var(--text4)}
@@ -1610,7 +1611,11 @@ async function openParadoxModal(){
 
 // ─── COMPARISON ───────────────────────────────────────────────
 async function loadComparison(items,compareBy){
-  const ENTITY_COLORS=['#f5a623','#4fc3f7','#69f0ae','#f48fb1']; // Bright, colorblind-friendly
+  // Use colors that work on both dark and light backgrounds
+  const isLight=document.body.classList.contains('light');
+  const ENTITY_COLORS=isLight
+    ?['#d97706','#0284c7','#059669','#db2777']  // darker for light theme
+    :['#f5a623','#4fc3f7','#69f0ae','#f48fb1']; // brighter for dark theme
   const BM_COLOR='#9d86cc';
   const ASPECTS=['Dining','Cleanliness','Staff','Room','Location','Value for Money','General'];
   try{
@@ -1844,9 +1849,9 @@ function renderCmpDynamic(asp){
     dyn+=`<div style="background:var(--card-bg);border-radius:9px;padding:12px;border-top:3px solid ${item.color};text-align:center">
       <div style="color:${item.color};font-size:11px;font-weight:700;margin-bottom:8px">${item.name}</div>
       <div style="color:#d55e00;font-size:10px;font-weight:700;margin-bottom:3px">⚠ Pain Points</div>
-      ${fp.length?fp.map(p=>`<div onclick="cmpDrilldown('${escHtml(p.phrase)}','${escHtml(item.item)}','pain_point','${compareBy||''}')" style="padding:3px 0;border-bottom:1px solid rgba(45,33,84,.12);color:#fdba74;font-size:10px;display:flex;justify-content:space-between;cursor:pointer;transition:opacity .15s" onmouseover="this.style.opacity='.7'" onmouseleave="this.style.opacity='1'"><span>• ${escHtml(p.phrase)}</span><span style="color:var(--text5);font-family:monospace;font-size:9px">${p.mention_count||''}</span></div>`).join(''):`<div style="color:#3d3355;font-size:10px;padding:3px 0">No data</div>`}
+      ${fp.length?fp.map(p=>`<div onclick="cmpDrilldown('${escHtml(p.phrase)}','${escHtml(item.item)}','pain_point','${compareBy||''}')" style="padding:3px 0;border-bottom:1px solid rgba(45,33,84,.12);color:#fdba74;font-size:13px;font-weight:500;display:flex;justify-content:space-between;cursor:pointer;transition:opacity .15s" onmouseover="this.style.opacity='.7'" onmouseleave="this.style.opacity='1'"><span>• ${escHtml(p.phrase)}</span><span style="color:var(--text5);font-family:monospace;font-size:11px">${p.mention_count||''}</span></div>`).join(''):`<div style="color:var(--text5);font-size:12px;padding:3px 0">No data</div>`}
       <div style="color:#56b4e9;font-size:10px;font-weight:700;margin:7px 0 3px">★ Delights</div>
-      ${fd.length?fd.map(d=>`<div onclick="cmpDrilldown('${escHtml(d.phrase)}','${escHtml(item.item)}','delight','${compareBy||''}')" style="padding:3px 0;border-bottom:1px solid rgba(45,33,84,.12);color:#93c5fd;font-size:10px;display:flex;justify-content:space-between;cursor:pointer;transition:opacity .15s" onmouseover="this.style.opacity='.7'" onmouseleave="this.style.opacity='1'"><span>• ${escHtml(d.phrase)}</span><span style="color:var(--text5);font-family:monospace;font-size:9px">${d.mention_count||''}</span></div>`).join(''):`<div style="color:#3d3355;font-size:10px;padding:3px 0">No data</div>`}
+      ${fd.length?fd.map(d=>`<div onclick="cmpDrilldown('${escHtml(d.phrase)}','${escHtml(item.item)}','delight','${compareBy||''}')" style="padding:3px 0;border-bottom:1px solid rgba(45,33,84,.12);color:#93c5fd;font-size:13px;font-weight:500;display:flex;justify-content:space-between;cursor:pointer;transition:opacity .15s" onmouseover="this.style.opacity='.7'" onmouseleave="this.style.opacity='1'"><span>• ${escHtml(d.phrase)}</span><span style="color:var(--text5);font-family:monospace;font-size:11px">${d.mention_count||''}</span></div>`).join(''):`<div style="color:var(--text5);font-size:12px;padding:3px 0">No data</div>`}
     </div>`;
   });
   dyn+='</div></div>';
@@ -2058,9 +2063,41 @@ function updateChatContext(){
 
 async function sendMessage(msg){
   msg=(msg||'').trim();if(!msg)return;
+
+  // Try to detect hotel name in message and auto-set context
+  if(!currentHotel&&!currentBrand&&allHotelsCache.length){
+    const msgLow=msg.toLowerCase();
+    // Find best matching hotel — check if any hotel name is contained in the message
+    const match=allHotelsCache.find(h=>{
+      const name=(h.hotel_name||'').toLowerCase();
+      return name.length>4&&msgLow.includes(name);
+    }) || allHotelsCache.find(h=>{
+      // Partial match: all words of hotel name appear in message
+      const words=(h.hotel_name||'').toLowerCase().split(/\s+/).filter(w=>w.length>3);
+      return words.length>=2&&words.filter(w=>msgLow.includes(w)).length>=2;
+    });
+    if(match){
+      // Auto-load this hotel
+      const msgs=document.getElementById('chatMessages');
+      msgs.innerHTML+=`<div class="msg-bot" style="border-color:rgba(109,40,217,.2)">🔍 Found: <strong>${escHtml(match.hotel_name)}</strong> — loading data…</div>`;
+      msgs.scrollTop=msgs.scrollHeight;
+      showLoader();
+      const data=await loadHotelDataV2(match.product_id);
+      hideLoader();
+      if(data){
+        currentHotel=match.product_id;
+        currentHotelName=match.hotel_name;
+        currentBrand=match.brand_name||'';
+        currentProductId=match.product_id;
+        viewMode='hotel';
+        updateChatContext();
+      }
+    }
+  }
+
   if(!currentHotel&&!currentBrand){
     const msgs=document.getElementById('chatMessages');
-    msgs.innerHTML+=`<div class="msg-bot" style="border-color:rgba(245,158,11,.2)">⚠️ Please select a hotel or brand first, then ask me about it.</div>`;
+    msgs.innerHTML+=`<div class="msg-bot" style="border-color:rgba(245,158,11,.2)">⚠️ Please select a hotel or brand first, or mention the hotel name in your message.</div>`;
     msgs.scrollTop=msgs.scrollHeight;return;
   }
   document.getElementById('chatInput').value='';
@@ -2138,7 +2175,7 @@ document.addEventListener('mousemove',e=>{if(document.getElementById('tmTooltip'
 <div class="footer">
   <span>© 2026 Acquink</span>
   <span>Powered by <span class="masi">MASI</span> Technology</span>
-  <span>v2.49 — 2026-04-14</span>
+  <span>v2.50 — 2026-04-14</span>
 </div>
 </body>
 </html>
