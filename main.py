@@ -756,7 +756,7 @@ async def get_brand_summary(brand_id: str, city: Optional[str] = None, star: Opt
         for _,row in rd_brand_df.iterrows():
             sig = str(row["rd_signal"] or "")
             if sig in brand_rd:
-                brand_rd[sig].append({"phrase":str(row["phrase"]),"mention_count":int(row["mention_count"])})
+                brand_rd[sig].append({"phrase":str(row["phrase"]),"mention_count":int(row["mention_count"]),"aspect_name":str(row.get("aspect_name") or "")})
     except:
         brand_rd = {"feature_request":[],"price_feedback":[],"expectation_gap":[]}
 
@@ -811,7 +811,7 @@ async def get_hotel_summary(product_id: int):
     # ── Always need hotel_master row + rd_signals from BQ ────────────────
     bq_queries = {
         "hotel": f"SELECT * FROM `{PROJECT}.{DATASET}.hotel_master` WHERE product_id = {product_id}",
-        "rd":    f"""SELECT signal_type as rd_signal, phrase, treemap_name, mention_count
+        "rd":    f"""SELECT signal_type as rd_signal, phrase, treemap_name, aspect_name, mention_count
                      FROM `{PROJECT}.{DATASET}.product_rd_signals`
                      WHERE product_id = {product_id} ORDER BY rd_signal, mention_count DESC"""
     }
