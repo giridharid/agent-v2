@@ -1123,7 +1123,32 @@ async def brand_drilldown(request: Request):
 
 
 
-@app.get("/api/hotel/{product_id}/paradox")
+@app.get("/api/debug_drilldown")
+async def debug_drilldown(brand: str = "", phrase: str = ""):
+    """Debug endpoint — check what's in review_drilldown for a brand+phrase"""
+    client = get_bq()
+    if not client: return {"error": "no db"}
+    safe_brand = brand.replace("'","''")
+    safe_phrase = phrase.replace("'","''")
+    try:
+        # Get product_ids for brand
+        pids = client.query(f"SELECT product_id FROM `{PROJECT}.{DATASET}.hotel_master` WHERE LOWER(brand_name)=LOWER('{safe_brand}')").to_dataframe()['product_id'].tolist()
+        if not pids: return {"error": f"No products for brand '{brand}'", "brand": brand}
+        pid_list = ','.join(str(p) for p in pids[:5])  # sample first 5
+        # Check phrases in review_drilldown for these products
+        sample = client.query(f"SELECT DISTINCT phrase FROM `{PROJECT}.{DATASET}.review_drilldown` WHERE product_id IN ({pid_list}) AND phrase IS NOT NULL LIMIT 20").to_dataframe()
+        # Check if our specific phrase exists
+        match = client.query(f"SELECT COUNT(*) as cnt FROM `{PROJECT}.{DATASET}.review_drilldown` WHERE product_id IN ({','.join(str(p) for p in pids)}) AND LOWER(phrase)=LOWER('{safe_phrase}')").to_dataframe()
+        return {
+            "brand": brand, "phrase": phrase,
+            "product_count": len(pids),
+            "sample_phrases_in_drilldown": sample['phrase'].tolist(),
+            "exact_phrase_match_count": int(match.iloc[0]['cnt'])
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
 async def get_paradox_reviews(product_id: int, limit: int = 50):
     """5-star reviews with negative sentiment — the paradox reviews"""
     client = get_bq()
