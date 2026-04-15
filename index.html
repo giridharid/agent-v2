@@ -752,7 +752,7 @@ let currentCity=null, currentStar=null, currentProductId=null;
 let activeTab='drivers';
 let allHotelsCache=[];
 let drilldownState={allReviews:[],showing:3};
-let allPainPoints=[], allDelights=[];
+let allPainPoints=[], allDelights=[], currentRdSignals={};
 let currentPainAspect='all', currentDelightAspect='all';
 let treemapData=[];
 
@@ -1547,6 +1547,7 @@ function renderFilteredDelights(){
 }
 
 function renderRdSignals(rd){
+  currentRdSignals=rd||{}; // cache for Action Insights prompt
   const pid=currentProductId||currentHotel;
   const isBrand=viewMode==='brand'&&!pid;
   // Combine all rd signals and group by department
@@ -1896,18 +1897,15 @@ function renderCmpDynamic(asp){
 
   dyn+=`<div>
     <h3 style="color:var(--accent2);font-size:13px;font-weight:700;margin-bottom:8px;text-align:center">🎯 Action Items${asp!=='all'?' — '+asp:''}</h3>
-    <div style="display:grid;grid-template-columns:repeat(${nonBmPd.length},1fr);gap:10px">`;
-  nonBmPd.forEach(item=>{
-    const rd=item.rd||{};
-    dyn+=`<div style="background:var(--card-bg);border-radius:9px;padding:12px;border-top:3px solid ${item.color}">
-      <div style="color:${item.color};font-size:13px;font-weight:700;margin-bottom:8px">${item.name}</div>
-      <div style="color:#e69f00;font-size:13px;font-weight:700;margin-bottom:4px">🔧 Guest Requests</div>
-      ${(rd.feature_request||[]).slice(0,4).map(r=>`<div style="color:#fde68a;font-size:13px;padding:3px 0;border-bottom:1px solid rgba(45,33,84,.12)">• ${escHtml(r.phrase)}</div>`).join('')||`<div style="color:#3d3355;font-size:12px">No data</div>`}
-      <div style="color:#cc79a7;font-size:13px;font-weight:700;margin:8px 0 4px">💸 Price Signals</div>
-      ${(rd.price_feedback||[]).slice(0,4).map(r=>`<div style="color:#f0abca;font-size:13px;padding:3px 0;border-bottom:1px solid rgba(45,33,84,.12)">• ${escHtml(r.phrase)}</div>`).join('')||`<div style="color:#3d3355;font-size:12px">No data</div>`}
-    </div>`;
-  });
-  dyn+='</div></div>';
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+    <button onclick="getCmpActionInsights()" style="width:100%;padding:14px;background:linear-gradient(135deg,rgba(124,58,237,.15),rgba(99,102,241,.1));border:1px dashed rgba(168,85,247,.35);border-radius:10px;color:var(--accent2);font-size:13px;cursor:pointer;font-family:inherit;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:8px" id="cmpActionBtn">
+      <span>✨</span><span>Get Comparative Action Insights</span>
+    </button>
+    <button onclick="getCmpSwot()" style="width:100%;padding:14px;background:linear-gradient(135deg,rgba(0,114,178,.12),rgba(0,158,115,.1));border:1px dashed rgba(0,158,115,.4);border-radius:10px;color:#5eead4;font-size:13px;cursor:pointer;font-family:inherit;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:8px" id="cmpSwotBtn">
+      <span>📊</span><span>SWOT Analysis</span>
+    </button>
+    </div>
+  </div>`;
 
   document.getElementById('cmpDynamicSection').innerHTML=dyn;
 }
@@ -2196,15 +2194,100 @@ function getHeatClassInv(v){if(v<=10)return'heat-vhigh';if(v<=20)return'heat-hig
 // ── Action Insights ─────────────────────────────────────────
 async function getActionInsights(){
   const btn=document.getElementById('getActionInsightsBtn');
-  if(btn){btn.textContent='⏳ Generating insights…';btn.disabled=true;}
-  // Build context from cached rd signals
+  if(btn){btn.innerHTML='⏳ Generating insights…';btn.disabled=true;}
   const entity=currentHotelName||currentBrand||'this property';
-  const msg=`Based on the R&D signals and guest feedback for ${entity}, provide department-by-department action items. For each department (F&B, Housekeeping, Guest Relations, Operations, Revenue), list the top 2-3 specific actions the team should take, with urgency level. Be concise and operational.`;
-  // Open chat panel and send
+
+  // Build data block from frontend state — no extra BQ call needed
+  const painBlock=allPainPoints.slice(0,10).map(p=>`  - ${p.phrase} (${p.aspect_name||'General'}, ${p.mention_count} mentions)`).join('\n');
+  const delightBlock=allDelights.slice(0,8).map(d=>`  - ${d.phrase} (${d.aspect_name||'General'}, ${d.mention_count} mentions)`).join('\n');
+
+  const rdBlock=Object.entries({
+    'Guest Requests':currentRdSignals.feature_request||[],
+    'Price Feedback':currentRdSignals.price_feedback||[],
+    'Expectation Gaps':currentRdSignals.expectation_gap||[]
+  }).filter(([,items])=>items.length>0)
+    .map(([label,items])=>`  [${label}]\n`+items.slice(0,5).map(i=>`    - ${i.phrase} (${i.aspect_name||''}, ${i.mention_count||0} mentions)`).join('\n'))
+    .join('\n');
+
+  const msg=`Here is the guest feedback data for ${entity}:
+
+TOP PAIN POINTS:
+${painBlock||'No data'}
+
+TOP DELIGHTS:
+${delightBlock||'No data'}
+
+R&D SIGNALS:
+${rdBlock||'No data'}
+
+Using ONLY the data above, generate department-specific action items for ${entity}. For each department (🍽️ F&B, 🛏️ Housekeeping, 👨‍💼 Guest Relations, ⚙️ Operations, 💰 Revenue), cite exact phrases and mention counts to justify actions. Include urgency level and one KPI to track. Skip departments with no relevant signals.`;
+
   openChat();
-  await new Promise(r=>setTimeout(r,300)); // let panel open
+  await new Promise(r=>setTimeout(r,300));
   await sendMessage(msg);
-  if(btn){btn.textContent='✨ Get Action Insights by Department';btn.disabled=false;}
+  if(btn){btn.innerHTML='<span>✨</span><span>Get Action Insights by Department</span>';btn.disabled=false;}
+}
+async function getCmpActionInsights(){
+  const btn=document.getElementById('cmpActionBtn');
+  if(btn){btn.innerHTML='⏳ Generating insights…';btn.disabled=true;}
+  const state=window._cmpState;
+  if(!state?.itemStats?.length){alert('Please run a comparison first');if(btn)btn.innerHTML='<span>✨</span><span>Get Comparative Action Insights</span>';btn.disabled=false;return;}
+  const names=state.itemStats.map(s=>s.name);
+  const entity=names.join(' vs ');
+
+  // Build comparative data block from frontend state
+  const dataBlock=state.pdResults.map(item=>{
+    const pains=(item.pain||[]).slice(0,5).map(p=>`    - ${p.phrase} (${p.aspect_name||'General'}, ${p.mention_count})`).join('\n');
+    const delights=(item.delights||[]).slice(0,3).map(d=>`    - ${d.phrase} (${d.aspect_name||'General'}, ${d.mention_count})`).join('\n');
+    return `${item.name}:\n  Pain Points:\n${pains||'    None'}\n  Delights:\n${delights||'    None'}`;
+  }).join('\n\n');
+
+  const msg=`Here is comparative guest feedback data for ${entity}:\n\n${dataBlock}\n\nFor each department (🍽️ F&B, 🛏️ Housekeeping, 👨‍💼 Guest Relations, ⚙️ Operations, 💰 Revenue), compare performance across these entities using the exact phrases and counts above. Identify which entity needs most urgent attention per department and why. Include urgency level.`;
+  openChat();
+  await new Promise(r=>setTimeout(r,300));
+  if(!currentHotel&&!currentBrand&&state?.itemStats?.[0]){
+    const first=state.itemStats[0];
+    if(state.compareBy==='brand') currentBrand=first.item;
+    updateChatContext();
+  }
+  await sendMessage(msg);
+  if(btn){btn.innerHTML='<span>✨</span><span>Get Comparative Action Insights</span>';btn.disabled=false;}
+}
+
+async function getCmpSwot(){
+  const btn=document.getElementById('cmpSwotBtn');
+  if(btn){btn.innerHTML='⏳ Generating SWOT…';btn.disabled=true;}
+  const state=window._cmpState;
+  if(!state?.itemStats?.length){alert('Please run a comparison first');if(btn){btn.innerHTML='<span>📊</span><span>SWOT Analysis</span>';btn.disabled=false;}return;}
+  const names=state.itemStats.map(s=>s.name);
+  const entity=names.join(' vs ');
+
+  // Build data for SWOT from frontend state
+  const dataBlock=state.allStats.map(s=>{
+    const aspects=s.aspects||[];
+    const topAsp=aspects.slice().sort((a,b)=>(b.satisfaction_pct||0)-(a.satisfaction_pct||0));
+    const strengths=topAsp.slice(0,2).map(a=>`${a.aspect_name} ${a.satisfaction_pct||0}%`).join(', ');
+    const weaknesses=topAsp.slice(-2).map(a=>`${a.aspect_name} ${a.satisfaction_pct||0}%`).join(', ');
+    return `${s.name}: +ve ${s.pos}%, -ve ${s.neg}%, Strengths: ${strengths}, Weaknesses: ${weaknesses}`;
+  }).join('\n');
+
+  const pdBlock=state.pdResults.map(item=>{
+    const pains=(item.pain||[]).slice(0,4).map(p=>`${p.phrase}(${p.mention_count})`).join(', ');
+    const delights=(item.delights||[]).slice(0,4).map(d=>`${d.phrase}(${d.mention_count})`).join(', ');
+    return `${item.name} — Pains: ${pains||'none'} | Delights: ${delights||'none'}`;
+  }).join('\n');
+
+  const msg=`Here is guest feedback data for ${entity}:\n\nAspect scores:\n${dataBlock}\n\nPain points and delights:\n${pdBlock}\n\nUsing ONLY the data above, generate a SWOT analysis comparing ${entity}. Format:\n\nFor EACH entity, provide:\n✅ Strengths (what guests love, high satisfaction scores)\n⚠️ Weaknesses (pain points, low scores)\n🚀 Opportunities (gaps the entity could exploit vs competitors)\n🔴 Threats (areas where competitors are stronger)\n\nEnd with a 2-line competitive verdict: who is winning and where each should focus.`;
+
+  openChat();
+  await new Promise(r=>setTimeout(r,300));
+  if(!currentHotel&&!currentBrand&&state?.itemStats?.[0]){
+    const first=state.itemStats[0];
+    if(state.compareBy==='brand') currentBrand=first.item;
+    updateChatContext();
+  }
+  await sendMessage(msg);
+  if(btn){btn.innerHTML='<span>📊</span><span>SWOT Analysis</span>';btn.disabled=false;}
 }
 function applyTheme(light){
   document.body.classList.toggle('light', light);
@@ -2242,7 +2325,7 @@ document.addEventListener('mousemove',e=>{if(document.getElementById('tmTooltip'
 <div class="footer">
   <span>© 2026 Acquink</span>
   <span>Powered by <span class="masi">MASI</span> Technology</span>
-  <span>v2.58 — 2026-04-14</span>
+  <span>v2.61 — 2026-04-14</span>
 </div>
 </body>
 </html>

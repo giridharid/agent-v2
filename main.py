@@ -1333,6 +1333,25 @@ async def chat(request: ChatRequest):
                 for d in delights_[:8]
             ])
 
+            # Fetch RD signals for hotel
+            rd_lines = []
+            try:
+                client3 = get_bq()
+                if client3:
+                    rd_df = client3.query(f"""
+                        SELECT signal_type, phrase, aspect_name, mention_count
+                        FROM `{PROJECT}.{DATASET}.product_rd_signals`
+                        WHERE product_id = {request.product_id}
+                        ORDER BY mention_count DESC LIMIT 20
+                    """).to_dataframe()
+                    for sig_type, label in [('feature_request','Guest Requests'),('price_feedback','Price Feedback'),('expectation_gap','Expectation Gaps')]:
+                        items = rd_df[rd_df['signal_type']==sig_type].head(5)
+                        if not items.empty:
+                            rd_lines.append(f"  [{label}]")
+                            rd_lines += [f"    - {r['phrase']} — {r.get('aspect_name','')} — {int(r['mention_count'])} mentions" for _,r in items.iterrows()]
+            except: pass
+            rd_section = "\n".join(rd_lines) if rd_lines else "No R&D signal data"
+
             data_context = f"""
 === HOTEL INTELLIGENCE CONTEXT ===
 Hotel: {entity_name}
@@ -1350,6 +1369,9 @@ Total Reviews: {total_reviews:,} | Overall Satisfaction: {overall_sat}%
 
 === TOP DELIGHTS (most mentioned) ===
 {delight_lines if delight_lines else 'No delight data'}
+
+=== R&D SIGNALS / ACTION ITEMS ===
+{rd_section}
 
 INSTRUCTION: Use ONLY the exact numbers above. Do not estimate or invent any figure.
 """
@@ -1384,16 +1406,26 @@ INSTRUCTION: Use ONLY the exact numbers above. Do not estimate or invent any fig
                 for a in aspects
             ])
 
-            # Get brand pain/delights from brand summary
-            brand_pain, brand_delights = [], []
+            # Get brand pain/delights + rd_signals from brand summary
+            brand_pain, brand_delights, brand_rd = [], [], {}
             try:
                 bs = await get_brand_summary(brand)
                 brand_pain = bs.get('pain_points', [])[:8]
                 brand_delights = bs.get('delights', [])[:8]
+                brand_rd = bs.get('rd_signals', {})
             except: pass
 
             pain_lines = "\n".join([f"  * {p['phrase']} — {p.get('aspect_name','')} — {p.get('mention_count',0)} mentions" for p in brand_pain])
             delight_lines = "\n".join([f"  * {d['phrase']} — {d.get('aspect_name','')} — {d.get('mention_count',0)} mentions" for d in brand_delights])
+
+            # Format RD signals
+            rd_lines = []
+            for sig_type, label in [('feature_request','Guest Requests'), ('price_feedback','Price Feedback'), ('expectation_gap','Expectation Gaps')]:
+                items = brand_rd.get(sig_type, [])[:5]
+                if items:
+                    rd_lines.append(f"  [{label}]")
+                    rd_lines += [f"    - {i['phrase']} — {i.get('aspect_name','')} — {i.get('mention_count',0)} mentions" for i in items]
+            rd_section = "\n".join(rd_lines) if rd_lines else "No R&D signal data"
 
             data_context = f"""
 === BRAND INTELLIGENCE CONTEXT ===
@@ -1409,6 +1441,9 @@ Overall Satisfaction: {brand_stats['overall_satisfaction']}% | Avg Google Rating
 
 === TOP DELIGHTS (brand-wide) ===
 {delight_lines if delight_lines else 'No delight data'}
+
+=== R&D SIGNALS / ACTION ITEMS ===
+{rd_section}
 
 INSTRUCTION: Use ONLY the exact numbers above. Do not estimate or invent any figure.
 """
