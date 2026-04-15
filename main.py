@@ -1063,7 +1063,7 @@ async def drilldown(request: DrilldownRequest):
 @app.post("/api/brand_drilldown")
 async def brand_drilldown(request: Request):
     """Get reviews mentioning a phrase across all hotels of a brand.
-    Uses review_text LIKE search — avoids phrase column mismatch issues."""
+    Uses run_in_executor so BQ calls don't block the event loop."""
     client = get_bq()
     if not client:
         raise HTTPException(status_code=500, detail="Database unavailable")
@@ -1076,10 +1076,10 @@ async def brand_drilldown(request: Request):
     safe_phrase = phrase.replace("'", "''")
     print(f"[BRAND_DRILLDOWN] brand='{brand}', phrase='{phrase}'")
 
-    try:
-        # Match by phrase column (same as hotel drilldown) — no sentiment_type filter
-        # sentiment_type is unreliable across rows; phrase column is the ground truth
-        query = f"""
+    loop = asyncio.get_event_loop()
+
+    def run_drilldown():
+        q1 = f"""
         SELECT r.review_text, r.sentiment_text, r.star_rating, r.reviewer_name,
                r.review_date, r.traveler_type, h.hotel_name
         FROM `{PROJECT}.{DATASET}.review_drilldown` r
@@ -1090,11 +1090,10 @@ async def brand_drilldown(request: Request):
         ORDER BY r.star_rating ASC
         LIMIT {limit}
         """
-        df = client.query(query).to_dataframe()
+        df = client.query(q1).to_dataframe()
         print(f"[BRAND_DRILLDOWN] phrase match rows={len(df)}")
         if df.empty:
-            # Fallback: review_text LIKE search
-            query = f"""
+            q2 = f"""
             SELECT r.review_text, r.sentiment_text, r.star_rating, r.reviewer_name,
                    r.review_date, r.traveler_type, h.hotel_name
             FROM `{PROJECT}.{DATASET}.review_drilldown` r
@@ -1105,13 +1104,43 @@ async def brand_drilldown(request: Request):
             ORDER BY r.star_rating ASC
             LIMIT {limit}
             """
-            df = client.query(query).to_dataframe()
+            df = client.query(q2).to_dataframe()
             print(f"[BRAND_DRILLDOWN] text fallback rows={len(df)}")
-        return {"reviews": df.to_dict(orient='records'), "total": len(df), "phrase": phrase}
+        return df.to_dict(orient='records')
 
+    try:
+        reviews = await asyncio.wait_for(
+            loop.run_in_executor(None, run_drilldown),
+            timeout=25.0
+        )
+        return {"reviews": reviews, "total": len(reviews), "phrase": phrase}
+    except asyncio.TimeoutError:
+        print(f"[BRAND_DRILLDOWN] Timeout for brand='{brand}' phrase='{phrase}'")
+        return {"reviews": [], "total": 0, "error": "Query timed out — try a shorter phrase"}
     except Exception as e:
         print(f"[BRAND_DRILLDOWN ERROR] {e}")
         return {"reviews": [], "total": 0, "error": str(e)}
+
+
+class GenerateRequest(BaseModel):
+    message: str
+    category: str = "hotels"
+
+@app.post("/api/generate")
+async def generate_text(request: GenerateRequest):
+    """Lightweight text generation — used for inline Action Insights and SWOT.
+    Bypasses the Data Analytics Agent (no BQ context needed — caller embeds data in message)."""
+    try:
+        model = get_gemini()
+        if not model:
+            return {"response": "AI service unavailable. Please check credentials.", "ok": False}
+        loop = asyncio.get_event_loop()
+        resp = await loop.run_in_executor(None, lambda: model.generate_content(request.message))
+        text = resp.text if resp.text else "No response generated."
+        return {"response": text, "ok": True}
+    except Exception as e:
+        print(f"[GENERATE ERROR] {e}")
+        return {"response": f"Generation error: {str(e)}", "ok": False}
 
 
 

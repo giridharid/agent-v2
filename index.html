@@ -422,6 +422,20 @@ body.light #tmTooltip{background:var(--bg4);border-color:var(--border2);box-shad
 .cmp-asp-btn.active{background:linear-gradient(135deg,#7c3aed,#5b21b6);color:#fff;border-color:transparent}
 /* ── Treemap tooltip ───────────────────────── */
 #tmTooltip{position:fixed;display:none;background:#1a1330;border:1px solid rgba(124,58,237,.35);border-radius:8px;padding:9px 13px;pointer-events:none;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,.6);min-width:130px}
+
+/* ── Inline insights markdown panels ──────────────── */
+.insights-body h1,.insights-body h2,.insights-body h3,.insights-body h4{color:var(--accent2);font-size:13px;font-weight:700;margin:10px 0 5px}
+.insights-body strong{color:var(--text);font-weight:700}
+.insights-body p{color:var(--text);margin-bottom:6px;font-size:12.5px;line-height:1.7}
+.insights-body ul,.insights-body ol{margin:4px 0 8px 18px}
+.insights-body li{color:var(--text2);margin-bottom:3px;font-size:12.5px;line-height:1.6}
+.insights-body li::marker{color:var(--accent)}
+.insights-body hr{border:none;border-top:1px solid var(--border);margin:10px 0}
+.insights-body code{background:rgba(15,11,28,.6);border:1px solid var(--border);padding:1px 5px;border-radius:4px;font-size:11.5px;color:#86efac}
+body.light .insights-body h1,body.light .insights-body h2,body.light .insights-body h3{color:var(--accent2)}
+body.light .insights-body strong{color:var(--text)}
+body.light .insights-body p,body.light .insights-body li{color:var(--text2)}
+body.light .insights-body code{background:rgba(109,40,217,.08);color:#5b21b6}
 </style>
 </head>
 <body>
@@ -1049,15 +1063,22 @@ async function applyHotelView(){
   currentHotel=sel.value;
   currentHotelName=sel.selectedOptions[0]?.dataset.name||sel.selectedOptions[0]?.textContent||'';
   currentBrand=document.getElementById('hotelBrandSelect').value;
+  currentCity=document.getElementById('hotelCitySelect').value||null;
+  currentStar=document.getElementById('hotelStarSelect')?.value||null;
   viewMode='hotel';
   if(!currentHotel){alert('Please select a hotel');return;}
   showLoader();
   hideContentAreas();
-  activeTab='drivers'; // reset before load so chartsRow shows in loadHotelDataV2
+  activeTab='drivers';
   const data=await loadHotelDataV2(currentHotel);
-  if(data){
-    showContentAreas();
+  showContentAreas();
+  if(data&&!data.detail){
     showSubTab('drivers');
+  } else {
+    document.getElementById('contextHeader').classList.remove('hidden');
+    document.getElementById('contextIcon').textContent='⚠️';
+    document.getElementById('contextTitle').textContent='Could not load hotel data';
+    document.getElementById('contextSubtitle').textContent='Please check your connection and try again';
   }
   hideLoader();
   updateChatContext();
@@ -1150,11 +1171,11 @@ async function cmpDrilldown(phrase, entityItem, signalType, cmpBy){
 
   if(cmpBy==='brand'){
     try{
-      const r=await fetch('/api/brand_drilldown',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({brand:entityItem,phrase,signal_type:signalType||'pain_point',limit:20})
-      });
+      const ctrl=new AbortController();
+      const tmo=setTimeout(()=>ctrl.abort(),30000);
+      let r;
+      try{r=await fetch('/api/brand_drilldown',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({brand:entityItem,phrase,signal_type:signalType||'pain_point',limit:20}),signal:ctrl.signal});}
+      finally{clearTimeout(tmo);}
       const d=await r.json();
       const reviews=d.reviews||[];
       document.getElementById('drilldownCount').textContent=`${reviews.length} of ${d.total||reviews.length} reviews across brand`;
@@ -1191,7 +1212,9 @@ async function cmpDrilldown(phrase, entityItem, signalType, cmpBy){
           }).join('')
         : '<div class="no-data">No reviews found for this phrase across the brand</div>';
     }catch(e){
-      document.getElementById('drilldownContent').innerHTML='<div class="no-data">Error loading brand reviews</div>';
+      const msg=e.name==='AbortError'?'Query timed out — try a more specific phrase':'Error loading reviews';
+      document.getElementById('drilldownContent').innerHTML=`<div class="no-data">${msg}</div>`;
+      document.getElementById('drilldownCount').textContent='';
     }
     return;
   }
@@ -1418,6 +1441,11 @@ async function loadHotelDataV2(productId){
   currentProductId=productId;
   try{
     const r=await fetch(`/api/hotel/${productId}/summary`);
+    if(!r.ok){
+      const err=await r.json().catch(()=>({}));
+      console.error('[loadHotelDataV2] API error:',r.status,err.detail||r.status);
+      return {detail: err.detail||`HTTP ${r.status}`};
+    }
     const data=await r.json();
     // Context header
     document.getElementById('contextIcon').textContent='🏨';
@@ -2194,100 +2222,101 @@ function getHeatClassInv(v){if(v<=10)return'heat-vhigh';if(v<=20)return'heat-hig
 // ── Action Insights ─────────────────────────────────────────
 async function getActionInsights(){
   const btn=document.getElementById('getActionInsightsBtn');
-  if(btn){btn.innerHTML='⏳ Generating insights…';btn.disabled=true;}
+  if(btn){btn.innerHTML='\u23f3 Generating\u2026';btn.disabled=true;}
   const entity=currentHotelName||currentBrand||'this property';
-
-  // Build data block from frontend state — no extra BQ call needed
+  const container=document.getElementById('actionItemsContent');
+  if(container){
+    container.innerHTML='<div style="padding:14px 16px;background:var(--card-bg);border-radius:10px;border:1px solid var(--border2);color:var(--text3);font-size:12px">\u23f3 Generating action insights\u2026</div>';
+  }
   const painBlock=allPainPoints.slice(0,10).map(p=>`  - ${p.phrase} (${p.aspect_name||'General'}, ${p.mention_count} mentions)`).join('\n');
   const delightBlock=allDelights.slice(0,8).map(d=>`  - ${d.phrase} (${d.aspect_name||'General'}, ${d.mention_count} mentions)`).join('\n');
-
-  const rdBlock=Object.entries({
-    'Guest Requests':currentRdSignals.feature_request||[],
-    'Price Feedback':currentRdSignals.price_feedback||[],
-    'Expectation Gaps':currentRdSignals.expectation_gap||[]
-  }).filter(([,items])=>items.length>0)
+  const rdBlock=Object.entries({'Guest Requests':currentRdSignals.feature_request||[],'Price Feedback':currentRdSignals.price_feedback||[],'Expectation Gaps':currentRdSignals.expectation_gap||[]})
+    .filter(([,items])=>items.length>0)
     .map(([label,items])=>`  [${label}]\n`+items.slice(0,5).map(i=>`    - ${i.phrase} (${i.aspect_name||''}, ${i.mention_count||0} mentions)`).join('\n'))
     .join('\n');
-
-  const msg=`Here is the guest feedback data for ${entity}:
-
-TOP PAIN POINTS:
-${painBlock||'No data'}
-
-TOP DELIGHTS:
-${delightBlock||'No data'}
-
-R&D SIGNALS:
-${rdBlock||'No data'}
-
-Using ONLY the data above, generate department-specific action items for ${entity}. For each department (🍽️ F&B, 🛏️ Housekeeping, 👨‍💼 Guest Relations, ⚙️ Operations, 💰 Revenue), cite exact phrases and mention counts to justify actions. Include urgency level and one KPI to track. Skip departments with no relevant signals.`;
-
-  openChat();
-  await new Promise(r=>setTimeout(r,300));
-  await sendMessage(msg);
-  if(btn){btn.innerHTML='<span>✨</span><span>Get Action Insights by Department</span>';btn.disabled=false;}
+  const msg=`Here is the guest feedback data for ${entity}:\n\nTOP PAIN POINTS:\n${painBlock||'No data'}\n\nTOP DELIGHTS:\n${delightBlock||'No data'}\n\nR&D SIGNALS:\n${rdBlock||'No data'}\n\nUsing ONLY the data above, generate department-specific action items for ${entity}. For each relevant department (F&B, Housekeeping, Guest Relations, Operations, Revenue), cite exact phrases and mention counts. Include urgency level and one KPI to track. Use markdown with clear headers. Skip departments with no relevant signals.`;
+  try{
+    const r=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg,category:'hotels'})});
+    const d=await r.json();
+    const html=typeof marked!=='undefined'?marked.parse(d.response||''):((d.response||'').replace(/\n/g,'<br>'));
+    if(container){
+      container.innerHTML=`<div style="padding:16px;background:var(--card-bg);border-radius:10px;border:1px solid var(--border2)"><div style="color:var(--accent2);font-weight:700;font-size:13px;margin-bottom:12px">\u2728 Action Insights \u2014 ${entity}</div><div class="insights-body">${html}</div><button onclick="resetActionInsights()" style="margin-top:10px;background:rgba(45,33,84,.4);border:1px solid var(--border);color:var(--text3);padding:5px 14px;border-radius:7px;font-size:11px;cursor:pointer;font-family:inherit">Reset</button></div>`;
+    }
+  }catch(err){
+    if(container)container.innerHTML=`<div style="color:#ef4444;padding:12px">\u274c ${err.message}</div>`;
+  }
+  if(btn){btn.innerHTML='<span>\u2728</span><span>Get Action Insights by Department</span>';btn.disabled=false;}
+}
+function resetActionInsights(){
+  const c=document.getElementById('actionItemsContent');
+  if(c)c.innerHTML='<button id="getActionInsightsBtn" onclick="getActionInsights()" style="width:100%;padding:14px;background:linear-gradient(135deg,rgba(124,58,237,.15),rgba(99,102,241,.1));border:1px dashed rgba(168,85,247,.35);border-radius:10px;color:var(--accent2);font-size:13px;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px"><span>\u2728</span><span>Get Action Insights by Department</span></button>';
 }
 async function getCmpActionInsights(){
   const btn=document.getElementById('cmpActionBtn');
-  if(btn){btn.innerHTML='⏳ Generating insights…';btn.disabled=true;}
+  if(btn){btn.innerHTML='\u23f3 Generating\u2026';btn.disabled=true;}
   const state=window._cmpState;
-  if(!state?.itemStats?.length){alert('Please run a comparison first');if(btn)btn.innerHTML='<span>✨</span><span>Get Comparative Action Insights</span>';btn.disabled=false;return;}
+  if(!state?.itemStats?.length){alert('Please run a comparison first');if(btn){btn.innerHTML='<span>\u2728</span><span>Get Comparative Action Insights</span>';btn.disabled=false;}return;}
   const names=state.itemStats.map(s=>s.name);
   const entity=names.join(' vs ');
-
-  // Build comparative data block from frontend state
+  showCmpInsights('<div style="color:var(--text3);font-size:12px;padding:4px 0">\u23f3 Generating insights\u2026</div>','Action Insights',entity);
   const dataBlock=state.pdResults.map(item=>{
     const pains=(item.pain||[]).slice(0,5).map(p=>`    - ${p.phrase} (${p.aspect_name||'General'}, ${p.mention_count})`).join('\n');
-    const delights=(item.delights||[]).slice(0,3).map(d=>`    - ${d.phrase} (${d.aspect_name||'General'}, ${d.mention_count})`).join('\n');
-    return `${item.name}:\n  Pain Points:\n${pains||'    None'}\n  Delights:\n${delights||'    None'}`;
+    const dels=(item.delights||[]).slice(0,3).map(d=>`    - ${d.phrase} (${d.aspect_name||'General'}, ${d.mention_count})`).join('\n');
+    return `${item.name}:\n  Pain Points:\n${pains||'    None'}\n  Delights:\n${dels||'    None'}`;
   }).join('\n\n');
-
-  const msg=`Here is comparative guest feedback data for ${entity}:\n\n${dataBlock}\n\nFor each department (🍽️ F&B, 🛏️ Housekeeping, 👨‍💼 Guest Relations, ⚙️ Operations, 💰 Revenue), compare performance across these entities using the exact phrases and counts above. Identify which entity needs most urgent attention per department and why. Include urgency level.`;
-  openChat();
-  await new Promise(r=>setTimeout(r,300));
-  if(!currentHotel&&!currentBrand&&state?.itemStats?.[0]){
-    const first=state.itemStats[0];
-    if(state.compareBy==='brand') currentBrand=first.item;
-    updateChatContext();
+  const msg=`Comparative guest feedback for ${entity}:\n\n${dataBlock}\n\nFor each department (F&B, Housekeeping, Guest Relations, Operations, Revenue), compare performance using the exact phrases and counts. Identify which entity needs most urgent attention per department. Include urgency level. Use markdown with clear headers.`;
+  try{
+    const r=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg,category:'hotels'})});
+    const d=await r.json();
+    const html=typeof marked!=='undefined'?marked.parse(d.response||''):d.response||'';
+    showCmpInsights(html,'Action Insights',entity);
+  }catch(err){
+    showCmpInsights(`<span style="color:#ef4444">\u274c ${err.message}</span>`,'Action Insights',entity);
   }
-  await sendMessage(msg);
-  if(btn){btn.innerHTML='<span>✨</span><span>Get Comparative Action Insights</span>';btn.disabled=false;}
+  if(btn){btn.innerHTML='<span>\u2728</span><span>Get Comparative Action Insights</span>';btn.disabled=false;}
 }
 
 async function getCmpSwot(){
   const btn=document.getElementById('cmpSwotBtn');
-  if(btn){btn.innerHTML='⏳ Generating SWOT…';btn.disabled=true;}
+  if(btn){btn.innerHTML='\u23f3 Generating SWOT\u2026';btn.disabled=true;}
   const state=window._cmpState;
-  if(!state?.itemStats?.length){alert('Please run a comparison first');if(btn){btn.innerHTML='<span>📊</span><span>SWOT Analysis</span>';btn.disabled=false;}return;}
+  if(!state?.itemStats?.length){alert('Please run a comparison first');if(btn){btn.innerHTML='<span>\ud83d\udcca</span><span>SWOT Analysis</span>';btn.disabled=false;}return;}
   const names=state.itemStats.map(s=>s.name);
   const entity=names.join(' vs ');
-
-  // Build data for SWOT from frontend state
+  showCmpInsights('<div style="color:var(--text3);font-size:12px;padding:4px 0">\u23f3 Generating SWOT\u2026</div>','SWOT Analysis',entity);
   const dataBlock=state.allStats.map(s=>{
-    const aspects=s.aspects||[];
-    const topAsp=aspects.slice().sort((a,b)=>(b.satisfaction_pct||0)-(a.satisfaction_pct||0));
-    const strengths=topAsp.slice(0,2).map(a=>`${a.aspect_name} ${a.satisfaction_pct||0}%`).join(', ');
-    const weaknesses=topAsp.slice(-2).map(a=>`${a.aspect_name} ${a.satisfaction_pct||0}%`).join(', ');
-    return `${s.name}: +ve ${s.pos}%, -ve ${s.neg}%, Strengths: ${strengths}, Weaknesses: ${weaknesses}`;
+    const topAsp=(s.aspects||[]).slice().sort((a,b)=>(b.satisfaction_pct||0)-(a.satisfaction_pct||0));
+    const str=topAsp.slice(0,2).map(a=>`${a.aspect_name} ${a.satisfaction_pct||0}%`).join(', ');
+    const wk=topAsp.slice(-2).map(a=>`${a.aspect_name} ${a.satisfaction_pct||0}%`).join(', ');
+    return `${s.name}: +ve ${s.pos}%, -ve ${s.neg}%, Strengths: ${str}, Weaknesses: ${wk}`;
   }).join('\n');
-
   const pdBlock=state.pdResults.map(item=>{
     const pains=(item.pain||[]).slice(0,4).map(p=>`${p.phrase}(${p.mention_count})`).join(', ');
-    const delights=(item.delights||[]).slice(0,4).map(d=>`${d.phrase}(${d.mention_count})`).join(', ');
-    return `${item.name} — Pains: ${pains||'none'} | Delights: ${delights||'none'}`;
+    const dels=(item.delights||[]).slice(0,4).map(d=>`${d.phrase}(${d.mention_count})`).join(', ');
+    return `${item.name} - Pains: ${pains||'none'} | Delights: ${dels||'none'}`;
   }).join('\n');
-
-  const msg=`Here is guest feedback data for ${entity}:\n\nAspect scores:\n${dataBlock}\n\nPain points and delights:\n${pdBlock}\n\nUsing ONLY the data above, generate a SWOT analysis comparing ${entity}. Format:\n\nFor EACH entity, provide:\n✅ Strengths (what guests love, high satisfaction scores)\n⚠️ Weaknesses (pain points, low scores)\n🚀 Opportunities (gaps the entity could exploit vs competitors)\n🔴 Threats (areas where competitors are stronger)\n\nEnd with a 2-line competitive verdict: who is winning and where each should focus.`;
-
-  openChat();
-  await new Promise(r=>setTimeout(r,300));
-  if(!currentHotel&&!currentBrand&&state?.itemStats?.[0]){
-    const first=state.itemStats[0];
-    if(state.compareBy==='brand') currentBrand=first.item;
-    updateChatContext();
+  const msg=`Guest feedback data for ${entity}:\n\nAspect scores:\n${dataBlock}\n\nPains and delights:\n${pdBlock}\n\nGenerate a SWOT analysis comparing ${entity}. Use markdown. For EACH entity:\n**Strengths** (high satisfaction, guest loves)\n**Weaknesses** (pain points, low scores)\n**Opportunities** (gaps to exploit vs competitors)\n**Threats** (where competitors are stronger)\n\nEnd with a 2-line competitive verdict.`;
+  try{
+    const r=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg,category:'hotels'})});
+    const d=await r.json();
+    const html=typeof marked!=='undefined'?marked.parse(d.response||''):d.response||'';
+    showCmpInsights(html,'SWOT Analysis',entity);
+  }catch(err){
+    showCmpInsights(`<span style="color:#ef4444">\u274c ${err.message}</span>`,'SWOT Analysis',entity);
   }
-  await sendMessage(msg);
-  if(btn){btn.innerHTML='<span>📊</span><span>SWOT Analysis</span>';btn.disabled=false;}
+  if(btn){btn.innerHTML='<span>\ud83d\udcca</span><span>SWOT Analysis</span>';btn.disabled=false;}
+}
+
+function showCmpInsights(bodyHtml,title,entity){
+  let panel=document.getElementById('cmpInsightsPanel');
+  if(!panel){
+    panel=document.createElement('div');
+    panel.id='cmpInsightsPanel';
+    const cc=document.getElementById('comparisonContent');
+    if(cc)cc.appendChild(panel);
+  }
+  panel.innerHTML=`<div style="margin-top:20px;padding:18px 20px;background:var(--card-bg);border-radius:12px;border:1px solid var(--border2)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><div style="color:var(--accent2);font-weight:700;font-size:14px">${title} \u2014 ${entity}</div><button onclick="document.getElementById('cmpInsightsPanel').remove()" style="background:rgba(45,33,84,.4);border:1px solid var(--border);color:var(--text3);padding:3px 10px;border-radius:6px;font-size:11px;cursor:pointer;font-family:inherit">Clear</button></div><div class="insights-body">${bodyHtml}</div></div>`;
+  panel.scrollIntoView({behavior:'smooth',block:'start'});
 }
 function applyTheme(light){
   document.body.classList.toggle('light', light);
