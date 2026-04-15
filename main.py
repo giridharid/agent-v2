@@ -1122,25 +1122,6 @@ async def brand_drilldown(request: Request):
         return {"reviews": [], "total": 0, "error": str(e)}
 
 
-class GenerateRequest(BaseModel):
-    message: str
-    category: str = "hotels"
-
-@app.post("/api/generate")
-async def generate_text(request: GenerateRequest):
-    """Lightweight text generation — used for inline Action Insights and SWOT.
-    Bypasses the Data Analytics Agent (no BQ context needed — caller embeds data in message)."""
-    try:
-        model = get_gemini()
-        if not model:
-            return {"response": "AI service unavailable. Please check credentials.", "ok": False}
-        loop = asyncio.get_event_loop()
-        resp = await loop.run_in_executor(None, lambda: model.generate_content(request.message))
-        text = resp.text if resp.text else "No response generated."
-        return {"response": text, "ok": True}
-    except Exception as e:
-        print(f"[GENERATE ERROR] {e}")
-        return {"response": f"Generation error: {str(e)}", "ok": False}
 
 
 

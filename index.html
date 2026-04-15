@@ -982,6 +982,10 @@ function switchMode(mode){
   currentBrand=null; currentHotel=null; currentHotelName=null;
   currentCity=null; currentStar=null; currentProductId=null;
   hideContentAreas();
+  // Reset inline insights panels so they don't bleed across tabs
+  resetActionInsights();
+  const cmpPanel=document.getElementById('cmpInsightsPanel');
+  if(cmpPanel)cmpPanel.remove();
 
   if(mode==='brand'){
     viewMode='brand';
@@ -1004,6 +1008,8 @@ function switchMode(mode){
     document.getElementById('comparisonTab').classList.remove('hidden');
     document.getElementById('comparisonContent').innerHTML='<div style="color:#3d3355;text-align:center;padding:3rem;font-size:13px">Select items above and click Compare</div>';
     window._cmpState=null;
+    const oldPanel=document.getElementById('cmpInsightsPanel');
+    if(oldPanel)oldPanel.remove();
   }
   updateChatContext();
 }
@@ -2234,9 +2240,11 @@ async function getActionInsights(){
     .filter(([,items])=>items.length>0)
     .map(([label,items])=>`  [${label}]\n`+items.slice(0,5).map(i=>`    - ${i.phrase} (${i.aspect_name||''}, ${i.mention_count||0} mentions)`).join('\n'))
     .join('\n');
-  const msg=`Here is the guest feedback data for ${entity}:\n\nTOP PAIN POINTS:\n${painBlock||'No data'}\n\nTOP DELIGHTS:\n${delightBlock||'No data'}\n\nR&D SIGNALS:\n${rdBlock||'No data'}\n\nUsing ONLY the data above, generate department-specific action items for ${entity}. For each relevant department (F&B, Housekeeping, Guest Relations, Operations, Revenue), cite exact phrases and mention counts. Include urgency level and one KPI to track. Use markdown with clear headers. Skip departments with no relevant signals.`;
+  const msg=`TOP PAIN POINTS:\n${painBlock||'No data'}\n\nTOP DELIGHTS:\n${delightBlock||'No data'}\n\nR&D SIGNALS:\n${rdBlock||'No data'}\n\nGenerate department-specific action items for ${entity} using ONLY the data above. For each relevant department (F&B, Housekeeping, Guest Relations, Operations, Revenue), cite exact phrases and mention counts. Include urgency level and one KPI to track. Skip departments with no relevant signals.`;
+  const pid=currentProductId?parseInt(currentProductId):null;
+  const bid=(!pid&&currentBrand)?currentBrand:null;
   try{
-    const r=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg,category:'hotels'})});
+    const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg,product_id:pid,brand_id:bid,category:'hotels'})});
     const d=await r.json();
     const html=typeof marked!=='undefined'?marked.parse(d.response||''):((d.response||'').replace(/\n/g,'<br>'));
     if(container){
@@ -2264,9 +2272,11 @@ async function getCmpActionInsights(){
     const dels=(item.delights||[]).slice(0,3).map(d=>`    - ${d.phrase} (${d.aspect_name||'General'}, ${d.mention_count})`).join('\n');
     return `${item.name}:\n  Pain Points:\n${pains||'    None'}\n  Delights:\n${dels||'    None'}`;
   }).join('\n\n');
-  const msg=`Comparative guest feedback for ${entity}:\n\n${dataBlock}\n\nFor each department (F&B, Housekeeping, Guest Relations, Operations, Revenue), compare performance using the exact phrases and counts. Identify which entity needs most urgent attention per department. Include urgency level. Use markdown with clear headers.`;
+  const msg=`Comparative guest feedback for ${entity}:\n\n${dataBlock}\n\nFor each department (F&B, Housekeeping, Guest Relations, Operations, Revenue), compare performance using the exact phrases and counts. Identify which entity needs most urgent attention per department. Include urgency level.`;
+  const cmpBid=state.compareBy==='brand'?(state.itemStats[0]?.item||null):null;
+  const cmpPid=state.compareBy==='hotel'?(parseInt(state.itemStats[0]?.item)||null):null;
   try{
-    const r=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg,category:'hotels'})});
+    const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg,brand_id:cmpBid,product_id:cmpPid,category:'hotels'})});
     const d=await r.json();
     const html=typeof marked!=='undefined'?marked.parse(d.response||''):d.response||'';
     showCmpInsights(html,'Action Insights',entity);
@@ -2295,9 +2305,11 @@ async function getCmpSwot(){
     const dels=(item.delights||[]).slice(0,4).map(d=>`${d.phrase}(${d.mention_count})`).join(', ');
     return `${item.name} - Pains: ${pains||'none'} | Delights: ${dels||'none'}`;
   }).join('\n');
-  const msg=`Guest feedback data for ${entity}:\n\nAspect scores:\n${dataBlock}\n\nPains and delights:\n${pdBlock}\n\nGenerate a SWOT analysis comparing ${entity}. Use markdown. For EACH entity:\n**Strengths** (high satisfaction, guest loves)\n**Weaknesses** (pain points, low scores)\n**Opportunities** (gaps to exploit vs competitors)\n**Threats** (where competitors are stronger)\n\nEnd with a 2-line competitive verdict.`;
+  const msg=`Guest feedback data for ${entity}:\n\nAspect scores:\n${dataBlock}\n\nPains and delights:\n${pdBlock}\n\nGenerate a SWOT analysis comparing ${entity}. For EACH entity:\n**Strengths** (high satisfaction, guest loves)\n**Weaknesses** (pain points, low scores)\n**Opportunities** (gaps to exploit vs competitors)\n**Threats** (where competitors are stronger)\n\nEnd with a 2-line competitive verdict.`;
+  const swotBid=state.compareBy==='brand'?(state.itemStats[0]?.item||null):null;
+  const swotPid=state.compareBy==='hotel'?(parseInt(state.itemStats[0]?.item)||null):null;
   try{
-    const r=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg,category:'hotels'})});
+    const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg,brand_id:swotBid,product_id:swotPid,category:'hotels'})});
     const d=await r.json();
     const html=typeof marked!=='undefined'?marked.parse(d.response||''):d.response||'';
     showCmpInsights(html,'SWOT Analysis',entity);
@@ -2354,7 +2366,7 @@ document.addEventListener('mousemove',e=>{if(document.getElementById('tmTooltip'
 <div class="footer">
   <span>© 2026 Acquink</span>
   <span>Powered by <span class="masi">MASI</span> Technology</span>
-  <span>v2.61 — 2026-04-14</span>
+  <span>v2.64 — 2026-04-15</span>
 </div>
 </body>
 </html>
