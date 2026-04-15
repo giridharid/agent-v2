@@ -1445,6 +1445,8 @@ async function loadBrandSignals(brand){
 async function loadHotelDataV2(productId){
   if(!productId)return;
   currentProductId=productId;
+  // ── Fetch ────────────────────────────────────────────────────
+  let data;
   try{
     const r=await fetch(`/api/hotel/${productId}/summary`);
     if(!r.ok){
@@ -1452,17 +1454,24 @@ async function loadHotelDataV2(productId){
       console.error('[loadHotelDataV2] API error:',r.status,err.detail||r.status);
       return {detail: err.detail||`HTTP ${r.status}`};
     }
-    const data=await r.json();
-    // Context header
+    data=await r.json();
+  }catch(e){
+    console.error('[loadHotelDataV2] fetch error:',e);
+    return {detail:'Network error'};
+  }
+  // ── Context header (critical — always render) ────────────────
+  try{
     document.getElementById('contextIcon').textContent='🏨';
     document.getElementById('contextTitle').textContent=data.hotel_name||currentHotelName||productId;
-    const stars=data.star_category?'⭐'.repeat(data.star_category):'';
+    const stars=data.star_category?'⭐'.repeat(Math.min(parseInt(data.star_category)||0,5)):'';
     document.getElementById('contextSubtitle').textContent=`${data.brand_name||''} · ${data.city||''} ${stars}`.trim();
     document.getElementById('contextRating').textContent=data.google_rating?`★ ${Number(data.google_rating).toFixed(1)}`:'--';
     document.getElementById('contextReviews').textContent=data.review_count?Number(data.review_count).toLocaleString():'--';
     document.getElementById('contextAddress').textContent=data.address||'';
     document.getElementById('paradoxBtn').classList.remove('hidden');
-    // Stats
+  }catch(e){console.error('[loadHotelDataV2] context header error:',e);}
+  // ── Stats cards ──────────────────────────────────────────────
+  try{
     const aspects=data.aspects||[];
     const mentions=aspects.reduce((s,a)=>s+(a.total_mentions||0),0);
     document.getElementById('statOverall').textContent=(data.overall_satisfaction||0)+'%';
@@ -1473,6 +1482,7 @@ async function loadHotelDataV2(productId){
     if(sortedA.length>1){const w=sortedA[sortedA.length-1];document.getElementById('statWeakness').textContent=w.aspect_name;document.getElementById('statWeaknessScore').textContent=(w.satisfaction_pct||0)+'% satisfaction';}
     const demo=data.demographics||{};
     const knownTypes=(demo.traveler_type||[])
+      .filter(t=>t&&(t.dimension_value||t.traveler_type))
       .map(t=>({val:t.dimension_value||t.traveler_type||'', cnt:+(t.count||t.review_count||0)}))
       .filter(t=>t.val&&!['unknown','none','null',''].includes(t.val.toLowerCase())&&t.cnt>0)
       .sort((a,b)=>b.cnt-a.cnt);
@@ -1484,9 +1494,11 @@ async function loadHotelDataV2(productId){
       document.getElementById('statGuestType').textContent='--';
       document.getElementById('statGuestPct').textContent='--';
     }
-    // Emotions
+  }catch(e){console.error('[loadHotelDataV2] stats error:',e);}
+  // ── Emotions + aspect charts ──────────────────────────────────
+  try{
+    const aspects=data.aspects||[];
     renderEmotions(data.emotions||[]);
-    // Aspect charts — populate before showing
     if(aspects.length){
       const totalMentions=aspects.reduce((s,a)=>s+(a.total_mentions||0),0);
       const sortedSov=[...aspects].sort((a,b)=>(b.share_of_voice_pct||0)-(a.share_of_voice_pct||0));
@@ -1500,19 +1512,19 @@ async function loadHotelDataV2(productId){
         const col=p>=80?'#0072b2':p>=60?'#e69f00':'#d55e00';
         return `<div class="css-bar-row"><div class="css-bar-lbl">${ASPECT_ICONS[d.aspect_id]||''} ${d.aspect_name}</div><div class="css-bar-track"><div class="css-bar-fill" style="width:${Math.min(p,100)}%;background:${col}"></div></div><div class="css-bar-val" style="color:${col}">${p}%</div></div>`;
       }).join('');
-      // Always show chartsRow once data is populated (activeTab was reset to 'drivers' before this call)
       document.getElementById('chartsRow').classList.remove('hidden');
     }
-    // Pain, delights, RD — render and explicitly show their rows
+    treemapData=data.aspects||[];
+  }catch(e){console.error('[loadHotelDataV2] charts error:',e);}
+  // ── Pain / delights / RD signals ─────────────────────────────
+  try{
     renderPainPoints(data.pain_points||[]);
     renderDelights(data.delights||[]);
     renderRdSignals(data.rd_signals||{});
     document.getElementById('painDelightsRow').classList.remove('hidden');
     document.getElementById('rdSignalsRow').classList.remove('hidden');
-    // Cache aspects for treemap
-    treemapData=aspects;
-    return data;
-  }catch(e){console.error('loadHotelDataV2 error:',e);}
+  }catch(e){console.error('[loadHotelDataV2] signals error:',e);}
+  return data;
 }
 
 // ─── RENDER HELPERS ───────────────────────────────────────────
@@ -1935,7 +1947,7 @@ function renderCmpDynamic(asp){
     <button onclick="getCmpActionInsights()" style="width:100%;padding:14px;background:linear-gradient(135deg,rgba(124,58,237,.15),rgba(99,102,241,.1));border:1px dashed rgba(168,85,247,.35);border-radius:10px;color:var(--accent2);font-size:13px;cursor:pointer;font-family:inherit;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:8px" id="cmpActionBtn">
       <span>✨</span><span>Get Comparative Action Insights</span>
     </button>
-    <button onclick="getCmpSwot()" style="width:100%;padding:14px;background:linear-gradient(135deg,rgba(0,114,178,.12),rgba(0,158,115,.1));border:1px dashed rgba(0,158,115,.4);border-radius:10px;color:#5eead4;font-size:13px;cursor:pointer;font-family:inherit;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:8px" id="cmpSwotBtn">
+    <button onclick="getCmpSwot()" style="width:100%;padding:14px;background:linear-gradient(135deg,rgba(0,114,178,.12),rgba(0,158,115,.1));border:1px dashed rgba(0,158,115,.4);border-radius:10px;color:var(--accent2);font-size:13px;cursor:pointer;font-family:inherit;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:8px" id="cmpSwotBtn">
       <span>📊</span><span>SWOT Analysis</span>
     </button>
     </div>
@@ -2366,7 +2378,7 @@ document.addEventListener('mousemove',e=>{if(document.getElementById('tmTooltip'
 <div class="footer">
   <span>© 2026 Acquink</span>
   <span>Powered by <span class="masi">MASI</span> Technology</span>
-  <span>v2.64 — 2026-04-15</span>
+  <span>v2.65 — 2026-04-15</span>
 </div>
 </body>
 </html>
