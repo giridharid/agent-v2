@@ -1890,8 +1890,8 @@ async def stay_purpose_preferences(product_id: Optional[int] = None, brand: Opti
         sp = row['stay_purpose']
         if sp not in result:
             result[sp] = {"stay_purpose": sp, "aspects": {}}
-        raw_asp = str(row['aspect_name'] or '')
-        asp_id_match = next((k for k,v in ASPECT_MAP.items() if v.lower() == raw_asp.lower()), None)
+        raw_asp = str(row['aspect_name'] or '').lower().replace("_"," ")
+        asp_id_match = next((k for k,v in ASPECT_MAP.items() if v.lower() == raw_asp), None)
         display_asp = VALID_ASPECTS.get(asp_id_match) or ASPECT_MAP.get(asp_id_match) or raw_asp
         if asp_id_match not in VALID_ASPECTS:
             continue  # skip General
@@ -1932,8 +1932,8 @@ async def traveler_preferences(product_id: Optional[int] = None, brand: Optional
         tt = row['traveler_type']
         if tt not in result:
             result[tt] = {"traveler_type": tt, "aspects": {}}
-        raw_asp = str(row['aspect_name'] or '')
-        asp_id_match = next((k for k,v in ASPECT_MAP.items() if v.lower() == raw_asp.lower()), None)
+        raw_asp = str(row['aspect_name'] or '').lower().replace("_"," ")
+        asp_id_match = next((k for k,v in ASPECT_MAP.items() if v.lower() == raw_asp), None)
         display_asp = VALID_ASPECTS.get(asp_id_match) or ASPECT_MAP.get(asp_id_match) or raw_asp
         if asp_id_match not in VALID_ASPECTS:
             continue  # skip General
@@ -1969,7 +1969,8 @@ async def comparison_alias(items: str = "", compare_by: str = "hotel"):
                 # Map lowercase aspect_name to display name, filter General
                 mapped = []
                 for _, r in df.iterrows():
-                    asp_id = next((k for k,v in ASPECT_MAP.items() if v.lower()==str(r["aspect_name"]).lower()), None)
+                    raw = str(r["aspect_name"]).lower().replace("_"," ")
+                    asp_id = next((k for k,v in ASPECT_MAP.items() if v.lower()==raw), None)
                     if asp_id not in VALID_ASPECTS: continue  # skip General + unknown
                     mapped.append({"aspect_name": VALID_ASPECTS[asp_id],
                                    "satisfaction_pct": int(r["satisfaction_pct"] or 0),
@@ -2006,7 +2007,8 @@ async def comparison_alias(items: str = "", compare_by: str = "hotel"):
                 if df.empty: continue
                 aspects = []
                 for _, r in df.iterrows():
-                    asp_id = next((k for k,v in ASPECT_MAP.items() if v.lower()==str(r["aspect_name"]).lower()), None)
+                    raw = str(r["aspect_name"]).lower().replace("_"," ")
+                    asp_id = next((k for k,v in ASPECT_MAP.items() if v.lower()==raw), None)
                     if asp_id not in VALID_ASPECTS: continue  # skip General
                     aspects.append({"aspect_name": VALID_ASPECTS[asp_id],
                                     "satisfaction_pct": int(r["satisfaction_pct"] or 0),

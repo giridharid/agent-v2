@@ -674,7 +674,7 @@ body.light .insights-body code{background:rgba(109,40,217,.08);color:#5b21b6}
           <option value="Dining">Dining</option><option value="Staff">Staff</option>
           <option value="Room">Room</option><option value="Cleanliness">Cleanliness</option>
           <option value="Amenities">Amenities</option><option value="Location">Location</option>
-          <option value="Value for Money">Value for Money</option><option value="General">General</option>
+          <option value="Value for Money">Value for Money</option>
         </select>
       </div>
       <div id="painPointsList"></div>
@@ -687,7 +687,7 @@ body.light .insights-body code{background:rgba(109,40,217,.08);color:#5b21b6}
           <option value="Dining">Dining</option><option value="Staff">Staff</option>
           <option value="Room">Room</option><option value="Cleanliness">Cleanliness</option>
           <option value="Amenities">Amenities</option><option value="Location">Location</option>
-          <option value="Value for Money">Value for Money</option><option value="General">General</option>
+          <option value="Value for Money">Value for Money</option>
         </select>
       </div>
       <div id="delightsList"></div>
@@ -782,7 +782,8 @@ const EMOTION_COLORS={
   disgust:{bg:'rgba(26,46,5,.7)',text:'#bef264',icon:'🤢'}
 };
 const ASPECT_ICONS={1:'🍽️',2:'🧹',3:'🏊',4:'👨‍💼',5:'🛏️',6:'📍',7:'💰',8:'⭐'};
-const ASPECT_COLORS={'Dining':'#14b8a6','Staff':'#8b5cf6','Room':'#3b82f6','Cleanliness':'#22c55e','Amenities':'#f59e0b','Location':'#ec4899','Value for Money':'#f97316','General':'#6b7280'};
+const ASPECT_COLORS={'Dining':'#14b8a6','Staff':'#8b5cf6','Room':'#3b82f6','Cleanliness':'#22c55e','Amenities':'#f59e0b','Location':'#ec4899','Value for Money':'#f97316'};
+let configAspects=['Dining','Cleanliness','Amenities','Staff','Room','Location','Value for Money']; // loaded from /api/config
 
 // ─── LOADER ───────────────────────────────────────────────────
 function showLoader(){document.getElementById('loader').classList.add('show')}
@@ -1394,7 +1395,7 @@ async function loadStayPurposePreferences(){
   try{
     const r=await fetch(`/api/stay_purpose_preferences?${buildParams()}`);const data=await r.json();
     if(!Array.isArray(data)||!data.length){document.getElementById('stayPurposeContent').innerHTML='<div class="no-data">No stay purpose data</div>';return;}
-    const aspects=['Dining','Cleanliness','Amenities','Staff','Room','Location','Value for Money','General'];
+    const aspects=configAspects;
     let html=`<table class="data-table"><thead><tr><th>Stay Purpose</th>${aspects.map(a=>`<th class="item-col">${a}</th>`).join('')}</tr></thead><tbody>`;
     data.forEach(row=>{
       html+=`<tr><td style="color:var(--text2);font-weight:500">${row.stay_purpose}</td>`;
@@ -1409,7 +1410,7 @@ async function loadTravelerTypePreferences(){
   try{
     const r=await fetch(`/api/traveler_preferences?${buildParams()}`);const data=await r.json();
     if(!Array.isArray(data)||!data.length){document.getElementById('travelerTypeContent').innerHTML='<div class="no-data">No traveler type data</div>';return;}
-    const aspects=['Dining','Cleanliness','Amenities','Staff','Room','Location','Value for Money','General'];
+    const aspects=configAspects;
     let html=`<table class="data-table"><thead><tr><th>Traveler Type</th>${aspects.map(a=>`<th class="item-col">${a}</th>`).join('')}</tr></thead><tbody>`;
     data.forEach(row=>{
       html+=`<tr><td style="color:var(--text2);font-weight:500">${row.traveler_type}</td>`;
@@ -1703,7 +1704,7 @@ async function loadComparison(items,compareBy){
     ?['#d97706','#0284c7','#059669','#db2777']  // darker for light theme
     :['#f5a623','#4fc3f7','#69f0ae','#f48fb1']; // brighter for dark theme
   const BM_COLOR='#9d86cc';
-  const ASPECTS=['Dining','Cleanliness','Staff','Room','Location','Value for Money','General'];
+  const ASPECTS=configAspects;
   try{
     const regularItems=items.filter(x=>!x.startsWith('__bm__'));
     const bmRaws=items.filter(x=>x.startsWith('__bm__')).map(x=>x.replace('__bm__:',''));
@@ -1831,7 +1832,7 @@ async function loadComparison(items,compareBy){
       window._cmpState={allStats,tmByItem,pdResults,itemStats,compareBy};
 
       // ── Aspect filter bar ─────────────────────────────────────────────
-      const ASPECTS_F=['Dining','Cleanliness','Amenities','Staff','Room','Location','Value for Money'];
+      const ASPECTS_F=configAspects;
       html+=`<div id="cmpAspectBar" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;padding:10px 0;border-bottom:1px solid rgba(45,33,84,.3)">
         <span style="color:var(--text4);font-size:11px;font-weight:600;align-self:center;margin-right:4px">Filter:</span>
         <button class="cmp-asp-btn active" onclick="setCmpAspect('all',this)">All Aspects</button>
@@ -1861,7 +1862,7 @@ function setCmpAspect(asp, btn){
 function renderCmpDynamic(asp){
   const{allStats,tmByItem,pdResults,itemStats,compareBy}=window._cmpState||{};
   if(!allStats)return;
-  const ASPECTS_F=['Dining','Cleanliness','Amenities','Staff','Room','Location','Value for Money'];
+  const ASPECTS_F=configAspects;
 
   // ── Build scatter points (x = actual mention count, y = satisfaction %) ──
   let points=[];
@@ -2115,6 +2116,7 @@ async function loadChatSuggestions(){
   try{
     const r=await fetch('/api/config');
     const d=await r.json();
+    if(d.aspects&&d.aspects.length)configAspects=d.aspects.map(a=>a.aspect_name);
     const sug=document.getElementById('chatSuggestions');
     if(sug&&d.suggested_questions){
       sug.innerHTML=d.suggested_questions.map(q=>`<button class="chat-sug" onclick="sendSuggestion(this)">${q}</button>`).join('');
