@@ -245,6 +245,24 @@ def load_master_caches():
     
     try:
         # Load brands
+        # ── Load category + aspects from BQ ──────────────────────────────
+        global ASPECT_MAP, VALID_ASPECTS
+        try:
+            cat_df = client.query(f"""
+                SELECT ca.aspect_id, ca.aspect_name, ca.insight
+                FROM `{PROJECT}.{DATASET}.category_aspect` ca
+                JOIN `{PROJECT}.{DATASET}.category` c ON ca.category_id = c.id
+                WHERE LOWER(c.category_name) = '{CATEGORY}'
+                  AND ca.status = 'A'
+                ORDER BY ca.aspect_id
+            """).to_dataframe()
+            ASPECT_MAP = {int(r['aspect_id']): str(r['aspect_name']) for _, r in cat_df.iterrows()}
+            VALID_ASPECTS = {int(r['aspect_id']): str(r['aspect_name']) for _, r in cat_df.iterrows() if r['insight'] == 'Y'}
+            print(f"[CACHE] Loaded {len(VALID_ASPECTS)} aspects for category '{CATEGORY}' from BQ: {list(VALID_ASPECTS.values())}")
+        except Exception as e:
+            print(f"[WARN] Could not load aspects from BQ: {e}")
+            # Hardcoded fallback removed — fix BQ connection if this triggers
+
         brands_query = f"""
         SELECT brand_id, brand_name, categories
         FROM `{PROJECT}.{DATASET}.brand_master`
@@ -399,24 +417,6 @@ def load_master_caches():
                 })
         set_cache("demo_by_pid", demo_by_pid)
         print(f"[CACHE] Loaded demographics: {len(demo_by_pid)} products")
-
-        # ── Load category + aspects from BQ ──────────────────────────────
-        global ASPECT_MAP, VALID_ASPECTS
-        try:
-            cat_df = client.query(f"""
-                SELECT ca.aspect_id, ca.aspect_name, ca.insight
-                FROM `{PROJECT}.{DATASET}.category_aspect` ca
-                JOIN `{PROJECT}.{DATASET}.category` c ON ca.category_id = c.id
-                WHERE LOWER(c.category_name) = '{CATEGORY}'
-                  AND ca.status = 'A'
-                ORDER BY ca.aspect_id
-            """).to_dataframe()
-            ASPECT_MAP = {int(r['aspect_id']): str(r['aspect_name']) for _, r in cat_df.iterrows()}
-            VALID_ASPECTS = {int(r['aspect_id']): str(r['aspect_name']) for _, r in cat_df.iterrows() if r['insight'] == 'Y'}
-            print(f"[CACHE] Loaded {len(VALID_ASPECTS)} aspects for category '{CATEGORY}' from BQ: {list(VALID_ASPECTS.values())}")
-        except Exception as e:
-            print(f"[WARN] Could not load aspects from BQ: {e}")
-            # Hardcoded fallback removed — fix BQ connection if this triggers
 
         # ── Load product_phrases treemap cache ──
         # VALID_ASPECTS now loaded dynamically above
