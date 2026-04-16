@@ -761,6 +761,7 @@ body.light .insights-body code{background:rgba(109,40,217,.08);color:#5b21b6}
 <script>
 // ─── STATE ────────────────────────────────────────────────────
 let currentMode='brand', viewMode='brand';
+const currentCategory='hotels'; // ← single variable — change to switch verticals
 let currentBrand=null, currentHotel=null, currentHotelName=null;
 let currentCity=null, currentStar=null, currentProductId=null;
 let activeTab='drivers';
@@ -2110,6 +2111,21 @@ function buildTreemapChart(points, allStats, asp){
 }
 
 // ─── CHAT ─────────────────────────────────────────────────────
+async function loadChatSuggestions(){
+  try{
+    const r=await fetch('/api/config');
+    const d=await r.json();
+    const sug=document.getElementById('chatSuggestions');
+    if(sug&&d.suggested_questions){
+      sug.innerHTML=d.suggested_questions.map(q=>`<button class="chat-sug" onclick="sendSuggestion(this)">${q}</button>`).join('');
+    }
+  }catch(e){console.log('Config load failed',e);}
+}
+function sendSuggestion(btn){
+  const msg=btn.textContent;
+  document.getElementById('chatInput').value=msg;
+  sendChat();
+}
 function openChat(){document.getElementById('chatPanel').classList.add('open');document.getElementById('chatOverlay').classList.add('show');updateChatContext();}
 function closeChat(){document.getElementById('chatPanel').classList.remove('open');document.getElementById('chatOverlay').classList.remove('show');}
 function clearChat(){
@@ -2212,7 +2228,7 @@ async function sendMessage(msg){
       message:msg,
       product_id:productId?Number(productId):null,
       brand_id:currentBrand||null,
-      category:'hotels'
+      category:currentCategory
     };
     const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     const data=await r.json();
@@ -2256,7 +2272,7 @@ async function getActionInsights(){
   const pid=currentProductId?parseInt(currentProductId):null;
   const bid=(!pid&&currentBrand)?currentBrand:null;
   try{
-    const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg,product_id:pid,brand_id:bid,category:'hotels'})});
+    const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg,product_id:pid,brand_id:bid,category:currentCategory})});
     const d=await r.json();
     const html=typeof marked!=='undefined'?marked.parse(d.response||''):((d.response||'').replace(/\n/g,'<br>'));
     if(container){
@@ -2288,7 +2304,7 @@ async function getCmpActionInsights(){
   const cmpBid=state.compareBy==='brand'?(state.itemStats[0]?.item||null):null;
   const cmpPid=state.compareBy==='hotel'?(parseInt(state.itemStats[0]?.item)||null):null;
   try{
-    const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg,brand_id:cmpBid,product_id:cmpPid,category:'hotels'})});
+    const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg,brand_id:cmpBid,product_id:cmpPid,category:currentCategory})});
     const d=await r.json();
     const html=typeof marked!=='undefined'?marked.parse(d.response||''):d.response||'';
     showCmpInsights(html,'Action Insights',entity);
@@ -2321,7 +2337,7 @@ async function getCmpSwot(){
   const swotBid=state.compareBy==='brand'?(state.itemStats[0]?.item||null):null;
   const swotPid=state.compareBy==='hotel'?(parseInt(state.itemStats[0]?.item)||null):null;
   try{
-    const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg,brand_id:swotBid,product_id:swotPid,category:'hotels'})});
+    const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg,brand_id:swotBid,product_id:swotPid,category:currentCategory})});
     const d=await r.json();
     const html=typeof marked!=='undefined'?marked.parse(d.response||''):d.response||'';
     showCmpInsights(html,'SWOT Analysis',entity);
@@ -2378,7 +2394,7 @@ document.addEventListener('mousemove',e=>{if(document.getElementById('tmTooltip'
 <div class="footer">
   <span>© 2026 Acquink</span>
   <span>Powered by <span class="masi">MASI</span> Technology</span>
-  <span>v1 — 2026-04-15</span>
+  <span>v2.65 — 2026-04-15</span>
 </div>
 </body>
 </html>

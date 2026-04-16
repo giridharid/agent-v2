@@ -62,14 +62,17 @@ DATASET = "smaartanalyst"
 AGENT_ID = os.environ.get("GEMINI_AGENT_ID", "agent_024eedb9-0b86-4101-82a5-f4b3d72c5ee3")
 AGENT_LOCATION = "global"  # Data Analytics Agent uses global, not regional
 
-ASPECT_MAP = {
-    1: "Dining", 2: "Cleanliness", 3: "Amenities", 4: "Staff",
-    5: "Room", 6: "Location", 7: "Value for Money", 8: "General"
-}
+CATEGORY = "hotels"   # ← single variable — change this to switch verticals
 
-ASPECT_ICONS = {
+# Aspect data loaded dynamically from BQ category_aspect at startup
+ASPECT_MAP: dict = {}    # populated in load_master_caches()
+VALID_ASPECTS: dict = {} # same as ASPECT_MAP but only insight=Y aspects
+
+ASPECT_ICONS: dict = {
     "Dining": "🍽️", "Cleanliness": "🧹", "Amenities": "🏊", "Staff": "👨‍💼",
-    "Room": "🛏️", "Location": "📍", "Value for Money": "💰", "General": "⭐"
+    "Room": "🛏️", "Location": "📍", "Value for Money": "💰", "General": "⭐",
+    "Battery": "🔋", "Camera": "📷", "Performance": "⚡", "Display": "📱",
+    "Design": "✨", "Software": "💻", "Connectivity": "📶",
 }
 
 EMOTION_COLORS = {
@@ -397,8 +400,27 @@ def load_master_caches():
         set_cache("demo_by_pid", demo_by_pid)
         print(f"[CACHE] Loaded demographics: {len(demo_by_pid)} products")
 
+        # ── Load category + aspects from BQ ──────────────────────────────
+        global ASPECT_MAP, VALID_ASPECTS
+        try:
+            cat_df = client.query(f"""
+                SELECT ca.aspect_id, ca.aspect_name, ca.insight
+                FROM `{PROJECT}.{DATASET}.category_aspect` ca
+                JOIN `{PROJECT}.{DATASET}.category` c ON ca.category_id = c.id
+                WHERE LOWER(c.category_name) = '{CATEGORY}'
+                  AND ca.status = 'A'
+                ORDER BY ca.aspect_id
+            """).to_dataframe()
+            ASPECT_MAP = {int(r['aspect_id']): str(r['aspect_name']) for _, r in cat_df.iterrows()}
+            VALID_ASPECTS = {int(r['aspect_id']): str(r['aspect_name']) for _, r in cat_df.iterrows() if r['insight'] == 'Y'}
+            print(f"[CACHE] Loaded {len(VALID_ASPECTS)} aspects for category '{CATEGORY}' from BQ")
+        except Exception as e:
+            print(f"[WARN] Could not load aspects from BQ, using fallback: {e}")
+            ASPECT_MAP = {1:"Dining",2:"Cleanliness",3:"Amenities",4:"Staff",5:"Room",6:"Location",7:"Value for Money",8:"General"}
+            VALID_ASPECTS = {1:"Dining",2:"Cleanliness",3:"Amenities",4:"Staff",5:"Room",6:"Location",7:"Value for Money"}
+
         # ── Load product_phrases treemap cache ──
-        VALID_ASPECTS = {1:"Dining",2:"Cleanliness",3:"Amenities",4:"Staff",5:"Room",6:"Location",7:"Value for Money"}
+        # VALID_ASPECTS now loaded dynamically above
         phrases_df = client.query(f"""
             SELECT p.product_id, p.aspect_id, p.treemap_name, SUM(p.mention_count) as mention_count,
                    h.brand_name
@@ -485,6 +507,32 @@ async def health():
 # ─────────────────────────────────────────
 # MASTER DATA APIs
 # ─────────────────────────────────────────
+@app.get("/api/config")
+async def get_config():
+    """Return category config — aspects, icons, category name — for frontend."""
+    aspects = [
+        {
+            "aspect_id": k,
+            "aspect_name": v,
+            "icon": ASPECT_ICONS.get(v, "⭐"),
+            "lowercase_key": v.lower().replace(" ", "_")
+        }
+        for k, v in VALID_ASPECTS.items()
+    ]
+    return {
+        "category": CATEGORY,
+        "aspects": aspects,
+        "suggested_questions": [
+            f"What are the biggest pain points in {aspects[0]['aspect_name'] if aspects else 'dining'}?",
+            f"Which aspect needs the most improvement?",
+            f"What do guests love most?",
+            f"Generate a SWOT analysis",
+            f"What are the top R&D signals?",
+            f"Compare satisfaction across all aspects",
+        ]
+    }
+
+
 @app.get("/api/brands")
 async def get_brands(category: str = "hotels"):
     """Get all brands for a category"""
@@ -1052,7 +1100,8 @@ async def drilldown(request: DrilldownRequest):
             df = client.query(query2).to_dataframe()
             print(f"[DRILLDOWN] LIKE fallback: {len(df)} rows for pid={request.product_id} phrase='{request.phrase}'")
 
-        reviews = df.to_dict(orient='records')
+        df = df.drop_duplicates(subset=['review_text'])
+        reviews = [clean_row(r) for r in df.to_dict(orient='records')]
         return {"reviews": reviews, "total": len(reviews), "total_count": len(reviews),
                 "phrase": request.phrase, "signal_type": request.signal_type}
     except Exception as e:
@@ -1106,7 +1155,8 @@ async def brand_drilldown(request: Request):
             """
             df = client.query(q2).to_dataframe()
             print(f"[BRAND_DRILLDOWN] text fallback rows={len(df)}")
-        return df.to_dict(orient='records')
+        df = df.drop_duplicates(subset=['review_text'])
+        return [clean_row(r) for r in df.to_dict(orient='records')]
 
     try:
         reviews = await asyncio.wait_for(
@@ -1560,7 +1610,6 @@ async def get_treemap_phrases(
     client = get_bq()
     if not client:
         return {}
-    VALID_ASPECTS = {1:"Dining",2:"Cleanliness",3:"Amenities",4:"Staff",5:"Room",6:"Location",7:"Value for Money"}
     try:
         if product_id:
             query = f"""
@@ -1681,8 +1730,6 @@ async def hotel_details_alias(product_id: Optional[int] = None, brand: Optional[
 @app.get("/api/drivers")
 async def drivers_alias(product_id: Optional[int] = None, brand: Optional[str] = None,
                          city: Optional[str] = None, star: Optional[str] = None):
-    ASPECT_ICONS = {1:"🍽️",2:"🧹",3:"🏊",4:"👨‍💼",5:"🛏️",6:"📍",7:"💰",8:"⭐"}
-
     if product_id:
         cached = get_cache("aspects_by_pid")
         if cached:
@@ -1695,7 +1742,7 @@ async def drivers_alias(product_id: Optional[int] = None, brand: Optional[str] =
                     sat = r['satisfaction_pct'] or (round(pos*100/(pos+neg)) if (pos+neg)>0 else 0)
                     sov = r['share_of_voice_pct'] or round(r['total_mentions']*100/total)
                     result.append({**r, 'satisfaction': sat, 'share_of_voice': sov,
-                                   'icon': ASPECT_ICONS.get(r['aspect_id'], '⭐')})
+                                   'icon': ASPECT_ICONS.get(str(r.get('aspect_name','')), '⭐')})
                 return result
 
     elif brand and not city and not star:
@@ -1703,7 +1750,7 @@ async def drivers_alias(product_id: Optional[int] = None, brand: Optional[str] =
         cached = get_cache("aspects_by_brand")
         if cached and brand in cached:
             rows = cached[brand]
-            return [{**r, 'icon': ASPECT_ICONS.get(r['aspect_id'], '⭐')} for r in rows]
+            return [{**r, 'icon': ASPECT_ICONS.get(str(r.get('aspect_name','')), '⭐')} for r in rows]
 
     # Fallback to BQ
     client = get_bq()
@@ -1747,7 +1794,7 @@ async def drivers_alias(product_id: Optional[int] = None, brand: Optional[str] =
             'aspect_name': str(row.get('aspect_name') or ''),
             'satisfaction': sat, 'share_of_voice': sov,
             'positive_count': pos, 'negative_count': neg, 'total_mentions': total,
-            'icon': ASPECT_ICONS.get(int(row.get('aspect_id') or 0), '⭐')
+            'icon': ASPECT_ICONS.get(str(row.get('aspect_name','')), '⭐')
         })
     return results
 
