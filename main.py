@@ -1966,7 +1966,16 @@ async def comparison_alias(items: str = "", compare_by: str = "hotel"):
                 """
                 df = client.query(query).to_dataframe()
                 if df.empty: continue
-                aspects = df[["aspect_name","satisfaction_pct","share_of_voice_pct","total_mentions"]].to_dict(orient='records')
+                # Map lowercase aspect_name to display name, filter General
+                mapped = []
+                for _, r in df.iterrows():
+                    asp_id = next((k for k,v in ASPECT_MAP.items() if v.lower()==str(r["aspect_name"]).lower()), None)
+                    if asp_id not in VALID_ASPECTS: continue  # skip General + unknown
+                    mapped.append({"aspect_name": VALID_ASPECTS[asp_id],
+                                   "satisfaction_pct": int(r["satisfaction_pct"] or 0),
+                                   "share_of_voice_pct": int(r.get("share_of_voice_pct") or 0),
+                                   "total_mentions": int(r["total_mentions"])})
+                aspects = mapped
                 total_pos = int(df["positive_count"].sum())
                 total_neg = int(df["negative_count"].sum())
                 result[pid_str] = {
@@ -1995,8 +2004,13 @@ async def comparison_alias(items: str = "", compare_by: str = "hotel"):
                 """
                 df = client.query(query).to_dataframe()
                 if df.empty: continue
-                aspects = [{"aspect_name": r["aspect_name"], "satisfaction_pct": int(r["satisfaction_pct"] or 0),
-                            "total_mentions": int(r["total_mentions"])} for _, r in df.iterrows()]
+                aspects = []
+                for _, r in df.iterrows():
+                    asp_id = next((k for k,v in ASPECT_MAP.items() if v.lower()==str(r["aspect_name"]).lower()), None)
+                    if asp_id not in VALID_ASPECTS: continue  # skip General
+                    aspects.append({"aspect_name": VALID_ASPECTS[asp_id],
+                                    "satisfaction_pct": int(r["satisfaction_pct"] or 0),
+                                    "total_mentions": int(r["total_mentions"])})
                 total_pos = int(df["positive_count"].sum())
                 total_neg = int(df["negative_count"].sum())
                 result[brand_name] = {
