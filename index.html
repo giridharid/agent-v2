@@ -1244,8 +1244,13 @@ async function cmpDrilldown(phrase, entityItem, signalType, cmpBy){
           const st=rv.sentiment_text||phrase;
           if(st){
             const isPain=signalType==='pain_point';
-            const hlBg=isPain?'rgba(239,68,68,.25)':'rgba(34,197,94,.2)';
-            const hlCol=isPain?'#fca5a5':'#86efac';
+            const isLight=document.body.classList.contains('light');
+            const hlBg=isPain
+              ?(isLight?'rgba(220,38,38,.15)':'rgba(239,68,68,.25)')
+              :(isLight?'rgba(22,163,74,.15)':'rgba(34,197,94,.2)');
+            const hlCol=isPain
+              ?(isLight?'#991b1b':'#fca5a5')
+              :(isLight?'#14532d':'#86efac');
             txt=txt.replace(
               new RegExp('('+escHtml(st).replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','gi'),
               `<mark style="background:${hlBg};color:${hlCol};padding:1px 3px;border-radius:3px;font-weight:600">$1</mark>`
