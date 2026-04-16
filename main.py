@@ -291,7 +291,7 @@ def load_master_caches():
             brand = hotel_to_brand.get(pid, '')
             r = {
                 'aspect_id': int(row['aspect_id'] or 0),
-                'aspect_name': str(row['aspect_name'] or ''),
+                'aspect_name': VALID_ASPECTS.get(int(row['aspect_id'] or 0)) or ASPECT_MAP.get(int(row['aspect_id'] or 0)) or str(row['aspect_name'] or ''),
                 'positive_count': int(row['positive_count'] or 0),
                 'negative_count': int(row['negative_count'] or 0),
                 'total_mentions': int(row['total_mentions'] or 0),
@@ -365,7 +365,7 @@ def load_master_caches():
             if not phrase or phrase.lower() in ('null','none','nan'): continue
             r = {
                 'phrase': phrase,
-                'aspect_name': str(row['aspect_name'] or ''),
+                'aspect_name': VALID_ASPECTS.get(int(row['aspect_id'] or 0)) or ASPECT_MAP.get(int(row['aspect_id'] or 0)) or str(row['aspect_name'] or ''),
                 'mention_count': int(row['mention_count'] or 0),
             }
             sig = str(row['signal_type'] or '')
@@ -413,14 +413,16 @@ def load_master_caches():
             """).to_dataframe()
             ASPECT_MAP = {int(r['aspect_id']): str(r['aspect_name']) for _, r in cat_df.iterrows()}
             VALID_ASPECTS = {int(r['aspect_id']): str(r['aspect_name']) for _, r in cat_df.iterrows() if r['insight'] == 'Y'}
-            print(f"[CACHE] Loaded {len(VALID_ASPECTS)} aspects for category '{CATEGORY}' from BQ")
+            print(f"[CACHE] Loaded {len(VALID_ASPECTS)} aspects for category '{CATEGORY}' from BQ: {list(VALID_ASPECTS.values())}")
         except Exception as e:
-            print(f"[WARN] Could not load aspects from BQ, using fallback: {e}")
-            ASPECT_MAP = {1:"Dining",2:"Cleanliness",3:"Amenities",4:"Staff",5:"Room",6:"Location",7:"Value for Money",8:"General"}
-            VALID_ASPECTS = {1:"Dining",2:"Cleanliness",3:"Amenities",4:"Staff",5:"Room",6:"Location",7:"Value for Money"}
+            print(f"[WARN] Could not load aspects from BQ: {e}")
+            # Hardcoded fallback removed — fix BQ connection if this triggers
 
         # ── Load product_phrases treemap cache ──
         # VALID_ASPECTS now loaded dynamically above
+        if not VALID_ASPECTS:
+            print("[WARN] VALID_ASPECTS empty — skipping treemap cache load")
+            return
         phrases_df = client.query(f"""
             SELECT p.product_id, p.aspect_id, p.treemap_name, SUM(p.mention_count) as mention_count,
                    h.brand_name
@@ -727,14 +729,20 @@ async def get_brand_summary(brand_id: str, city: Optional[str] = None, star: Opt
     aspects = []
     total_mentions = aspects_df['total_mentions'].sum()
     for _, row in aspects_df.iterrows():
+        asp_id = int(row['aspect_id'] or 0)
+        # Skip aspects not in VALID_ASPECTS (e.g. General which has insight=N)
+        if VALID_ASPECTS and asp_id not in VALID_ASPECTS:
+            continue
         pos = row['positive_count'] or 0
         neg = row['negative_count'] or 0
         total = row['total_mentions'] or 0
         sat = round(pos * 100 / (pos + neg)) if (pos + neg) > 0 else 0
         sov = round(total * 100 / total_mentions) if total_mentions > 0 else 0
+        raw_name = str(row['aspect_name'] or '')
+        display_name = VALID_ASPECTS.get(asp_id) or ASPECT_MAP.get(asp_id) or raw_name
         aspects.append({
             "aspect_id": int(row['aspect_id']),
-            "aspect_name": row['aspect_name'],
+            "aspect_name": display_name,
             "satisfaction_pct": sat,
             "share_of_voice_pct": sov,
             "total_mentions": int(total)
@@ -1658,7 +1666,14 @@ async def get_segment_aspect(product_id: int):
     ORDER BY segment_type, segment_value, aspect_id
     """
     df = client.query(query).to_dataframe()
-    return {"data": df.to_dict(orient='records')}
+    # Map lowercase aspect_name to display name
+    if not df.empty and VALID_ASPECTS:
+        df['aspect_name'] = df['aspect_id'].apply(
+            lambda x: VALID_ASPECTS.get(int(x or 0)) or ASPECT_MAP.get(int(x or 0)) or ''
+        )
+        # Filter out General (insight=N) — not in VALID_ASPECTS
+        df = df[df['aspect_id'].apply(lambda x: int(x or 0) in VALID_ASPECTS)]
+    return {"data": [clean_row(r) for r in df.to_dict(orient='records')]}
 
 # ─────────────────────────────────────────
 # MAIN
@@ -1789,12 +1804,15 @@ async def drivers_alias(product_id: Optional[int] = None, brand: Optional[str] =
         total = int(row.get('total_mentions') or 0)
         sat = int(row.get('satisfaction') or 0) or (round(pos*100/(pos+neg)) if (pos+neg)>0 else 0)
         sov = int(row.get('share_of_voice') or 0) or (round(total*100/total_mentions) if total_mentions>0 else 0)
+        raw_name = str(row.get('aspect_name') or '')
+        asp_id = int(row.get('aspect_id') or 0)
+        display_name = VALID_ASPECTS.get(asp_id) or ASPECT_MAP.get(asp_id) or raw_name
         results.append({
-            'aspect_id': int(row.get('aspect_id') or 0),
-            'aspect_name': str(row.get('aspect_name') or ''),
+            'aspect_id': asp_id,
+            'aspect_name': display_name,
             'satisfaction': sat, 'share_of_voice': sov,
             'positive_count': pos, 'negative_count': neg, 'total_mentions': total,
-            'icon': ASPECT_ICONS.get(str(row.get('aspect_name','')), '⭐')
+            'icon': ASPECT_ICONS.get(display_name, '⭐')
         })
     return results
 
@@ -1872,7 +1890,12 @@ async def stay_purpose_preferences(product_id: Optional[int] = None, brand: Opti
         sp = row['stay_purpose']
         if sp not in result:
             result[sp] = {"stay_purpose": sp, "aspects": {}}
-        result[sp]["aspects"][row['aspect_name']] = {
+        raw_asp = str(row['aspect_name'] or '')
+        asp_id_match = next((k for k,v in ASPECT_MAP.items() if v.lower() == raw_asp.lower()), None)
+        display_asp = VALID_ASPECTS.get(asp_id_match) or ASPECT_MAP.get(asp_id_match) or raw_asp
+        if asp_id_match not in VALID_ASPECTS:
+            continue  # skip General
+        result[sp]["aspects"][display_asp] = {
             "satisfaction": int(row['satisfaction'] or 0),
             "mentions": int(row['mentions'])
         }
@@ -1909,7 +1932,12 @@ async def traveler_preferences(product_id: Optional[int] = None, brand: Optional
         tt = row['traveler_type']
         if tt not in result:
             result[tt] = {"traveler_type": tt, "aspects": {}}
-        result[tt]["aspects"][row['aspect_name']] = {
+        raw_asp = str(row['aspect_name'] or '')
+        asp_id_match = next((k for k,v in ASPECT_MAP.items() if v.lower() == raw_asp.lower()), None)
+        display_asp = VALID_ASPECTS.get(asp_id_match) or ASPECT_MAP.get(asp_id_match) or raw_asp
+        if asp_id_match not in VALID_ASPECTS:
+            continue  # skip General
+        result[tt]["aspects"][display_asp] = {
             "satisfaction": int(row['satisfaction'] or 0),
             "mentions": int(row['mentions'])
         }
