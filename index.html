@@ -1759,12 +1759,13 @@ function renderFilteredPains(){
   document.getElementById('painPointsList').innerHTML=filtered.length
     ?filtered.slice(0,10).map(p=>{
       const d=JSON.stringify(p.phrase).replace(/'/g,"&#39;");
-      const fn=isBrand?`handleBrandDrill(this,'pain_point')`:`openDrilldown(${pid},this.dataset.phrase,'pain_point')`;
-      return `<div class="sig-item pain" onclick="${fn}" data-phrase='${p.phrase.replace(/'/g,"&#39;")}' data-brand='${(currentBrand||'').replace(/'/g,"&#39;")}'>
+      const canDrill = p.has_drilldown !== false;
+      const fn=canDrill?(isBrand?`handleBrandDrill(this,'pain_point')`:`openDrilldown(${pid},this.dataset.phrase,'pain_point')`):'';
+      return `<div class="sig-item pain${canDrill?'':' no-drill'}" ${canDrill?`onclick="${fn}"`:'style="cursor:default;opacity:0.6"'} data-phrase='${p.phrase.replace(/'/g,"&#39;")}' data-brand='${(currentBrand||'').replace(/'/g,"&#39;")}'>
         <span class="sig-txt-r">${escHtml(p.phrase)}</span>
         <span style="display:flex;align-items:center;gap:5px">
           ${p.aspect_name?`<span class="sig-meta">${escHtml(p.aspect_name)}</span>`:''}
-          <span class="sig-cnt">${p.mention_count||''} →</span>
+          <span class="sig-cnt">${p.mention_count||''}${canDrill?' →':''}</span>
         </span></div>`;}).join('')
     :'<div class="no-data">No pain points for this aspect</div>';
 }
@@ -1778,12 +1779,13 @@ function renderFilteredDelights(){
   ).sort((a,b)=>(b.mention_count||0)-(a.mention_count||0));
   document.getElementById('delightsList').innerHTML=filtered.length
     ?filtered.slice(0,10).map(d=>{
-      const fn=isBrand?`handleBrandDrill(this,'delight')`:`openDrilldown(${pid},this.dataset.phrase,'delight')`;
-      return `<div class="sig-item delight" onclick="${fn}" data-phrase='${d.phrase.replace(/'/g,"&#39;")}' data-brand='${(currentBrand||'').replace(/'/g,"&#39;")}'>
+      const canDrill = d.has_drilldown !== false;
+      const fn=canDrill?(isBrand?`handleBrandDrill(this,'delight')`:`openDrilldown(${pid},this.dataset.phrase,'delight')`):'';
+      return `<div class="sig-item delight${canDrill?'':' no-drill'}" ${canDrill?`onclick="${fn}"`:'style="cursor:default;opacity:0.6"'} data-phrase='${d.phrase.replace(/'/g,"&#39;")}' data-brand='${(currentBrand||'').replace(/'/g,"&#39;")}'>
         <span class="sig-txt-g">${escHtml(d.phrase)}</span>
         <span style="display:flex;align-items:center;gap:5px">
           ${d.aspect_name?`<span class="sig-meta">${escHtml(d.aspect_name)}</span>`:''}
-          <span class="sig-cnt">${d.mention_count||''} →</span>
+          <span class="sig-cnt">${d.mention_count||''}${canDrill?' →':''}</span>
         </span></div>`;}).join('')
     :'<div class="no-data">No delights for this aspect</div>';
 }

@@ -465,6 +465,18 @@ def load_master_caches():
         set_cache("emotions_by_pid", emo_by_pid)
         print(f"[CACHE] Loaded emotions: {len(emo_by_pid)} products")
 
+        # ── Load drilldown coverage — (product_id, phrase) pairs that have reviewable rows ──
+        dd_df = client.query(f"""
+            SELECT DISTINCT CAST(product_id AS STRING) as product_id, phrase
+            FROM `{PROJECT}.{DATASET}.review_drilldown`
+            WHERE phrase IS NOT NULL AND confidence_score >= 0.65
+        """).to_dataframe()
+        drilldown_coverage = set(zip(
+            dd_df['product_id'].astype(str).str.split('.').str[0],
+            dd_df['phrase'].str.lower().str.strip()
+        ))
+        print(f"[CACHE] Drilldown coverage: {len(drilldown_coverage)} product+phrase pairs")
+
         # ── Load product_pain_delights ──
         pd_df = client.query(f"""
             SELECT product_id, phrase, aspect_name, signal_type, mention_count, severity_rank
@@ -479,10 +491,13 @@ def load_master_caches():
             pid = str(row['product_id']).split('.')[0]
             phrase = str(row['phrase'] or '').strip()
             if not phrase or phrase.lower() in ('null','none','nan'): continue
+            # Only include phrases that have drilldown rows available
+            has_drilldown = (pid, phrase.lower()) in drilldown_coverage
             r = {
                 'phrase': phrase,
                 'aspect_name': str(row['aspect_name'] or ''),
                 'mention_count': int(row['mention_count'] or 0),
+                'has_drilldown': has_drilldown,
             }
             sig = str(row['signal_type'] or '')
             if sig == 'pain_point':
