@@ -1238,9 +1238,10 @@ def drilldown(request: DrilldownRequest):
         FROM `{PROJECT}.{DATASET}.review_drilldown`
         WHERE CAST(product_id AS STRING) = '{request.product_id}'
           AND LOWER(phrase) = LOWER('{safe_phrase}')
+          AND confidence_score >= 0.75
           {sentiment_filter}
         ORDER BY confidence_score DESC, confidence_score_phrase DESC
-        LIMIT {request.limit}
+        LIMIT 10
         """
         df = client.query(query).to_dataframe()
 
@@ -1253,9 +1254,10 @@ def drilldown(request: DrilldownRequest):
             FROM `{PROJECT}.{DATASET}.review_drilldown`
             WHERE CAST(product_id AS STRING) = '{request.product_id}'
               AND LOWER(review_text) LIKE LOWER('%{safe_phrase}%')
+              AND confidence_score >= 0.75
               {sentiment_filter}
             ORDER BY confidence_score DESC, confidence_score_phrase DESC
-            LIMIT {request.limit}
+            LIMIT 10
             """
             df = client.query(query2).to_dataframe()
             print(f"[DRILLDOWN] LIKE fallback: {len(df)} rows for pid={request.product_id} phrase='{request.phrase}'")
@@ -1297,8 +1299,9 @@ async def brand_drilldown(request: Request):
           ON CAST(r.product_id AS STRING) = CAST(h.product_id AS STRING)
         WHERE LOWER(h.brand_name) = LOWER('{safe_brand}')
           AND LOWER(r.phrase) = LOWER('{safe_phrase}')
+          AND r.confidence_score_phrase >= 0.85
         ORDER BY r.confidence_score DESC, r.confidence_score_phrase DESC
-        LIMIT {limit}
+        LIMIT 10
         """
         df = client.query(q1).to_dataframe()
         print(f"[BRAND_DRILLDOWN] phrase match rows={len(df)}")
@@ -1312,8 +1315,9 @@ async def brand_drilldown(request: Request):
               ON CAST(r.product_id AS STRING) = CAST(h.product_id AS STRING)
             WHERE LOWER(h.brand_name) = LOWER('{safe_brand}')
               AND LOWER(r.review_text) LIKE LOWER('%{safe_phrase}%')
+              AND r.confidence_score_phrase >= 0.85
             ORDER BY r.confidence_score DESC, r.confidence_score_phrase DESC
-            LIMIT {limit}
+            LIMIT 10
             """
             df = client.query(q2).to_dataframe()
             print(f"[BRAND_DRILLDOWN] text fallback rows={len(df)}")
