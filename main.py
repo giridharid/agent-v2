@@ -477,6 +477,21 @@ def load_master_caches():
         ))
         print(f"[CACHE] Drilldown coverage: {len(drilldown_coverage)} product+phrase pairs")
 
+        # ── Load brand drilldown coverage — (brand_name, phrase) pairs ──
+        bd_df = client.query(f"""
+            SELECT DISTINCT LOWER(h.brand_name) as brand_name, LOWER(r.phrase) as phrase
+            FROM `{PROJECT}.{DATASET}.review_drilldown` r
+            JOIN `{PROJECT}.{DATASET}.{MASTER_TABLE}` h
+              ON CAST(r.product_id AS STRING) = CAST(h.product_id AS STRING)
+            WHERE r.phrase IS NOT NULL AND r.confidence_score >= 0.65
+        """).to_dataframe()
+        brand_drilldown_coverage = set(zip(
+            bd_df['brand_name'].str.strip(),
+            bd_df['phrase'].str.strip()
+        ))
+        set_cache("brand_drilldown_coverage", brand_drilldown_coverage)
+        print(f"[CACHE] Brand drilldown coverage: {len(brand_drilldown_coverage)} brand+phrase pairs")
+
         # ── Load product_pain_delights ──
         pd_df = client.query(f"""
             SELECT product_id, phrase, aspect_name, signal_type, mention_count, severity_rank
@@ -955,8 +970,18 @@ async def get_brand_summary(brand_id: str, city: Optional[str] = None, star: Opt
     """
     try:
         pain_brand_df = client.query(pain_brand_query).to_dataframe()
-        brand_pain = [{"phrase":r["phrase"],"aspect_name":r["aspect_name"],"mention_count":int(r["mention_count"])} for _,r in pain_brand_df[pain_brand_df["signal_type"]=="pain_point"].head(30).iterrows()]
-        brand_delights = [{"phrase":r["phrase"],"aspect_name":r["aspect_name"],"mention_count":int(r["mention_count"])} for _,r in pain_brand_df[pain_brand_df["signal_type"]=="delight"].head(30).iterrows()]
+        bdc = get_cache("brand_drilldown_coverage") or set()
+        brand_name_lower = brand_id.lower().strip() if brand_id else ''
+        def _mk_brand_phrase(r):
+            phrase = str(r['phrase'] or '')
+            return {
+                'phrase': phrase,
+                'aspect_name': str(r['aspect_name'] or ''),
+                'mention_count': int(r['mention_count'] or 0),
+                'has_drilldown': (brand_name_lower, phrase.lower().strip()) in bdc
+            }
+        brand_pain = [_mk_brand_phrase(r) for _,r in pain_brand_df[pain_brand_df["signal_type"]=="pain_point"].head(30).iterrows()]
+        brand_delights = [_mk_brand_phrase(r) for _,r in pain_brand_df[pain_brand_df["signal_type"]=="delight"].head(30).iterrows()]
     except:
         brand_pain, brand_delights = [], []
 
@@ -1253,7 +1278,7 @@ def drilldown(request: DrilldownRequest):
         FROM `{PROJECT}.{DATASET}.review_drilldown`
         WHERE CAST(product_id AS STRING) = '{request.product_id}'
           AND LOWER(phrase) = LOWER('{safe_phrase}')
-          AND confidence_score >= 0.65
+          AND confidence_score >= 0.75
           {sentiment_filter}
         ORDER BY confidence_score DESC, confidence_score_phrase DESC
         LIMIT 10
@@ -1269,7 +1294,7 @@ def drilldown(request: DrilldownRequest):
             FROM `{PROJECT}.{DATASET}.review_drilldown`
             WHERE CAST(product_id AS STRING) = '{request.product_id}'
               AND LOWER(review_text) LIKE LOWER('%{safe_phrase}%')
-              AND confidence_score >= 0.65
+              AND confidence_score >= 0.75
               {sentiment_filter}
             ORDER BY confidence_score DESC, confidence_score_phrase DESC
             LIMIT 10
