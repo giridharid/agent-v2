@@ -1253,7 +1253,7 @@ def drilldown(request: DrilldownRequest):
         FROM `{PROJECT}.{DATASET}.review_drilldown`
         WHERE CAST(product_id AS STRING) = '{request.product_id}'
           AND LOWER(phrase) = LOWER('{safe_phrase}')
-          AND confidence_score >= 0.75
+          AND confidence_score >= 0.65
           {sentiment_filter}
         ORDER BY confidence_score DESC, confidence_score_phrase DESC
         LIMIT 10
@@ -1269,7 +1269,7 @@ def drilldown(request: DrilldownRequest):
             FROM `{PROJECT}.{DATASET}.review_drilldown`
             WHERE CAST(product_id AS STRING) = '{request.product_id}'
               AND LOWER(review_text) LIKE LOWER('%{safe_phrase}%')
-              AND confidence_score >= 0.75
+              AND confidence_score >= 0.65
               {sentiment_filter}
             ORDER BY confidence_score DESC, confidence_score_phrase DESC
             LIMIT 10
