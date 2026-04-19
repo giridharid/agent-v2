@@ -398,26 +398,31 @@ def load_master_caches():
         asp_by_pid = {}
         asp_brand_raw = {}  # brand_name -> {aspect_name -> {pos,neg,total}}
         for _, row in asp_df.iterrows():
-            pid = str(int(row['product_id']))
-            brand = hotel_to_brand.get(pid, '')
-            r = {
-                'aspect_id': int(row['aspect_id'] or 0),
-                'aspect_name': VALID_ASPECTS.get(int(row['aspect_id'] or 0)) or ASPECT_MAP.get(int(row['aspect_id'] or 0)) or str(row['aspect_name'] or ''),
-                'positive_count': int(row['positive_count'] or 0),
-                'negative_count': int(row['negative_count'] or 0),
-                'total_mentions': int(row['total_mentions'] or 0),
-                'satisfaction_pct': int(row['satisfaction_pct'] or 0),
-                'share_of_voice_pct': int(row['share_of_voice_pct'] or 0),
-            }
-            asp_by_pid.setdefault(pid, []).append(r)
-            if brand:
-                ba = asp_brand_raw.setdefault(brand, {})
-                ak = r['aspect_name']
-                if ak not in ba:
-                    ba[ak] = {'aspect_id': r['aspect_id'], 'pos': 0, 'neg': 0, 'total': 0}
-                ba[ak]['pos'] += r['positive_count']
-                ba[ak]['neg'] += r['negative_count']
-                ba[ak]['total'] += r['total_mentions']
+            try:
+                pid = str(row['product_id']).split('.')[0]
+                brand = hotel_to_brand.get(pid, '')
+                _aid_raw = row['aspect_id']
+                _aid = int(float(_aid_raw)) if _aid_raw and str(_aid_raw) not in ('nan','None','') else 0
+                r = {
+                    'aspect_id': _aid,
+                    'aspect_name': VALID_ASPECTS.get(_aid) or ASPECT_MAP.get(_aid) or str(row['aspect_name'] or ''),
+                    'positive_count': int(row['positive_count'] or 0),
+                    'negative_count': int(row['negative_count'] or 0),
+                    'total_mentions': int(row['total_mentions'] or 0),
+                    'satisfaction_pct': int(row['satisfaction_pct'] or 0),
+                    'share_of_voice_pct': int(row['share_of_voice_pct'] or 0),
+                }
+                asp_by_pid.setdefault(pid, []).append(r)
+                if brand:
+                    ba = asp_brand_raw.setdefault(brand, {})
+                    ak = r['aspect_name']
+                    if ak not in ba:
+                        ba[ak] = {'aspect_id': r['aspect_id'], 'pos': 0, 'neg': 0, 'total': 0}
+                    ba[ak]['pos'] += r['positive_count']
+                    ba[ak]['neg'] += r['negative_count']
+                    ba[ak]['total'] += r['total_mentions']
+            except Exception as _ae:
+                continue
         set_cache("aspects_by_pid", asp_by_pid)
 
         # Compute brand-level aggregated aspects
@@ -476,7 +481,7 @@ def load_master_caches():
             if not phrase or phrase.lower() in ('null','none','nan'): continue
             r = {
                 'phrase': phrase,
-                'aspect_name': VALID_ASPECTS.get(int(row['aspect_id'] or 0)) or ASPECT_MAP.get(int(row['aspect_id'] or 0)) or str(row['aspect_name'] or ''),
+                'aspect_name': VALID_ASPECTS.get(_aid) or ASPECT_MAP.get(_aid) or str(row['aspect_name'] or ''),
                 'mention_count': int(row['mention_count'] or 0),
             }
             sig = str(row['signal_type'] or '')
@@ -532,8 +537,11 @@ def load_master_caches():
         brand_asp_accum = {}  # brand -> aspect_id -> {treemap_name: total_count}
 
         for _, row in phrases_df.iterrows():
-            pid = str(int(row['product_id']))
-            asp_id = int(row['aspect_id'])
+            try:
+                pid = str(row['product_id']).split('.')[0]
+                asp_id = int(float(row['aspect_id'])) if row['aspect_id'] and str(row['aspect_id']) not in ('nan','None') else 0
+            except: continue
+            if not asp_id: continue
             asp_name = VALID_ASPECTS.get(asp_id)
             if not asp_name: continue
             tn = str(row['treemap_name'])
@@ -1004,18 +1012,18 @@ async def get_product_summary(product_id: int):
 
     # ── Always need hotel_master row + rd_signals from BQ ────────────────
     bq_queries = {
-        "hotel": f"SELECT * FROM `{PROJECT}.{DATASET}.{MASTER_TABLE}` WHERE product_id = {product_id}",
+        "hotel": f"SELECT * FROM `{PROJECT}.{DATASET}.{MASTER_TABLE}` WHERE CAST(product_id AS STRING) = '{product_id}'",
         "rd":    f"""SELECT signal_type as rd_signal, phrase, treemap_name, aspect_name, mention_count
                      FROM `{PROJECT}.{DATASET}.product_rd_signals`
-                     WHERE product_id = {product_id} ORDER BY rd_signal, mention_count DESC"""
+                     WHERE CAST(product_id AS STRING) = '{product_id}' ORDER BY rd_signal, mention_count DESC"""
     }
 
     # Add BQ fallbacks for anything not yet cached
-    if aspects_cached  is None: bq_queries["aspects"]  = f"""SELECT aspect_id, aspect_name, positive_count, negative_count, total_mentions, satisfaction_pct, share_of_voice_pct FROM `{PROJECT}.{DATASET}.product_aspect_summary` WHERE product_id = {product_id} ORDER BY total_mentions DESC"""
-    if emotions_cached is None: bq_queries["emotions"] = f"""SELECT emotion, mention_count as count, pct_of_total as percentage FROM `{PROJECT}.{DATASET}.product_emotions` WHERE product_id = {product_id} ORDER BY mention_count DESC"""
-    if pain_cached     is None: bq_queries["pain"]     = f"""SELECT phrase, aspect_name, mention_count FROM `{PROJECT}.{DATASET}.product_pain_delights` WHERE product_id = {product_id} AND signal_type = 'pain_point' AND phrase IS NOT NULL AND TRIM(phrase) != '' ORDER BY mention_count DESC LIMIT 20"""
-    if delights_cached is None: bq_queries["delight"]  = f"""SELECT phrase, aspect_name, mention_count FROM `{PROJECT}.{DATASET}.product_pain_delights` WHERE product_id = {product_id} AND signal_type = 'delight' AND phrase IS NOT NULL AND TRIM(phrase) != '' ORDER BY mention_count DESC LIMIT 20"""
-    if demo_cached     is None: bq_queries["demo"]     = f"""SELECT dimension, dimension_value, review_count as count, pct_of_total FROM `{PROJECT}.{DATASET}.product_demographics` WHERE product_id = {product_id} ORDER BY dimension, review_count DESC"""
+    if aspects_cached  is None: bq_queries["aspects"]  = f"""SELECT aspect_id, aspect_name, positive_count, negative_count, total_mentions, satisfaction_pct, share_of_voice_pct FROM `{PROJECT}.{DATASET}.product_aspect_summary` WHERE CAST(product_id AS STRING) = '{product_id}' ORDER BY total_mentions DESC"""
+    if emotions_cached is None: bq_queries["emotions"] = f"""SELECT emotion, mention_count as count, pct_of_total as percentage FROM `{PROJECT}.{DATASET}.product_emotions` WHERE CAST(product_id AS STRING) = '{product_id}' ORDER BY mention_count DESC"""
+    if pain_cached     is None: bq_queries["pain"]     = f"""SELECT phrase, aspect_name, mention_count FROM `{PROJECT}.{DATASET}.product_pain_delights` WHERE CAST(product_id AS STRING) = '{product_id}' AND signal_type = 'pain_point' AND phrase IS NOT NULL AND TRIM(phrase) != '' ORDER BY mention_count DESC LIMIT 20"""
+    if delights_cached is None: bq_queries["delight"]  = f"""SELECT phrase, aspect_name, mention_count FROM `{PROJECT}.{DATASET}.product_pain_delights` WHERE CAST(product_id AS STRING) = '{product_id}' AND signal_type = 'delight' AND phrase IS NOT NULL AND TRIM(phrase) != '' ORDER BY mention_count DESC LIMIT 20"""
+    if demo_cached     is None: bq_queries["demo"]     = f"""SELECT dimension, dimension_value, review_count as count, pct_of_total FROM `{PROJECT}.{DATASET}.product_demographics` WHERE CAST(product_id AS STRING) = '{product_id}' ORDER BY dimension, review_count DESC"""
 
     results = await asyncio.gather(*[loop.run_in_executor(None, run_query, sql) for sql in bq_queries.values()])
     dfs = dict(zip(bq_queries.keys(), results))
@@ -1105,7 +1113,7 @@ def get_product_aspects(product_id: int):
     SELECT aspect_id, aspect_name, positive_count, negative_count,
            total_mentions, satisfaction_pct, share_of_voice_pct
     FROM `{PROJECT}.{DATASET}.product_aspect_summary`
-    WHERE product_id = {product_id}
+    WHERE CAST(product_id AS STRING) = '{product_id}'
     ORDER BY total_mentions DESC
     """
     aspects_df = client.query(aspects_query).to_dataframe()
@@ -1114,7 +1122,7 @@ def get_product_aspects(product_id: int):
     phrases_query = f"""
     SELECT aspect_id, phrase, mention_count, sentiment_type
     FROM `{PROJECT}.{DATASET}.product_phrases`
-    WHERE product_id = {product_id}
+    WHERE CAST(product_id AS STRING) = '{product_id}'
     ORDER BY aspect_id, mention_count DESC
     """
     phrases_df = client.query(phrases_query).to_dataframe()
@@ -1141,7 +1149,7 @@ def get_product_pain_delights(product_id: int):
     SELECT phrase, treemap_name, aspect_id, aspect_name, signal_type,
            mention_count, severity_rank
     FROM `{PROJECT}.{DATASET}.product_pain_delights`
-    WHERE product_id = {product_id}
+    WHERE CAST(product_id AS STRING) = '{product_id}'
     AND phrase IS NOT NULL AND TRIM(phrase) != ''
     ORDER BY signal_type, severity_rank
     LIMIT 20
@@ -1163,7 +1171,7 @@ def get_product_emotions(product_id: int):
     query = f"""
     SELECT emotion, mention_count as count, pct_of_total as percentage
     FROM `{PROJECT}.{DATASET}.product_emotions`
-    WHERE product_id = {product_id}
+    WHERE CAST(product_id AS STRING) = '{product_id}'
     ORDER BY mention_count DESC
     """
     df = client.query(query).to_dataframe()
@@ -1179,7 +1187,7 @@ def get_product_rd_signals(product_id: int):
     query = f"""
     SELECT signal_type as rd_signal, phrase, treemap_name, mention_count
     FROM `{PROJECT}.{DATASET}.product_rd_signals`
-    WHERE product_id = {product_id}
+    WHERE CAST(product_id AS STRING) = '{product_id}'
     ORDER BY rd_signal, mention_count DESC
     """
     df = client.query(query).to_dataframe()
@@ -1769,7 +1777,7 @@ def get_treemap_phrases(
             query = f"""
             SELECT aspect_id, treemap_name, SUM(mention_count) as mention_count
             FROM `{PROJECT}.{DATASET}.product_phrases`
-            WHERE product_id = {product_id}
+            WHERE CAST(product_id AS STRING) = '{product_id}'
               AND treemap_name IS NOT NULL AND TRIM(treemap_name) != ''
               AND aspect_id IN ({','.join(str(k) for k in VALID_ASPECTS)})
             GROUP BY aspect_id, treemap_name ORDER BY aspect_id, mention_count DESC
@@ -1808,7 +1816,7 @@ def get_segment_aspect(product_id: int):
     SELECT segment_type, segment_value, aspect_id, aspect_name,
            positive_count, negative_count, total_mentions, satisfaction_pct
     FROM `{PROJECT}.{DATASET}.product_segment_aspect`
-    WHERE product_id = {product_id}
+    WHERE CAST(product_id AS STRING) = '{product_id}'
     ORDER BY segment_type, segment_value, aspect_id
     """
     df = client.query(query).to_dataframe()
@@ -1924,7 +1932,7 @@ async def drivers_alias(product_id: Optional[int] = None, brand: Optional[str] =
         SELECT aspect_id, aspect_name, positive_count, negative_count,
                total_mentions, satisfaction_pct as satisfaction, share_of_voice_pct as share_of_voice
         FROM `{PROJECT}.{DATASET}.product_aspect_summary`
-        WHERE product_id = {product_id} ORDER BY total_mentions DESC
+        WHERE CAST(product_id AS STRING) = '{product_id}' ORDER BY total_mentions DESC
         """
     elif brand:
         safe_brand = brand.replace("'","''")
@@ -1977,7 +1985,7 @@ async def demographics_alias(product_id: Optional[int] = None, brand: Optional[s
         query = f"""
         SELECT dimension, dimension_value, review_count, pct_of_total
         FROM `{PROJECT}.{DATASET}.product_demographics`
-        WHERE product_id = {product_id}
+        WHERE CAST(product_id AS STRING) = '{product_id}'
         ORDER BY dimension, review_count DESC
         """
         df = client.query(query).to_dataframe()
@@ -2024,7 +2032,7 @@ def segment_preferences(
         return []
     safe_dim = dimension.replace("'", "''")
     if product_id:
-        where = f"s.product_id = {product_id}"
+        where = f"CAST(s.product_id AS STRING) = '{product_id}'"
         join_clause = ""
     elif brand:
         safe_brand = brand.replace("'", "''")
@@ -2092,7 +2100,7 @@ def comparison_alias(items: str = "", compare_by: str = "hotel"):
                        a.positive_count, a.negative_count
                 FROM `{PROJECT}.{DATASET}.{MASTER_TABLE}` h
                 JOIN `{PROJECT}.{DATASET}.product_aspect_summary` a ON h.product_id = a.product_id
-                WHERE h.product_id = {pid}
+                WHERE CAST(h.product_id AS STRING) = '{pid}'
                 """
                 df = client.query(query).to_dataframe()
                 if df.empty: continue
