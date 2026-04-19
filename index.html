@@ -449,14 +449,36 @@ body.light .insights-body code{background:rgba(109,40,217,.08);color:#5b21b6}
     <img src="/acquink_logo.png" class="logo-sq" onerror="this.style.cssText='width:30px;height:30px;border-radius:7px;background:linear-gradient(135deg,#7c3aed,#6366f1);flex-shrink:0'">
     <div>
       <div class="logo-name">Smaartbrand</div>
-      <div class="logo-sub">Hotels Intelligence</div>
+      <div class="logo-sub" id="categorySubtitle">Intelligence</div>
     </div>
+  </div>
+  <!-- Category selector -->
+  <div style="display:flex;align-items:center;gap:8px;margin-left:18px">
+    <span style="color:#7c6baa;font-size:12px;font-weight:500">Category:</span>
+    <select id="categorySelector" onchange="onCategoryChange(this.value)"
+      style="background:#1a1535;color:#c4b5fd;border:1px solid #3d2b6e;border-radius:8px;padding:5px 10px;font-size:12px;cursor:pointer;outline:none">
+      <option value="">Loading...</option>
+    </select>
   </div>
   <div class="search-wrap">
     <span class="search-icon">🔍</span>
     <input id="hotelSearchInput" type="text" placeholder="Search hotel, brand or city...">
     <div id="hotelSearchDropdown"></div>
   </div>
+</div>
+
+<!-- WIP OVERLAY — shown when non-active category selected -->
+<div id="wipOverlay" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(10,5,25,0.92);
+  display:none;align-items:center;justify-content:center;flex-direction:column;gap:20px">
+  <div style="font-size:60px">🚧</div>
+  <div style="color:#c4b5fd;font-size:28px;font-weight:700">Work in Progress</div>
+  <div id="wipCategoryName" style="color:#7c6baa;font-size:16px">This category is coming soon</div>
+  <div style="color:#4a3d7a;font-size:13px">Switch back to Hotels to continue</div>
+  <button onclick="switchToActiveCategory()"
+    style="margin-top:10px;background:linear-gradient(135deg,#7c3aed,#6366f1);color:#fff;border:none;
+    border-radius:10px;padding:12px 28px;font-size:14px;font-weight:600;cursor:pointer">
+    ← Back to Hotels
+  </button>
 </div>
 
 <!-- TABS -->
@@ -621,8 +643,8 @@ body.light .insights-body code{background:rgba(109,40,217,.08);color:#5b21b6}
     <button class="sub-tab active" data-tab="drivers" onclick="showSubTab('drivers')">📊 Drivers</button>
     <button class="sub-tab" data-tab="satisfaction" onclick="showSubTab('satisfaction')">📄 Satisfaction</button>
     <button class="sub-tab" data-tab="demographics" onclick="showSubTab('demographics')">👥 Demographics</button>
-    <button class="sub-tab" data-tab="stayPurpose" onclick="showSubTab('stayPurpose')">🏷 Stay Purpose</button>
-    <button class="sub-tab" data-tab="travelerType" onclick="showSubTab('travelerType')">✈️ Traveler Type</button>
+    <!-- Dynamic cross-tab buttons rendered by renderCrossTabTabs() from activeDimensions -->
+    <span id="crossTabButtons"></span>
   </div>
 
   <!-- Charts row (drivers tab content) -->
@@ -647,22 +669,13 @@ body.light .insights-body code{background:rgba(109,40,217,.08);color:#5b21b6}
   </div>
 
   <div id="demographicsTab" class="tab-panel hidden demo-tab-panel">
-    <div class="demo-grid">
-      <div class="demo-card"><div class="demo-title">Gender Distribution</div><div id="genderChart"></div></div>
-      <div class="demo-card"><div class="demo-title">Traveler Type</div><div id="travelerChart"></div></div>
-      <div class="demo-card"><div class="demo-title">Stay Purpose</div><div id="purposeChart"></div></div>
+    <div class="demo-grid" id="demographicsGrid">
+      <!-- Rendered dynamically by renderDemographicsGrid() from /api/dimensions -->
     </div>
   </div>
 
-  <div id="stayPurposeTab" class="tab-panel hidden demo-tab-panel">
-    <div class="card-title" style="margin-bottom:14px">Stay Purpose × Aspect Satisfaction</div>
-    <div id="stayPurposeContent" style="overflow-x:auto"></div>
-  </div>
-
-  <div id="travelerTypeTab" class="tab-panel hidden demo-tab-panel">
-    <div class="card-title" style="margin-bottom:14px">Traveler Type × Aspect Satisfaction</div>
-    <div id="travelerTypeContent" style="overflow-x:auto"></div>
-  </div>
+  <!-- Dynamic cross-tab panels — rendered by renderCrossTabPanels() from activeDimensions -->
+  <div id="crossTabPanels"></div>
 
   <!-- Pain & Delights — colorblind-safe: orange for pain, blue for delights -->
   <div id="painDelightsRow" class="hidden">
@@ -743,7 +756,7 @@ body.light .insights-body code{background:rgba(109,40,217,.08);color:#5b21b6}
   </div>
   <div id="chatMessages">
     <div class="msg-bot">
-      Hi! I'm <strong>SmaartAnalyst</strong> — your hotel intelligence AI. Select a hotel or brand from the dashboard, then ask me about guest sentiment, pain points, competitive insights, or anything in the data.
+      Hi! I'm <strong>SmaartAnalyst</strong> — your intelligence AI. Select a product or brand from the dashboard, then ask me about sentiment, pain points, competitive insights, or anything in the data.
       <div class="chat-suggestions">
         <span class="chat-sug" onclick="insertSug('What are the top pain points?')">Top pain points</span>
         <span class="chat-sug" onclick="insertSug('Which aspect needs most improvement?')">Key weakness</span>
@@ -791,6 +804,7 @@ function hideLoader(){document.getElementById('loader').classList.remove('show')
 
 // ─── INIT ─────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded',async()=>{
+  await loadCategories();
   await loadHotelSearchCache();
   setupHotelSearch();
   await loadBrands();
@@ -799,9 +813,138 @@ document.addEventListener('DOMContentLoaded',async()=>{
   document.getElementById('chatInput').addEventListener('keydown',e=>{if(e.key==='Enter')sendMessage(document.getElementById('chatInput').value);});
 });
 
+// ─── CATEGORY SELECTOR ────────────────────────────────────────
+let activeCategory = '';
+let activeDimensions = []; // [{dimension_key, dimension_label, icon}]
+let productLabel = 'Hotel'; // singular label — updates dynamically from category
+
+const CATEGORY_LABELS = {
+  hotels:       {singular: 'Hotel',      plural: 'Hotels',      search: 'Search hotel, brand or city...'},
+  smartphones:  {singular: 'Smartphone', plural: 'Smartphones', search: 'Search smartphone, brand or model...'},
+  bikes:        {singular: 'Bike',       plural: 'Bikes',       search: 'Search bike, brand or model...'},
+  auto:         {singular: 'Car',        plural: 'Cars',        search: 'Search car, brand or model...'},
+  televisions:  {singular: 'TV',         plural: 'TVs',         search: 'Search TV, brand or model...'},
+};
+
+function updateCategoryLabels(catId){
+  const lbl = CATEGORY_LABELS[catId] || {singular: 'Product', plural: 'Products', search: 'Search product, brand or category...'};
+  productLabel = lbl.singular;
+
+  // Tab labels
+  const hv = document.getElementById('hotelViewTab');
+  if(hv) hv.textContent = lbl.singular + ' View';
+  const ch = document.getElementById('compareHotelsTab');
+  if(ch) ch.textContent = 'Compare ' + lbl.plural;
+
+  // Search placeholder
+  const si = document.getElementById('hotelSearchInput');
+  if(si) si.placeholder = lbl.search;
+
+  // Select Hotel dropdowns
+  document.querySelectorAll('#hotelSelect, #compareHotel1, #compareHotel2, #compareHotel3').forEach(el=>{
+    if(el.options[0]) el.options[0].text = 'Select ' + lbl.singular;
+  });
+
+  // Chat labels
+  const ccl = document.getElementById('chatContextLabel');
+  if(ccl) ccl.textContent = lbl.plural + ' Intelligence AI';
+}
+
+async function loadCategories(){
+  try{
+    const r = await fetch('/api/categories');
+    if(!r.ok) return;
+    const d = await r.json();
+    activeCategory = d.active_category || 'hotels';
+    activeDimensions = d.dimensions || [];
+    updateCategoryLabels(activeCategory);
+    const sel = document.getElementById('categorySelector');
+    sel.innerHTML = '';
+    (d.categories||[]).forEach(cat=>{
+      const opt = document.createElement('option');
+      opt.value = cat.category_id;
+      opt.textContent = cat.category_name + (cat.is_active ? '' : ' 🚧');
+      opt.selected = (cat.category_id === activeCategory);
+      sel.appendChild(opt);
+    });
+    const activeCat = (d.categories||[]).find(c=>c.category_id===activeCategory);
+    if(activeCat) document.getElementById('categorySubtitle').textContent = activeCat.category_name + ' Intelligence';
+    // Build demographics grid and cross-tab tabs from active dimensions
+    renderDemographicsGrid(activeDimensions);
+    renderCrossTabTabs(activeDimensions);
+    renderCrossTabPanels(activeDimensions);
+  }catch(e){
+    console.warn('[CATEGORY] Could not load categories:', e);
+    // Fallback defaults for hotels
+    activeDimensions = [
+      {dimension_key:'gender',        dimension_label:'Gender Distribution', icon:'👤'},
+      {dimension_key:'traveler_type', dimension_label:'Traveler Type',       icon:'🧳'},
+      {dimension_key:'stay_purpose',  dimension_label:'Stay Purpose',        icon:'🎯'},
+    ];
+    renderDemographicsGrid(activeDimensions);
+  }
+}
+
+function renderDemographicsGrid(dimensions){
+  const grid = document.getElementById('demographicsGrid');
+  if(!grid) return;
+  grid.innerHTML = dimensions.map(dim=>
+    `<div class="demo-card">
+       <div class="demo-title">${dim.icon||''} ${dim.dimension_label}</div>
+       <div id="dimChart_${dim.dimension_key}"></div>
+     </div>`
+  ).join('');
+}
+
+function renderCrossTabTabs(dimensions){
+  const container = document.getElementById('crossTabButtons');
+  if(!container) return;
+  const crossTabDims = dimensions.filter(d => d.show_cross_tab === 'Y');
+  container.innerHTML = crossTabDims.map(dim=>
+    `<button class="sub-tab" data-tab="crossTab_${dim.dimension_key}"
+       onclick="showSubTab('crossTab_${dim.dimension_key}')"
+       id="btn_crossTab_${dim.dimension_key}">
+       ${dim.icon||''} ${dim.dimension_label}
+     </button>`
+  ).join('');
+}
+
+function renderCrossTabPanels(dimensions){
+  const container = document.getElementById('crossTabPanels');
+  if(!container) return;
+  const crossTabDims = dimensions.filter(d => d.show_cross_tab === 'Y');
+  container.innerHTML = crossTabDims.map(dim=>
+    `<div id="crossTab_${dim.dimension_key}Tab" class="tab-panel hidden demo-tab-panel">
+       <div class="card-title" style="margin-bottom:14px">${dim.cross_tab_label||dim.dimension_label+' × Aspect Satisfaction'}</div>
+       <div id="crossTabContent_${dim.dimension_key}" style="overflow-x:auto">
+         <div class="no-data">Loading...</div>
+       </div>
+     </div>`
+  ).join('');
+}
+
+function onCategoryChange(selectedId){
+  if(selectedId === activeCategory){
+    // Back to active category — hide WIP
+    document.getElementById('wipOverlay').style.display = 'none';
+    return;
+  }
+  // Non-active category — show WIP overlay
+  const sel = document.getElementById('categorySelector');
+  const selectedText = sel.options[sel.selectedIndex]?.textContent || selectedId;
+  document.getElementById('wipCategoryName').textContent =
+    selectedText.replace('🚧','').trim() + ' Intelligence — Coming Soon';
+  document.getElementById('wipOverlay').style.display = 'flex';
+}
+
+function switchToActiveCategory(){
+  document.getElementById('categorySelector').value = activeCategory;
+  document.getElementById('wipOverlay').style.display = 'none';
+}
+
 // ─── SEARCH ───────────────────────────────────────────────────
 async function loadHotelSearchCache(){
-  try{const r=await fetch('/api/hotels');if(r.ok){const d=await r.json();allHotelsCache=d.hotels||[];}}catch(e){}
+  try{const r=await fetch('/api/products');if(r.ok){const d=await r.json();allHotelsCache=d.products||d.hotels||[];}}catch(e){}
 }
 
 function setupHotelSearch(){
@@ -877,15 +1020,15 @@ function resetDownstream(from){
     document.getElementById('citySelect').innerHTML='<option value="">All Cities</option>';
     document.getElementById('hotelStarSelect').innerHTML='<option value="">All Stars</option>';
     document.getElementById('starSelect').innerHTML='<option value="">All Stars</option>';
-    document.getElementById('hotelSelect').innerHTML='<option value="">Select Hotel</option>';
+    document.getElementById('hotelSelect').innerHTML='<option value="">Select '+productLabel+'</option>';
   }
   if(from==='city'){
     document.getElementById('hotelStarSelect').innerHTML='<option value="">All Stars</option>';
     document.getElementById('starSelect').innerHTML='<option value="">All Stars</option>';
-    document.getElementById('hotelSelect').innerHTML='<option value="">Select Hotel</option>';
+    document.getElementById('hotelSelect').innerHTML='<option value="">Select '+productLabel+'</option>';
   }
   if(from==='star'){
-    document.getElementById('hotelSelect').innerHTML='<option value="">Select Hotel</option>';
+    document.getElementById('hotelSelect').innerHTML='<option value="">Select '+productLabel+'</option>';
   }
 }
 
@@ -911,7 +1054,7 @@ async function loadStarCategoriesFor(view){
   const starEl=isBrand?'starSelect':'hotelStarSelect';
   // Reset downstream (star + hotel) when city changes
   document.getElementById(starEl).innerHTML='<option value="">All Stars</option>';
-  document.getElementById('hotelSelect').innerHTML='<option value="">Select Hotel</option>';
+  document.getElementById('hotelSelect').innerHTML='<option value="">Select '+productLabel+'</option>';
   if(!brand)return;
   try{
     let url=`/api/star_categories?brand=${encodeURIComponent(brand)}`;
@@ -928,13 +1071,13 @@ async function loadHotelsFor(view){
   const brand=document.getElementById('hotelBrandSelect').value;
   const city=document.getElementById('hotelCitySelect').value;
   const star=document.getElementById('hotelStarSelect')?.value||'';
-  if(!brand){document.getElementById('hotelSelect').innerHTML='<option value="">Select Hotel</option>';return;}
+  if(!brand){document.getElementById('hotelSelect').innerHTML='<option value="">Select '+productLabel+'</option>';return;}
   try{
-    let url=`/api/hotels?brand=${encodeURIComponent(brand)}`;
+    let url=`/api/products?brand=${encodeURIComponent(brand)}`;
     if(city)url+=`&city=${encodeURIComponent(city)}`;
     if(star)url+=`&star_category=${encodeURIComponent(star)}`;
-    const r=await fetch(url);const d=await r.json();const hotels=d.hotels||[];
-    document.getElementById('hotelSelect').innerHTML=`<option value="">Select Hotel (${hotels.length})</option>`+hotels.map(h=>`<option value="${h.product_id}" data-name="${escHtml(h.hotel_name)}">${escHtml(h.hotel_name)}</option>`).join('');
+    const r=await fetch(url);const d=await r.json();const hotels=d.products||d.hotels||[];
+    document.getElementById('hotelSelect').innerHTML=`<option value="">Select ${productLabel} (${hotels.length})</option>`+hotels.map(h=>`<option value="${h.product_id}" data-name="${escHtml(h.hotel_name)}">${escHtml(h.hotel_name)}</option>`).join('');
   }catch(e){}
 }
 
@@ -959,9 +1102,9 @@ async function loadHotelsForCompareSlot(idx){
   hotelSel.dataset.productId='';
   if(!brand||!city)return;
   try{
-    const r=await fetch(`/api/hotels?brand=${encodeURIComponent(brand)}&city=${encodeURIComponent(city)}`);
+    const r=await fetch(`/api/products?brand=${encodeURIComponent(brand)}&city=${encodeURIComponent(city)}`);
     const d=await r.json();
-    hotelSel.innerHTML='<option value="">Hotel</option>'+(d.hotels||[]).map(h=>`<option value="${h.product_id}" data-name="${escHtml(h.hotel_name)}">${escHtml(h.hotel_name)}</option>`).join('');
+    hotelSel.innerHTML='<option value="">Hotel</option>'+(d.products||d.hotels||[]).map(h=>`<option value="${h.product_id}" data-name="${escHtml(h.hotel_name)}">${escHtml(h.hotel_name)}</option>`).join('');
   }catch(e){}
 }
 
@@ -1003,7 +1146,7 @@ function switchMode(mode){
     document.getElementById('hotelBrandSelect').value='';
     document.getElementById('hotelCitySelect').innerHTML='<option value="">All Cities</option>';
     document.getElementById('hotelStarSelect').innerHTML='<option value="">All Stars</option>';
-    document.getElementById('hotelSelect').innerHTML='<option value="">Select Hotel</option>';
+    document.getElementById('hotelSelect').innerHTML='<option value="">Select '+productLabel+'</option>';
   } else if(mode==='compareBrands'||mode==='compareHotels'){
     viewMode=mode;
     document.getElementById(mode==='compareBrands'?'compareBrandsSelectors':'compareHotelsSelectors').classList.remove('hidden');
@@ -1031,17 +1174,19 @@ function showSubTab(name){
   document.querySelector(`.sub-tab[data-tab="${name}"]`)?.classList.add('active');
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.add('hidden'));
   activeTab=name;
-  // BUG-001 fix: chartsRow only shown when drivers active; data loaded before showing
   if(name==='drivers'){
     document.getElementById('chartsRow').classList.remove('hidden');
-    // Don't call loadDrivers() here — data already loaded in loadDashboard/loadHotelDataV2
   } else {
     document.getElementById('chartsRow').classList.add('hidden');
-    document.getElementById(name+'Tab')?.classList.remove('hidden');
-    if(name==='satisfaction')loadSatisfactionTab();
-    else if(name==='demographics')loadDemographics();
-    else if(name==='stayPurpose')loadStayPurposePreferences();
-    else if(name==='travelerType')loadTravelerTypePreferences();
+    const panel = document.getElementById(name+'Tab');
+    if(panel) panel.classList.remove('hidden');
+    if(name==='satisfaction') loadSatisfactionTab();
+    else if(name==='demographics') loadDemographics();
+    else if(name.startsWith('crossTab_')){
+      // Dynamic cross-tab: load dimension x aspect satisfaction
+      const dimKey = name.replace('crossTab_','');
+      loadCrossTabData(dimKey);
+    }
   }
 }
 
@@ -1074,7 +1219,7 @@ async function applyHotelView(){
   currentCity=document.getElementById('hotelCitySelect').value||null;
   currentStar=document.getElementById('hotelStarSelect')?.value||null;
   viewMode='hotel';
-  if(!currentHotel){alert('Please select a hotel');return;}
+  if(!currentHotel){alert('Please select a '+productLabel);return;}
   showLoader();
   hideContentAreas();
   activeTab='drivers';
@@ -1131,8 +1276,8 @@ async function loadBenchmarkHotels(slot=1){
   const brand=document.getElementById(slot===1?'benchmarkHotelBrand':'benchmarkHotelBrand2').value;
   const city=document.getElementById(slot===1?'benchmarkHotelCity':'benchmarkHotelCity2').value;
   if(!brand||!city)return;
-  const r=await fetch(`/api/hotels?brand=${encodeURIComponent(brand)}&city=${encodeURIComponent(city)}`);const d=await r.json();
-  const opts='<option value="">Hotel</option>'+(d.hotels||[]).map(h=>`<option value="${h.product_id}">${escHtml(h.hotel_name)}</option>`).join('');
+  const r=await fetch(`/api/products?brand=${encodeURIComponent(brand)}&city=${encodeURIComponent(city)}`);const d=await r.json();
+  const opts='<option value="">Hotel</option>'+(d.products||d.hotels||[]).map(h=>`<option value="${h.product_id}">${escHtml(h.hotel_name)}</option>`).join('');
   document.getElementById(slot===1?'benchmarkHotelSel':'benchmarkHotelSel2').innerHTML=opts;
 }
 
@@ -1289,7 +1434,7 @@ async function loadDashboard(){
 
 async function loadContextHeader(){
   try{
-    const r=await fetch(`/api/hotel_details?${buildParams()}`);
+    const r=await fetch(`/api/product_details?${buildParams()}`);
     const data=await r.json();
     if(viewMode==='hotel'){
       document.getElementById('contextIcon').textContent='🏨';
@@ -1324,8 +1469,9 @@ async function loadStats(){
     const excl=[...(sat||[])].filter(a=>a.aspect_name!=='General').sort((a,b)=>(b.satisfaction||0)-(a.satisfaction||0));
     if(excl.length){document.getElementById('statStrength').textContent=excl[0].aspect_name;document.getElementById('statStrengthScore').textContent=(excl[0].satisfaction||0)+'% satisfaction';}
     if(excl.length>1){const w=excl[excl.length-1];document.getElementById('statWeakness').textContent=w.aspect_name;document.getElementById('statWeaknessScore').textContent=(w.satisfaction||0)+'% satisfaction';}
-    const known=(demo.traveler_type||[]).filter(t=>t.traveler_type&&t.traveler_type.toLowerCase()!=='unknown');
-    if(known.length){const kt=known.reduce((s,t)=>s+t.review_count,0);document.getElementById('statGuestType').textContent=known[0].traveler_type;document.getElementById('statGuestPct').textContent=Math.round(known[0].review_count*100/kt)+'% of guests';}
+    const primaryDim=(activeDimensions.find(d=>d.dimension_key!=='gender')||activeDimensions[0]||{dimension_key:'traveler_type'});
+    const known=(demo[primaryDim.dimension_key]||[]).filter(t=>{const v=(t.dimension_value||t[primaryDim.dimension_key]||'').toLowerCase();return v&&v!=='unknown';});
+    if(known.length){const kt=known.reduce((s,t)=>s+(t.review_count||t.count||0),0);document.getElementById('statGuestType').textContent=known[0].dimension_value||known[0][primaryDim.dimension_key];document.getElementById('statGuestPct').textContent=Math.round((known[0].review_count||known[0].count||0)*100/kt)+'% of guests';}
   }catch(e){}
 }
 
@@ -1376,55 +1522,88 @@ async function loadSatisfactionTab(){
 async function loadDemographics(){
   try{
     const r=await fetch(`/api/demographics?${buildParams()}`);const data=await r.json();
-    const colorPalettes={
+    const defaultColors=['#56b4e9','#e69f00','#009e73','#d55e00','#cc79a7','#0072b2','#f59e0b','#8b5cf6'];
+    const paletteMap={
       gender:['#0072b2','#cc79a7','#6b7280'],
       traveler_type:['#56b4e9','#e69f00','#009e73','#d55e00','#cc79a7','#0072b2'],
-      stay_purpose:['#0072b2','#e69f00','#009e73','#56b4e9','#d55e00']
+      stay_purpose:['#0072b2','#e69f00','#009e73','#56b4e9','#d55e00'],
+      age_group:['#7c3aed','#6366f1','#3b82f6','#0ea5e9','#06b6d4'],
+      purchase_channel:['#f59e0b','#ef4444','#10b981','#3b82f6','#8b5cf6'],
+      price_segment:['#059669','#3b82f6','#f59e0b','#ef4444'],
+      color:['#ef4444','#3b82f6','#1f2937','#d1d5db','#f59e0b','#10b981'],
+      processor:['#7c3aed','#3b82f6','#10b981','#f59e0b','#ef4444'],
     };
-    const renderBars=(cid,items,lk,colors)=>{
-      const known=(items||[]).filter(t=>{const l=(t[lk]||'').toLowerCase();return l&&l!=='unknown'&&l!=='none'&&l!=='null'&&(t.review_count||t.count||0)>0;});
-      if(!known.length){document.getElementById(cid).innerHTML='<div class="no-data">No data</div>';return;}
+    const renderBars=(cid,items,dimKey,colors)=>{
+      const el=document.getElementById(cid);if(!el)return;
+      const known=(items||[]).filter(t=>{
+        const l=(t.dimension_value||t[dimKey]||'').toLowerCase();
+        return l&&l!=='unknown'&&l!=='none'&&l!=='null'&&(t.review_count||t.count||0)>0;
+      });
+      if(!known.length){el.innerHTML='<div class="no-data">No data</div>';return;}
       const total=known.reduce((s,t)=>s+(t.review_count||t.count||0),0);
-      document.getElementById(cid).innerHTML=known.slice(0,8).map((t,i)=>{
-        const cnt=t.review_count||t.count||0;const pct=Math.round(cnt*100/total);const lbl=t[lk]||'';
-        return `<div class="css-bar-row" style="margin-bottom:9px"><div class="css-bar-lbl" style="width:115px;font-size:11px">${lbl}</div><div class="css-bar-track"><div class="css-bar-fill" style="width:${pct}%;background:${colors[i%colors.length]}"></div></div><div class="css-bar-val" style="color:var(--text4);font-size:11px">${pct}%</div></div>`;
+      el.innerHTML=known.slice(0,8).map((t,i)=>{
+        const cnt=t.review_count||t.count||0;
+        const pct=Math.round(cnt*100/total);
+        const lbl=t.dimension_value||t[dimKey]||'';
+        return `<div class="css-bar-row" style="margin-bottom:9px">
+          <div class="css-bar-lbl" style="width:115px;font-size:11px">${lbl}</div>
+          <div class="css-bar-track"><div class="css-bar-fill" style="width:${pct}%;background:${colors[i%colors.length]}"></div></div>
+          <div class="css-bar-val" style="color:var(--text4);font-size:11px">${pct}%</div>
+        </div>`;
       }).join('');
     };
-    renderBars('genderChart',data.gender||[],'gender',colorPalettes.gender);
-    renderBars('travelerChart',data.traveler_type||[],'traveler_type',colorPalettes.traveler_type);
-    renderBars('purposeChart',data.stay_purpose||[],'stay_purpose',colorPalettes.stay_purpose);
-  }catch(e){}
+    // Render a chart for each active dimension
+    const dims = activeDimensions.length ? activeDimensions : [
+      {dimension_key:'gender',        dimension_label:'Gender'},
+      {dimension_key:'traveler_type', dimension_label:'Traveler Type'},
+      {dimension_key:'stay_purpose',  dimension_label:'Stay Purpose'},
+    ];
+    dims.forEach(dim=>{
+      const key = dim.dimension_key;
+      const chartId = `dimChart_${key}`;
+      const colors = paletteMap[key] || defaultColors;
+      renderBars(chartId, data[key]||[], key, colors);
+    });
+  }catch(e){console.warn('[DEMOGRAPHICS]',e);}
 }
 
-async function loadStayPurposePreferences(){
+// ─── DYNAMIC CROSS-TAB (dimension × aspect satisfaction) ─────
+async function loadCrossTabData(dimKey){
+  const dim = activeDimensions.find(d=>d.dimension_key===dimKey);
+  if(!dim) return;
+  const contentEl = document.getElementById(`crossTabContent_${dimKey}`);
+  if(!contentEl) return;
+  contentEl.innerHTML = '<div class="no-data">Loading...</div>';
   try{
-    const r=await fetch(`/api/stay_purpose_preferences?${buildParams()}`);const data=await r.json();
-    if(!Array.isArray(data)||!data.length){document.getElementById('stayPurposeContent').innerHTML='<div class="no-data">No stay purpose data</div>';return;}
-    const aspects=configAspects;
-    let html=`<table class="data-table"><thead><tr><th>Stay Purpose</th>${aspects.map(a=>`<th class="item-col">${a}</th>`).join('')}</tr></thead><tbody>`;
+    // Use existing segment endpoint — filters by dimension_key
+    const params = buildParams() + `&dimension=${encodeURIComponent(dimKey)}`;
+    const r = await fetch(`/api/segment_preferences?${params}`);
+    if(!r.ok){ contentEl.innerHTML='<div class="no-data">No data available</div>'; return; }
+    const data = await r.json();
+    if(!Array.isArray(data)||!data.length){ contentEl.innerHTML='<div class="no-data">No data available</div>'; return; }
+    const aspects = configAspects;
+    let html = `<table class="data-table"><thead><tr>
+      <th>${dim.dimension_label}</th>
+      ${aspects.map(a=>`<th class="item-col">${a}</th>`).join('')}
+    </tr></thead><tbody>`;
     data.forEach(row=>{
-      html+=`<tr><td style="color:var(--text2);font-weight:500">${row.stay_purpose}</td>`;
-      aspects.forEach(a=>{const d=row.aspects?.[a];html+=d&&d.mentions>=10?`<td><span class="heat-cell ${getHeatClass(d.satisfaction)}">${d.satisfaction}%</span></td>`:`<td><span style="color:#3d3355">—</span></td>`;});
-      html+=`</tr>`;
+      const segVal = row[dimKey] || row.segment_value || row.dimension_value || '';
+      html += `<tr><td style="color:var(--text2);font-weight:500">${segVal}</td>`;
+      aspects.forEach(a=>{
+        const d = row.aspects?.[a];
+        html += d&&d.mentions>=10
+          ? `<td><span class="heat-cell ${getHeatClass(d.satisfaction)}">${d.satisfaction}%</span></td>`
+          : `<td><span style="color:#3d3355">—</span></td>`;
+      });
+      html += `</tr>`;
     });
-    document.getElementById('stayPurposeContent').innerHTML=html+'</tbody></table>';
-  }catch(e){}
+    contentEl.innerHTML = html + '</tbody></table>';
+  }catch(e){ contentEl.innerHTML='<div class="no-data">Error loading data</div>'; }
 }
 
-async function loadTravelerTypePreferences(){
-  try{
-    const r=await fetch(`/api/traveler_preferences?${buildParams()}`);const data=await r.json();
-    if(!Array.isArray(data)||!data.length){document.getElementById('travelerTypeContent').innerHTML='<div class="no-data">No traveler type data</div>';return;}
-    const aspects=configAspects;
-    let html=`<table class="data-table"><thead><tr><th>Traveler Type</th>${aspects.map(a=>`<th class="item-col">${a}</th>`).join('')}</tr></thead><tbody>`;
-    data.forEach(row=>{
-      html+=`<tr><td style="color:var(--text2);font-weight:500">${row.traveler_type}</td>`;
-      aspects.forEach(a=>{const d=row.aspects?.[a];html+=d&&d.mentions>=10?`<td><span class="heat-cell ${getHeatClass(d.satisfaction)}">${d.satisfaction}%</span></td>`:`<td><span style="color:#3d3355">—</span></td>`;});
-      html+=`</tr>`;
-    });
-    document.getElementById('travelerTypeContent').innerHTML=html+'</tbody></table>';
-  }catch(e){}
-}
+// ── Legacy wrappers — loadCrossTabData() handles everything now ──
+async function loadStayPurposePreferences(){ await loadCrossTabData('stay_purpose'); }
+async function loadTravelerTypePreferences(){ await loadCrossTabData('traveler_type'); }
 
 // ─── HOTEL DATA V2 (single summary call) ─────────────────────
 async function loadBrandSignals(brand){
@@ -1444,7 +1623,8 @@ async function loadBrandSignals(brand){
     renderDelights(data.delights||[]);
     renderRdSignals(data.rd_signals||{});
     const demo=data.demographics||{};
-    const kt=(demo.traveler_type||[]).filter(t=>t.dimension_value&&t.dimension_value.toLowerCase()!=='unknown'&&(t.count||0)>=10);
+    const primDim=(activeDimensions.find(d=>d.dimension_key!=='gender')||{dimension_key:'traveler_type'});
+    const kt=(demo[primDim.dimension_key]||[]).filter(t=>t.dimension_value&&t.dimension_value.toLowerCase()!=='unknown'&&(t.count||0)>=10);
     if(kt.length){const total=kt.reduce((s,t)=>s+t.count,0);document.getElementById('statGuestType').textContent=kt[0].dimension_value;document.getElementById('statGuestPct').textContent=Math.round(kt[0].count*100/total)+'% of guests';}
   }catch(e){}
 }
@@ -1455,7 +1635,7 @@ async function loadHotelDataV2(productId){
   // ── Fetch ────────────────────────────────────────────────────
   let data;
   try{
-    const r=await fetch(`/api/hotel/${productId}/summary`);
+    const r=await fetch(`/api/product/${productId}/summary`);
     if(!r.ok){
       const err=await r.json().catch(()=>({}));
       console.error('[loadHotelDataV2] API error:',r.status,err.detail||r.status);
@@ -1488,9 +1668,11 @@ async function loadHotelDataV2(productId){
     if(sortedA.length){document.getElementById('statStrength').textContent=sortedA[0].aspect_name;document.getElementById('statStrengthScore').textContent=(sortedA[0].satisfaction_pct||0)+'% satisfaction';}
     if(sortedA.length>1){const w=sortedA[sortedA.length-1];document.getElementById('statWeakness').textContent=w.aspect_name;document.getElementById('statWeaknessScore').textContent=(w.satisfaction_pct||0)+'% satisfaction';}
     const demo=data.demographics||{};
-    const knownTypes=(demo.traveler_type||[])
-      .filter(t=>t&&(t.dimension_value||t.traveler_type))
-      .map(t=>({val:t.dimension_value||t.traveler_type||'', cnt:+(t.count||t.review_count||0)}))
+    // Use first non-gender active dimension for "Top Guest Type" stat card
+    const primaryDim=(activeDimensions.find(d=>d.dimension_key!=='gender')||activeDimensions[0]||{dimension_key:'traveler_type',dimension_label:'Traveler Type'});
+    const knownTypes=(demo[primaryDim.dimension_key]||[])
+      .filter(t=>t&&(t.dimension_value||t[primaryDim.dimension_key]))
+      .map(t=>({val:t.dimension_value||t[primaryDim.dimension_key]||'', cnt:+(t.count||t.review_count||0)}))
       .filter(t=>t.val&&!['unknown','none','null',''].includes(t.val.toLowerCase())&&t.cnt>0)
       .sort((a,b)=>b.cnt-a.cnt);
     if(knownTypes.length){
@@ -1693,7 +1875,7 @@ async function openParadoxModal(){
   document.getElementById('drilldownFooter').innerHTML='';
   document.getElementById('drilldownOverlay').classList.add('open');
   try{
-    const r=await fetch(`/api/hotel/${pid}/paradox?limit=50`);const data=await r.json();
+    const r=await fetch(`/api/product/${pid}/paradox?limit=50`);const data=await r.json();
     if(!data.reviews||!data.reviews.length){document.getElementById('drilldownContent').innerHTML='<div style="text-align:center;padding:2rem;color:var(--text4)">No paradox reviews found.</div>';return;}
     document.getElementById('drilldownCount').textContent=`${data.reviews.length} of ${data.total_count} — gave 5 stars but mentioned pain points`;
     drilldownState={allReviews:data.reviews,showing:3,signalType:'paradox'};
@@ -1815,10 +1997,10 @@ async function loadComparison(items,compareBy){
           let pain=[],delights=[],rd={feature_request:[],price_feedback:[],expectation_gap:[]};
           try{
             if(compareBy==='hotel'){
-              const r2=await fetch(`/api/hotel/${s.item}/pain_delights`);const d2=await r2.json();
+              const r2=await fetch(`/api/product/${s.item}/pain_delights`);const d2=await r2.json();
               pain=(d2.pain_points||[]).sort((a,b)=>(b.mention_count||0)-(a.mention_count||0));
               delights=(d2.delights||[]).sort((a,b)=>(b.mention_count||0)-(a.mention_count||0));
-              const r3=await fetch(`/api/hotel/${s.item}/rd_signals`);const d3=await r3.json();
+              const r3=await fetch(`/api/product/${s.item}/rd_signals`);const d3=await r3.json();
               rd=d3.rd_signals||rd;
             } else {
               const r2=await fetch(`/api/brand/${encodeURIComponent(s.item)}/summary`);const d2=await r2.json();
@@ -2133,8 +2315,8 @@ function sendSuggestion(btn){
   document.getElementById('chatInput').value=msg;
   sendChat();
 }
-function openChat(){document.getElementById('chatPanel').classList.add('open');document.getElementById('chatOverlay').classList.add('show');updateChatContext();}
-function closeChat(){document.getElementById('chatPanel').classList.remove('open');document.getElementById('chatOverlay').classList.remove('show');}
+function openChat(){document.body.style.overflow='hidden';document.getElementById('chatPanel').classList.add('open');document.getElementById('chatOverlay').classList.add('show');updateChatContext();}
+function closeChat(){document.body.style.overflow='';document.getElementById('chatPanel').classList.remove('open');document.getElementById('chatOverlay').classList.remove('show');}
 function clearChat(){
   document.getElementById('chatMessages').innerHTML=`<div class="msg-bot">Chat cleared. Ask me anything about the selected hotel or brand.
     <div class="chat-suggestions">
@@ -2162,7 +2344,7 @@ function updateChatContext(){
   } else if(currentBrand){
     lbl.textContent=`Analyzing: ${currentBrand}`;
   } else {
-    lbl.textContent='Select a hotel or brand to begin';
+    lbl.textContent='Select a '+productLabel+' or brand to begin';
   }
 }
 
@@ -2219,7 +2401,7 @@ async function sendMessage(msg){
   // Don't block — pass to agent even without context; agent will ask for clarification
   if(!currentHotel&&!currentBrand){
     const msgs=document.getElementById('chatMessages');
-    msgs.innerHTML+=`<div class="msg-bot" style="border-color:rgba(245,158,11,.2)">⚠️ I couldn't find that hotel. Try the search bar (top right) to select a hotel first, or mention the exact hotel name.</div>`;
+    msgs.innerHTML+=`<div class="msg-bot" style="border-color:rgba(245,158,11,.2)">⚠️ I couldn't find that product. Try the search bar (top right) to select a product first, or mention the exact name.</div>`;
     msgs.scrollTop=msgs.scrollHeight;return;
   }
   document.getElementById('chatInput').value='';

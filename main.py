@@ -62,11 +62,77 @@ DATASET = "smaartanalyst"
 AGENT_ID = os.environ.get("GEMINI_AGENT_ID", "agent_024eedb9-0b86-4101-82a5-f4b3d72c5ee3")
 AGENT_LOCATION = "global"  # Data Analytics Agent uses global, not regional
 
-CATEGORY = "hotels"   # ← single variable — change this to switch verticals
+CATEGORY = "hotels"   # ← driven by category table at startup (env var SMAARTBRAND_CATEGORY)
+CATEGORY_ID = 200     # ← BQ category.id for active category (Hotels=200, Smartphones=1)
+
+# MASTER_TABLE: BQ flat table for the active category
+# Populated at startup by get_active_category()
+# Pattern: hotel_master, smartphone_master, bike_master etc.
+MASTER_TABLE = f"{CATEGORY}_master"
+
+# Mapping: category_name (lowercase) → BQ master table name
+# Add new categories here as they go live
+CATEGORY_MASTER_MAP = {
+    "hotels":       "hotel_master",
+    "smartphones":  "smartphone_master",
+    "bikes":        "bike_master",
+    "auto":         "auto_master",
+}
+
+def get_active_category() -> tuple:
+    """
+    Read active category from BQ category table WHERE status='A'.
+    Returns (category_id_lower, master_table_name).
+
+    category table schema:
+      id            INTEGER  — category_id (FK to category_aspect.category_id)
+      category_name STRING   — e.g. "Hotels", "Smartphones", "Bikes"
+      category_desc STRING   — display description
+      status        STRING   — 'A' = active, 'I' = inactive
+
+    Falls back to CATEGORY constant if table not found.
+
+    Priority:
+      1. SMAARTBRAND_CATEGORY env var (set on Railway per deployment)
+      2. category table WHERE status='A' AND id = SMAARTBRAND_CATEGORY_ID env var
+      3. Default CATEGORY constant ("hotels")
+    """
+    # Priority 1: explicit env var (set on Railway)
+    env_cat = os.environ.get("SMAARTBRAND_CATEGORY", "").strip().lower()
+    if env_cat:
+        master = CATEGORY_MASTER_MAP.get(env_cat, f"{env_cat}_master")
+        print(f"[CATEGORY] From env SMAARTBRAND_CATEGORY: {env_cat} → {master}")
+        return env_cat, master
+
+    try:
+        client = bigquery.Client(project=PROJECT)
+        # Priority 2: category table filtered by SMAARTBRAND_CATEGORY_ID env var
+        cat_id_filter = os.environ.get("SMAARTBRAND_CATEGORY_ID", "")
+        where = f"WHERE id = {cat_id_filter}" if cat_id_filter else "WHERE LOWER(category_name) = 'hotels'"
+        df = client.query(f"""
+            SELECT id, LOWER(category_name) as category_id, category_name
+            FROM `{PROJECT}.{DATASET}.category`
+            {where}
+            LIMIT 1
+        """).to_dataframe()
+        if not df.empty:
+            row = df.iloc[0]
+            cat_name = str(row['category_id']).strip()
+            master = CATEGORY_MASTER_MAP.get(cat_name, f"{cat_name}_master")
+            print(f"[CATEGORY] From BQ (id={row['id']}): {cat_name} → {master}")
+            return cat_name, master
+    except Exception as e:
+        print(f"[CATEGORY] Fallback to default '{CATEGORY}': {e}")
+    return CATEGORY, CATEGORY_MASTER_MAP.get(CATEGORY, f"{CATEGORY}_master")
 
 # Aspect data loaded dynamically from BQ category_aspect at startup
 ASPECT_MAP: dict = {}    # populated in load_master_caches()
 VALID_ASPECTS: dict = {} # same as ASPECT_MAP but only insight=Y aspects
+
+# ACTIVE_DIMENSIONS: dimensions to show in demographics section
+# Loaded from category_dimension WHERE category_id = active AND status='A'
+# Each entry: {dimension_key, dimension_label, icon, display_order}
+ACTIVE_DIMENSIONS: list = []
 
 ASPECT_ICONS: dict = {
     "Dining": "🍽️", "Cleanliness": "🧹", "Amenities": "🏊", "Staff": "👨‍💼",
@@ -234,54 +300,81 @@ def get_gemini():
 async def startup():
     init_bq_client()
     init_gemini()
-    # Load caches in background
+    global CATEGORY, MASTER_TABLE, CATEGORY_ID
+    CATEGORY, MASTER_TABLE = get_active_category()
+    # Set CATEGORY_ID from env or use default map
+    env_id = os.environ.get("SMAARTBRAND_CATEGORY_ID", "")
+    if env_id:
+        CATEGORY_ID = int(env_id)
+    else:
+        CATEGORY_ID = {"products": 200, "smartphones": 1, "bikes": 300}.get(CATEGORY, 200)
+    print(f"[STARTUP] Category: {CATEGORY} (id={CATEGORY_ID}) → {MASTER_TABLE}")
     threading.Thread(target=load_master_caches, daemon=True).start()
 
 def load_master_caches():
-    """Load brand_master and hotel_master into cache at startup"""
+    """Load brand_master and product master table into cache at startup"""
     client = get_bq()
     if not client:
         return
     
     try:
-        # Load brands
-        # ── Load category + aspects from BQ ──────────────────────────────
+        # ── Load category aspects from BQ ─────────────────────────────────
         global ASPECT_MAP, VALID_ASPECTS
         try:
             cat_df = client.query(f"""
                 SELECT ca.aspect_id, ca.aspect_name, ca.insight
                 FROM `{PROJECT}.{DATASET}.category_aspect` ca
                 JOIN `{PROJECT}.{DATASET}.category` c ON ca.category_id = c.id
-                WHERE LOWER(c.category_name) = '{CATEGORY}'
+                WHERE c.id = {CATEGORY_ID}
                   AND ca.status = 'A'
                 ORDER BY ca.aspect_id
             """).to_dataframe()
             ASPECT_MAP = {int(r['aspect_id']): str(r['aspect_name']) for _, r in cat_df.iterrows()}
             VALID_ASPECTS = {int(r['aspect_id']): str(r['aspect_name']) for _, r in cat_df.iterrows() if r['insight'] == 'Y'}
-            print(f"[CACHE] Loaded {len(VALID_ASPECTS)} aspects for category '{CATEGORY}' from BQ: {list(VALID_ASPECTS.values())}")
+            print(f"[CACHE] Loaded {len(VALID_ASPECTS)} aspects for '{CATEGORY}': {list(VALID_ASPECTS.values())}")
         except Exception as e:
             print(f"[WARN] Could not load aspects from BQ: {e}")
-            # Hardcoded fallback removed — fix BQ connection if this triggers
 
-        brands_query = f"""
-        SELECT brand_id, brand_name, categories
-        FROM `{PROJECT}.{DATASET}.brand_master`
-        ORDER BY brand_name
-        """
-        brands_df = client.query(brands_query).to_dataframe()
+        # ── Load category dimensions ──────────────────────────────────────
+        global ACTIVE_DIMENSIONS
+        try:
+            dim_df = client.query(f"""
+                SELECT cd.dimension_key, cd.dimension_label, cd.icon,
+                       cd.display_order, cd.source_table, cd.source_column,
+                       cd.show_cross_tab, cd.cross_tab_label
+                FROM `{PROJECT}.{DATASET}.category_dimension` cd
+                JOIN `{PROJECT}.{DATASET}.category` c ON cd.category_id = c.id
+                WHERE c.id = {CATEGORY_ID}
+                  AND cd.status = 'A'
+                ORDER BY cd.display_order
+            """).to_dataframe()
+            ACTIVE_DIMENSIONS = dim_df.to_dict(orient='records')
+            print(f"[CACHE] Loaded {len(ACTIVE_DIMENSIONS)} dimensions: {[d['dimension_key'] for d in ACTIVE_DIMENSIONS]}")
+        except Exception as e:
+            ACTIVE_DIMENSIONS = [
+                {"dimension_key": "gender",        "dimension_label": "Gender Distribution", "icon": "👤", "display_order": 1, "source_table": "review_gender",     "source_column": "inferred_gender", "show_cross_tab": "N", "cross_tab_label": ""},
+                {"dimension_key": "traveler_type", "dimension_label": "Traveler Type",       "icon": "🧳", "display_order": 2, "source_table": "review_attributes", "source_column": "traveler_type",   "show_cross_tab": "Y", "cross_tab_label": "Traveler Type × Aspect Satisfaction"},
+                {"dimension_key": "stay_purpose",  "dimension_label": "Stay Purpose",        "icon": "🎯", "display_order": 3, "source_table": "review_attributes", "source_column": "stay_purpose",    "show_cross_tab": "Y", "cross_tab_label": "Stay Purpose × Aspect Satisfaction"},
+            ]
+            print(f"[WARN] category_dimension not found — using defaults: {e}")
+
+        # ── Load brands ───────────────────────────────────────────────────
+        brands_df = client.query(f"""
+            SELECT brand_id, brand_name, categories
+            FROM `{PROJECT}.{DATASET}.brand_master`
+            ORDER BY brand_name
+        """).to_dataframe()
         set_cache("brands", brands_df.to_dict(orient='records'))
         print(f"[CACHE] Loaded {len(brands_df)} brands")
-        
-        # Load hotels
-        hotels_query = f"""
-        SELECT product_id, hotel_name, brand_id, brand_name, city, state, country,
-               star_category, review_count, overall_satisfaction
-        FROM `{PROJECT}.{DATASET}.hotel_master`
-        ORDER BY hotel_name
-        """
-        hotels_df = client.query(hotels_query).to_dataframe()
+
+        # ── Load products from MASTER_TABLE ───────────────────────────────
+        hotels_df = client.query(f"""
+            SELECT *
+            FROM `{PROJECT}.{DATASET}.{MASTER_TABLE}`
+            ORDER BY hotel_name
+        """).to_dataframe()
         set_cache("hotels", hotels_df.to_dict(orient='records'))
-        print(f"[CACHE] Loaded {len(hotels_df)} hotels")
+        print(f"[CACHE] Loaded {len(hotels_df)} products from {MASTER_TABLE}")
         
         # Extract unique cities
         cities = sorted(hotels_df['city'].dropna().unique().tolist())
@@ -408,7 +501,7 @@ def load_master_caches():
             dim = str(row['dimension'] or '')
             val = str(row['dimension_value'] or '').strip()
             if not val or val.lower() in ('unknown','none','null',''): continue
-            entry = demo_by_pid.setdefault(pid, {'gender':[], 'traveler_type':[], 'stay_purpose':[]})
+            entry = demo_by_pid.setdefault(pid, {d['dimension_key']: [] for d in ACTIVE_DIMENSIONS})
             if dim in entry:
                 entry[dim].append({
                     "dimension_value": val,           # consistent with BQ response
@@ -427,7 +520,7 @@ def load_master_caches():
             SELECT p.product_id, p.aspect_id, p.treemap_name, SUM(p.mention_count) as mention_count,
                    h.brand_name
             FROM `{PROJECT}.{DATASET}.product_phrases` p
-            JOIN `{PROJECT}.{DATASET}.hotel_master` h ON p.product_id = h.product_id
+            JOIN `{PROJECT}.{DATASET}.{MASTER_TABLE}` h ON p.product_id = h.product_id
             WHERE p.treemap_name IS NOT NULL AND TRIM(p.treemap_name) != ''
               AND p.aspect_id IN ({','.join(str(k) for k in VALID_ASPECTS)})
             GROUP BY p.product_id, p.aspect_id, p.treemap_name, h.brand_name
@@ -535,8 +628,49 @@ async def get_config():
     }
 
 
+@app.get("/api/categories")
+def get_categories():
+    """Get all categories from BQ category table.
+    Used by UI category selector — shows all categories,
+    UI marks non-active ones as WIP."""
+    client = get_bq()
+    if not client:
+        raise HTTPException(status_code=500, detail="Database unavailable")
+    try:
+        df = client.query(f"""
+            SELECT id, category_name, category_desc, status
+            FROM `{PROJECT}.{DATASET}.category`
+            ORDER BY id
+        """).to_dataframe()
+        categories = []
+        for _, row in df.iterrows():
+            cat_id = str(row['category_name']).lower().replace(' ', '_')
+            categories.append({
+                "id":            int(row['id']),
+                "category_id":   cat_id,
+                "category_name": str(row['category_name']),
+                "category_desc": str(row.get('category_desc') or ''),
+                "status":        str(row['status']),
+                "is_active":     str(row['status']).upper() == 'A',
+                "active_category": CATEGORY,  # currently loaded category
+            })
+        return {"categories": categories, "active_category": CATEGORY,
+                "dimensions": ACTIVE_DIMENSIONS}
+    except Exception as e:
+        return {"categories": [{"category_id": CATEGORY, "category_name": CATEGORY.title(),
+                                 "status": "A", "is_active": True}],
+                "active_category": CATEGORY,
+                "dimensions": ACTIVE_DIMENSIONS}
+
+
+@app.get("/api/dimensions")
+def get_dimensions():
+    """Get active dimensions for current category — drives demographics UI."""
+    return {"dimensions": ACTIVE_DIMENSIONS, "category": CATEGORY}
+
+
 @app.get("/api/brands")
-async def get_brands(category: str = "hotels"):
+def get_brands(category: str = CATEGORY):
     """Get all brands for a category"""
     cached = get_cache("brands")
     if cached:
@@ -557,14 +691,14 @@ async def get_brands(category: str = "hotels"):
     df = client.query(query).to_dataframe()
     return {"brands": df.to_dict(orient='records')}
 
-@app.get("/api/hotels")
-async def get_hotels(
+@app.get("/api/products")
+def get_products(
     brand: Optional[str] = None,
     city: Optional[str] = None,
     star_category: Optional[str] = None,
-    category: str = "hotels"
+    category: str = CATEGORY
 ):
-    """Get hotels with optional filters"""
+    """Get products with optional filters"""
     cached = get_cache("hotels")
     if cached:
         filtered = cached
@@ -577,7 +711,7 @@ async def get_hotels(
                 star_val = int(float(star_category))
                 filtered = [h for h in filtered if int(h.get('star_category') or 0) == star_val]
             except: pass
-        return {"hotels": filtered}
+        return {"products": filtered}
     
     client = get_bq()
     if not client:
@@ -585,9 +719,11 @@ async def get_hotels(
     
     conditions = ["1=1"]
     if brand:
-        conditions.append(f"brand_name = '{brand}'")
+        safe_brand = brand.replace("'", "''")
+        conditions.append(f"brand_name = '{safe_brand}'")
     if city and city != "All Cities":
-        conditions.append(f"city = '{city}'")
+        safe_city = city.replace("'", "''")
+        conditions.append(f"city = '{safe_city}'")
     if star_category and star_category != "All Stars":
         try:
             star_val = int(float(star_category))
@@ -597,15 +733,15 @@ async def get_hotels(
     query = f"""
     SELECT product_id, hotel_name, brand_id, brand_name, city, state, country,
            star_category, review_count, overall_satisfaction
-    FROM `{PROJECT}.{DATASET}.hotel_master`
+    FROM `{PROJECT}.{DATASET}.{MASTER_TABLE}`
     WHERE {' AND '.join(conditions)}
     ORDER BY hotel_name
     """
     df = client.query(query).to_dataframe()
-    return {"hotels": df.to_dict(orient='records')}
+    return {"products": df.to_dict(orient='records')}
 
 @app.get("/api/cities")
-async def get_cities(brand: Optional[str] = None):
+def get_cities(brand: Optional[str] = None):
     """Get unique cities, optionally filtered by brand name"""
     cached = get_cache("hotels")
     if cached:
@@ -627,7 +763,7 @@ async def get_cities(brand: Optional[str] = None):
 
     query = f"""
     SELECT DISTINCT city
-    FROM `{PROJECT}.{DATASET}.hotel_master`
+    FROM `{PROJECT}.{DATASET}.{MASTER_TABLE}`
     WHERE {' AND '.join(conditions)}
     ORDER BY city
     """
@@ -639,7 +775,7 @@ async def get_cities(brand: Optional[str] = None):
         return {"cities": []}
 
 @app.get("/api/search")
-async def search_hotels(q: str = Query(..., min_length=2)):
+def search_hotels(q: str = Query(..., min_length=2)):
     """Wildcard search for hotels"""
     cached = get_cache("hotels")
     if cached:
@@ -655,13 +791,14 @@ async def search_hotels(q: str = Query(..., min_length=2)):
     client = get_bq()
     if not client:
         return {"results": []}
-    
+
+    safe_q = q.replace("'", "''").lower()
     query = f"""
     SELECT product_id, hotel_name, brand_name, city, star_category
-    FROM `{PROJECT}.{DATASET}.hotel_master`
-    WHERE LOWER(hotel_name) LIKE '%{q.lower()}%'
-       OR LOWER(city) LIKE '%{q.lower()}%'
-       OR LOWER(brand_name) LIKE '%{q.lower()}%'
+    FROM `{PROJECT}.{DATASET}.{MASTER_TABLE}`
+    WHERE LOWER(hotel_name) LIKE '%{safe_q}%'
+       OR LOWER(city) LIKE '%{safe_q}%'
+       OR LOWER(brand_name) LIKE '%{safe_q}%'
     LIMIT 20
     """
     df = client.query(query).to_dataframe()
@@ -687,7 +824,7 @@ async def get_brand_summary(brand_id: str, city: Optional[str] = None, star: Opt
         pid_filter += f" AND city = '{safe_city}'"
     if safe_star:
         pid_filter += f" AND star_category = '{safe_star}'"
-    pid_subquery = f"SELECT product_id FROM `{PROJECT}.{DATASET}.hotel_master` WHERE {pid_filter}"
+    pid_subquery = f"SELECT product_id FROM `{PROJECT}.{DATASET}.{MASTER_TABLE}` WHERE {pid_filter}"
 
     # Brand info
     brand_query = f"""
@@ -707,7 +844,7 @@ async def get_brand_summary(brand_id: str, city: Optional[str] = None, star: Opt
     SELECT COUNT(*) as hotel_count, SUM(review_count) as total_reviews,
            ROUND(AVG(overall_satisfaction)) as overall_satisfaction,
            ROUND(AVG(google_rating),1) as avg_rating
-    FROM `{PROJECT}.{DATASET}.hotel_master`
+    FROM `{PROJECT}.{DATASET}.{MASTER_TABLE}`
     WHERE {pid_filter}
     """
     hotels_df = client.query(hotels_query).to_dataframe()
@@ -771,8 +908,9 @@ async def get_brand_summary(brand_id: str, city: Optional[str] = None, star: Opt
     GROUP BY dimension, dimension_value ORDER BY dimension, count DESC
     """
     demo_df = client.query(demo_query).to_dataframe()
-    demographics = {"traveler_type": [], "gender": [], "stay_purpose": []}
-    for dim in ["traveler_type", "gender", "stay_purpose"]:
+    demographics = {d['dimension_key']: [] for d in ACTIVE_DIMENSIONS}
+    active_dim_keys = [d['dimension_key'] for d in ACTIVE_DIMENSIONS]
+    for dim in active_dim_keys:
         dim_data = demo_df[demo_df['dimension'] == dim]
         total_dim = dim_data['count'].sum()
         for _, row in dim_data.iterrows():
@@ -833,8 +971,8 @@ async def get_brand_summary(brand_id: str, city: Optional[str] = None, star: Opt
 # ─────────────────────────────────────────
 # HOTEL-LEVEL APIs
 # ─────────────────────────────────────────
-@app.get("/api/hotel/{product_id}/summary")
-async def get_hotel_summary(product_id: int):
+@app.get("/api/product/{product_id}/summary")
+async def get_product_summary(product_id: int):
     """Get full hotel summary with all data - parallel BQ queries"""
     client = get_bq()
     if not client:
@@ -866,7 +1004,7 @@ async def get_hotel_summary(product_id: int):
 
     # ── Always need hotel_master row + rd_signals from BQ ────────────────
     bq_queries = {
-        "hotel": f"SELECT * FROM `{PROJECT}.{DATASET}.hotel_master` WHERE product_id = {product_id}",
+        "hotel": f"SELECT * FROM `{PROJECT}.{DATASET}.{MASTER_TABLE}` WHERE product_id = {product_id}",
         "rd":    f"""SELECT signal_type as rd_signal, phrase, treemap_name, aspect_name, mention_count
                      FROM `{PROJECT}.{DATASET}.product_rd_signals`
                      WHERE product_id = {product_id} ORDER BY rd_signal, mention_count DESC"""
@@ -918,7 +1056,8 @@ async def get_hotel_summary(product_id: int):
         delights = [clean_row(r) for r in raw if r.get("phrase") and str(r.get("phrase")).lower() not in ("nan","none","null","")]
 
     # ── Demographics ──────────────────────────────────────────────────────
-    demographics = {"traveler_type": [], "gender": [], "stay_purpose": []}
+    demographics = {d['dimension_key']: [] for d in ACTIVE_DIMENSIONS}
+    active_dim_keys = [d['dimension_key'] for d in ACTIVE_DIMENSIONS]
     if demo_cached is not None:
         demographics = demo_cached
         print(f"[CACHE HIT] demo for {pid_str}")
@@ -954,8 +1093,8 @@ async def get_hotel_summary(product_id: int):
         "rd_signals": rd_signals
     }
 
-@app.get("/api/hotel/{product_id}/aspects")
-async def get_hotel_aspects(product_id: int):
+@app.get("/api/product/{product_id}/aspects")
+def get_product_aspects(product_id: int):
     """Get aspect breakdown with top phrases"""
     client = get_bq()
     if not client:
@@ -983,7 +1122,7 @@ async def get_hotel_aspects(product_id: int):
     aspects = []
     for _, row in aspects_df.iterrows():
         aspect_id = row['aspect_id']
-        aspect_phrases = phrases_df[phrases_df['aspect_id'] == aspect_id].head(5)
+        aspect_phrases = phrases_df[phrases_df['aspect_id'] == aspect_id].head(10)
         aspects.append({
             **row.to_dict(),
             "top_phrases": aspect_phrases.to_dict(orient='records')
@@ -991,8 +1130,8 @@ async def get_hotel_aspects(product_id: int):
     
     return {"aspects": aspects}
 
-@app.get("/api/hotel/{product_id}/pain_delights")
-async def get_hotel_pain_delights(product_id: int):
+@app.get("/api/product/{product_id}/pain_delights")
+def get_product_pain_delights(product_id: int):
     """Get pain points and delights"""
     client = get_bq()
     if not client:
@@ -1005,6 +1144,7 @@ async def get_hotel_pain_delights(product_id: int):
     WHERE product_id = {product_id}
     AND phrase IS NOT NULL AND TRIM(phrase) != ''
     ORDER BY signal_type, severity_rank
+    LIMIT 20
     """
     df = client.query(query).to_dataframe()
     
@@ -1013,8 +1153,8 @@ async def get_hotel_pain_delights(product_id: int):
     
     return {"pain_points": pain_points, "delights": delights}
 
-@app.get("/api/hotel/{product_id}/emotions")
-async def get_hotel_emotions(product_id: int):
+@app.get("/api/product/{product_id}/emotions")
+def get_product_emotions(product_id: int):
     """Get emotion distribution"""
     client = get_bq()
     if not client:
@@ -1029,8 +1169,8 @@ async def get_hotel_emotions(product_id: int):
     df = client.query(query).to_dataframe()
     return {"emotions": df.to_dict(orient='records')}
 
-@app.get("/api/hotel/{product_id}/rd_signals")
-async def get_hotel_rd_signals(product_id: int):
+@app.get("/api/product/{product_id}/rd_signals")
+def get_product_rd_signals(product_id: int):
     """Get R&D signals"""
     client = get_bq()
     if not client:
@@ -1066,7 +1206,7 @@ class DrilldownRequest(BaseModel):
     limit: int = 10
 
 @app.post("/api/drilldown")
-async def drilldown(request: DrilldownRequest):
+def drilldown(request: DrilldownRequest):
     """Get actual reviews for a specific phrase/signal"""
     client = get_bq()
     if not client:
@@ -1085,11 +1225,13 @@ async def drilldown(request: DrilldownRequest):
         # Try 1: phrase column match (fast, exact)
         query = f"""
         SELECT review_text, sentiment_text, star_rating, reviewer_name,
-               review_date, traveler_type, stay_purpose, emotion
+               review_date, traveler_type, stay_purpose, emotion,
+               confidence_score, confidence_score_phrase
         FROM `{PROJECT}.{DATASET}.review_drilldown`
         WHERE CAST(product_id AS STRING) = '{request.product_id}'
           AND LOWER(phrase) = LOWER('{safe_phrase}')
           {sentiment_filter}
+        ORDER BY confidence_score DESC, confidence_score_phrase DESC
         LIMIT {request.limit}
         """
         df = client.query(query).to_dataframe()
@@ -1098,11 +1240,13 @@ async def drilldown(request: DrilldownRequest):
         if df.empty:
             query2 = f"""
             SELECT review_text, sentiment_text, star_rating, reviewer_name,
-                   review_date, traveler_type, stay_purpose, emotion
+                   review_date, traveler_type, stay_purpose, emotion,
+                   confidence_score, confidence_score_phrase
             FROM `{PROJECT}.{DATASET}.review_drilldown`
             WHERE CAST(product_id AS STRING) = '{request.product_id}'
               AND LOWER(review_text) LIKE LOWER('%{safe_phrase}%')
               {sentiment_filter}
+            ORDER BY confidence_score DESC, confidence_score_phrase DESC
             LIMIT {request.limit}
             """
             df = client.query(query2).to_dataframe()
@@ -1138,13 +1282,14 @@ async def brand_drilldown(request: Request):
     def run_drilldown():
         q1 = f"""
         SELECT r.review_text, r.sentiment_text, r.star_rating, r.reviewer_name,
-               r.review_date, r.traveler_type, h.hotel_name
+               r.review_date, r.traveler_type, h.hotel_name,
+               r.confidence_score, r.confidence_score_phrase
         FROM `{PROJECT}.{DATASET}.review_drilldown` r
-        JOIN `{PROJECT}.{DATASET}.hotel_master` h
+        JOIN `{PROJECT}.{DATASET}.{MASTER_TABLE}` h
           ON CAST(r.product_id AS STRING) = CAST(h.product_id AS STRING)
         WHERE LOWER(h.brand_name) = LOWER('{safe_brand}')
           AND LOWER(r.phrase) = LOWER('{safe_phrase}')
-        ORDER BY r.star_rating ASC
+        ORDER BY r.confidence_score DESC, r.confidence_score_phrase DESC
         LIMIT {limit}
         """
         df = client.query(q1).to_dataframe()
@@ -1152,13 +1297,14 @@ async def brand_drilldown(request: Request):
         if df.empty:
             q2 = f"""
             SELECT r.review_text, r.sentiment_text, r.star_rating, r.reviewer_name,
-                   r.review_date, r.traveler_type, h.hotel_name
+                   r.review_date, r.traveler_type, h.hotel_name,
+                   r.confidence_score, r.confidence_score_phrase
             FROM `{PROJECT}.{DATASET}.review_drilldown` r
-            JOIN `{PROJECT}.{DATASET}.hotel_master` h
+            JOIN `{PROJECT}.{DATASET}.{MASTER_TABLE}` h
               ON CAST(r.product_id AS STRING) = CAST(h.product_id AS STRING)
             WHERE LOWER(h.brand_name) = LOWER('{safe_brand}')
               AND LOWER(r.review_text) LIKE LOWER('%{safe_phrase}%')
-            ORDER BY r.star_rating ASC
+            ORDER BY r.confidence_score DESC, r.confidence_score_phrase DESC
             LIMIT {limit}
             """
             df = client.query(q2).to_dataframe()
@@ -1185,7 +1331,7 @@ async def brand_drilldown(request: Request):
 
 
 @app.get("/api/debug_drilldown")
-async def debug_drilldown(brand: str = "", phrase: str = ""):
+def debug_drilldown(brand: str = "", phrase: str = ""):
     """Debug endpoint — check what's in review_drilldown for a brand+phrase"""
     client = get_bq()
     if not client: return {"error": "no db"}
@@ -1193,7 +1339,7 @@ async def debug_drilldown(brand: str = "", phrase: str = ""):
     safe_phrase = phrase.replace("'","''")
     try:
         # Get product_ids for brand
-        pids_df = client.query(f"SELECT CAST(product_id AS STRING) as product_id FROM `{PROJECT}.{DATASET}.hotel_master` WHERE LOWER(brand_name)=LOWER('{safe_brand}')").to_dataframe()
+        pids_df = client.query(f"SELECT CAST(product_id AS STRING) as product_id FROM `{PROJECT}.{DATASET}.{MASTER_TABLE}` WHERE LOWER(brand_name)=LOWER('{safe_brand}')").to_dataframe()
         pids = pids_df['product_id'].tolist()
         if not pids: return {"error": f"No products for brand '{brand}'", "brand": brand}
         pid_list = ','.join(f"'{p}'" for p in pids[:5])  # sample first 5
@@ -1211,8 +1357,8 @@ async def debug_drilldown(brand: str = "", phrase: str = ""):
         return {"error": str(e)}
 
 
-@app.get("/api/hotel/{product_id}/paradox")
-async def get_paradox_reviews(product_id: int, limit: int = 50):
+@app.get("/api/product/{product_id}/paradox")
+def get_product_paradox(product_id: int, limit: int = 50):
     """5-star reviews with negative sentiment — the paradox reviews"""
     client = get_bq()
     if not client:
@@ -1254,7 +1400,7 @@ class CompareHotelsRequest(BaseModel):
     product_ids: List[int]
 
 @app.post("/api/compare/hotels")
-async def compare_hotels(request: CompareHotelsRequest):
+def compare_hotels(request: CompareHotelsRequest):
     """Compare 2-3 hotels side by side"""
     client = get_bq()
     if not client:
@@ -1269,7 +1415,7 @@ async def compare_hotels(request: CompareHotelsRequest):
     hotels_query = f"""
     SELECT product_id, hotel_name, brand_name, city, star_category,
            review_count, overall_satisfaction
-    FROM `{PROJECT}.{DATASET}.hotel_master`
+    FROM `{PROJECT}.{DATASET}.{MASTER_TABLE}`
     WHERE product_id IN ({ids_str})
     """
     hotels_df = client.query(hotels_query).to_dataframe()
@@ -1307,7 +1453,7 @@ async def compare_hotels(request: CompareHotelsRequest):
             "top_delight": top_delight.iloc[0]['phrase'] if not top_delight.empty else None
         })
     
-    return {"hotels": hotels}
+    return {"products": hotels}
 
 class CompareBrandsRequest(BaseModel):
     brand_ids: List[str]
@@ -1340,7 +1486,7 @@ class ChatRequest(BaseModel):
     message: str
     product_id: Optional[int] = None
     brand_id: Optional[str] = None
-    category: str = "hotels"
+    category: str = CATEGORY
     conversation_id: Optional[str] = None
 
 @app.post("/api/chat")
@@ -1374,7 +1520,7 @@ async def chat(request: ChatRequest):
             try:
                 client2 = get_bq()
                 if client2:
-                    h_df = client2.query(f"SELECT * FROM `{PROJECT}.{DATASET}.hotel_master` WHERE product_id = {request.product_id}").to_dataframe()
+                    h_df = client2.query(f"SELECT * FROM `{PROJECT}.{DATASET}.{MASTER_TABLE}` WHERE product_id = {request.product_id}").to_dataframe()
                     if not h_df.empty:
                         hotel_info = clean_row(h_df.iloc[0].to_dict())
             except: pass
@@ -1459,7 +1605,7 @@ INSTRUCTION: Use ONLY the exact numbers above. Do not estimate or invent any fig
                         SELECT COUNT(*) as hotel_count, SUM(review_count) as total_reviews,
                                ROUND(AVG(overall_satisfaction)) as overall_satisfaction,
                                ROUND(AVG(google_rating),1) as avg_rating
-                        FROM `{PROJECT}.{DATASET}.hotel_master`
+                        FROM `{PROJECT}.{DATASET}.{MASTER_TABLE}`
                         WHERE brand_name = '{brand}'
                     """).to_dataframe()
                     if not b_df.empty:
@@ -1595,7 +1741,7 @@ Remember: Use the EXACT numbers from the data above. Do NOT invent any numbers. 
         return {"response": f"Error: {str(e)}", "conversation_id": None}
 
 @app.get("/api/treemap_phrases")
-async def get_treemap_phrases(
+def get_treemap_phrases(
     product_id: Optional[int] = None,
     brand: Optional[str] = None,
     limit: int = 5
@@ -1633,7 +1779,7 @@ async def get_treemap_phrases(
             query = f"""
             SELECT p.aspect_id, p.treemap_name, SUM(p.mention_count) as mention_count
             FROM `{PROJECT}.{DATASET}.product_phrases` p
-            JOIN `{PROJECT}.{DATASET}.hotel_master` h ON p.product_id = h.product_id
+            JOIN `{PROJECT}.{DATASET}.{MASTER_TABLE}` h ON p.product_id = h.product_id
             WHERE h.brand_name = '{safe}'
               AND p.treemap_name IS NOT NULL AND TRIM(p.treemap_name) != ''
               AND p.aspect_id IN ({','.join(str(k) for k in VALID_ASPECTS)})
@@ -1651,8 +1797,8 @@ async def get_treemap_phrases(
         return {}
 
 
-@app.get("/api/hotel/{product_id}/segment_aspect")
-async def get_segment_aspect(product_id: int):
+@app.get("/api/product/{product_id}/segment_aspect")
+def get_segment_aspect(product_id: int):
     """Get segment x aspect matrix for heatmaps"""
     client = get_bq()
     if not client:
@@ -1685,27 +1831,29 @@ async def get_segment_aspect(product_id: int):
 
 
 @app.get("/api/star_categories")
-async def get_star_categories(brand: Optional[str] = None, city: Optional[str] = None):
+def get_star_categories(brand: Optional[str] = None, city: Optional[str] = None):
     """Get distinct star categories for filter dropdown"""
     client = get_bq()
     if not client:
         return []
     conditions = ["star_category IS NOT NULL"]
     if brand:
-        conditions.append(f"brand_name = '{brand}'")
+        safe_brand = brand.replace("'", "''")
+        conditions.append(f"brand_name = '{safe_brand}'")
     if city:
-        conditions.append(f"city = '{city}'")
+        safe_city = city.replace("'", "''")
+        conditions.append(f"city = '{safe_city}'")
     query = f"""
     SELECT DISTINCT star_category
-    FROM `{PROJECT}.{DATASET}.hotel_master`
+    FROM `{PROJECT}.{DATASET}.{MASTER_TABLE}`
     WHERE {" AND ".join(conditions)}
     ORDER BY star_category
     """
     df = client.query(query).to_dataframe()
     return [int(r['star_category']) for _, r in df.iterrows() if r['star_category']]
 
-@app.get("/api/hotel_details")
-async def hotel_details_alias(product_id: Optional[int] = None, brand: Optional[str] = None,
+@app.get("/api/product_details")
+async def product_details_alias(product_id: Optional[int] = None, brand: Optional[str] = None,
                                city: Optional[str] = None, star: Optional[str] = None):
     client = get_bq()
     if not client:
@@ -1723,7 +1871,7 @@ async def hotel_details_alias(product_id: Optional[int] = None, brand: Optional[
                    ROUND(AVG(overall_satisfaction)) as overall_satisfaction,
                    ROUND(AVG(google_rating),1) as avg_rating,
                    '{safe_brand}' as brand_name
-            FROM `{PROJECT}.{DATASET}.hotel_master`
+            FROM `{PROJECT}.{DATASET}.{MASTER_TABLE}`
             WHERE {where}
             """
             df = client.query(query).to_dataframe()
@@ -1790,7 +1938,7 @@ async def drivers_alias(product_id: Optional[int] = None, brand: Optional[str] =
                ROUND(SUM(a.positive_count)*100/NULLIF(SUM(a.positive_count)+SUM(a.negative_count),0)) as satisfaction,
                ROUND(SUM(a.total_mentions)*100/NULLIF(SUM(SUM(a.total_mentions)) OVER(),0)) as share_of_voice
         FROM `{PROJECT}.{DATASET}.product_aspect_summary` a
-        JOIN `{PROJECT}.{DATASET}.hotel_master` h ON a.product_id = h.product_id
+        JOIN `{PROJECT}.{DATASET}.{MASTER_TABLE}` h ON a.product_id = h.product_id
         WHERE {where} GROUP BY a.aspect_id, a.aspect_name ORDER BY total_mentions DESC
         """
     else:
@@ -1837,7 +1985,7 @@ async def demographics_alias(product_id: Optional[int] = None, brand: Optional[s
         query = f"""
         SELECT d.dimension, d.dimension_value, SUM(d.review_count) as review_count, 0 as pct_of_total
         FROM `{PROJECT}.{DATASET}.product_demographics` d
-        JOIN `{PROJECT}.{DATASET}.hotel_master` h ON d.product_id = h.product_id
+        JOIN `{PROJECT}.{DATASET}.{MASTER_TABLE}` h ON d.product_id = h.product_id
         WHERE h.brand_name = '{brand}'
         GROUP BY d.dimension, d.dimension_value
         ORDER BY d.dimension, review_count DESC
@@ -1859,26 +2007,40 @@ async def demographics_alias(product_id: Optional[int] = None, brand: Optional[s
             })
     return result
 
-@app.get("/api/stay_purpose_preferences")
-async def stay_purpose_preferences(product_id: Optional[int] = None, brand: Optional[str] = None):
+@app.get("/api/segment_preferences")
+def segment_preferences(
+    dimension: str,
+    product_id: Optional[int] = None,
+    brand: Optional[str] = None
+):
+    """Generic segment × aspect satisfaction cross-tab.
+    dimension: any segment_type value in product_segment_aspect
+               (traveler_type, stay_purpose, age_group, purchase_channel, price_segment etc.)
+    Driven by category_dimension — no hardcoded dimension keys."""
     client = get_bq()
     if not client:
         raise HTTPException(status_code=500, detail="Database unavailable")
+    if not dimension:
+        return []
+    safe_dim = dimension.replace("'", "''")
     if product_id:
         where = f"s.product_id = {product_id}"
         join_clause = ""
     elif brand:
-        where = f"h.brand_name = '{brand}'"
-        join_clause = f"JOIN `{PROJECT}.{DATASET}.hotel_master` h ON s.product_id = h.product_id"
+        safe_brand = brand.replace("'", "''")
+        where = f"h.brand_name = '{safe_brand}'"
+        join_clause = f"JOIN `{PROJECT}.{DATASET}.{MASTER_TABLE}` h ON s.product_id = h.product_id"
     else:
         return []
     query = f"""
-    SELECT s.segment_value as stay_purpose, s.aspect_name,
+    SELECT s.segment_value, s.aspect_name,
            SUM(s.total_mentions) as mentions,
            ROUND(SUM(s.positive_count)*100/NULLIF(SUM(s.positive_count)+SUM(s.negative_count),0)) as satisfaction
     FROM `{PROJECT}.{DATASET}.product_segment_aspect` s
     {join_clause}
-    WHERE {where} AND s.segment_type = 'stay_purpose' AND s.segment_value IS NOT NULL
+    WHERE {where}
+      AND s.segment_type = '{safe_dim}'
+      AND s.segment_value IS NOT NULL
     GROUP BY s.segment_value, s.aspect_name
     ORDER BY s.segment_value, mentions DESC
     """
@@ -1887,64 +2049,32 @@ async def stay_purpose_preferences(product_id: Optional[int] = None, brand: Opti
         return []
     result = {}
     for _, row in df.iterrows():
-        sp = row['stay_purpose']
-        if sp not in result:
-            result[sp] = {"stay_purpose": sp, "aspects": {}}
-        raw_asp = str(row['aspect_name'] or '').lower().replace("_"," ")
-        asp_id_match = next((k for k,v in ASPECT_MAP.items() if v.lower() == raw_asp), None)
+        seg_val = str(row['segment_value'])
+        if seg_val not in result:
+            result[seg_val] = {"segment_value": seg_val, "dimension": safe_dim, "aspects": {}}
+        raw_asp = str(row['aspect_name'] or '').lower().replace("_", " ")
+        asp_id_match = next((k for k, v in ASPECT_MAP.items() if v.lower() == raw_asp), None)
         display_asp = VALID_ASPECTS.get(asp_id_match) or ASPECT_MAP.get(asp_id_match) or raw_asp
         if asp_id_match not in VALID_ASPECTS:
-            continue  # skip General
-        result[sp]["aspects"][display_asp] = {
+            continue
+        result[seg_val]["aspects"][display_asp] = {
             "satisfaction": int(row['satisfaction'] or 0),
             "mentions": int(row['mentions'])
         }
     return list(result.values())
+
+
+# ── Backward compatibility aliases ──────────────────────────────────────────
+@app.get("/api/stay_purpose_preferences")
+async def stay_purpose_preferences(product_id: Optional[int] = None, brand: Optional[str] = None):
+    return await segment_preferences("stay_purpose", product_id=product_id, brand=brand)
 
 @app.get("/api/traveler_preferences")
 async def traveler_preferences(product_id: Optional[int] = None, brand: Optional[str] = None):
-    client = get_bq()
-    if not client:
-        raise HTTPException(status_code=500, detail="Database unavailable")
-    if product_id:
-        where = f"s.product_id = {product_id}"
-        join_clause = ""
-    elif brand:
-        where = f"h.brand_name = '{brand}'"
-        join_clause = f"JOIN `{PROJECT}.{DATASET}.hotel_master` h ON s.product_id = h.product_id"
-    else:
-        return []
-    query = f"""
-    SELECT s.segment_value as traveler_type, s.aspect_name,
-           SUM(s.total_mentions) as mentions,
-           ROUND(SUM(s.positive_count)*100/NULLIF(SUM(s.positive_count)+SUM(s.negative_count),0)) as satisfaction
-    FROM `{PROJECT}.{DATASET}.product_segment_aspect` s
-    {join_clause}
-    WHERE {where} AND s.segment_type = 'traveler_type' AND s.segment_value IS NOT NULL
-    GROUP BY s.segment_value, s.aspect_name
-    ORDER BY s.segment_value, mentions DESC
-    """
-    df = client.query(query).to_dataframe()
-    if df.empty:
-        return []
-    result = {}
-    for _, row in df.iterrows():
-        tt = row['traveler_type']
-        if tt not in result:
-            result[tt] = {"traveler_type": tt, "aspects": {}}
-        raw_asp = str(row['aspect_name'] or '').lower().replace("_"," ")
-        asp_id_match = next((k for k,v in ASPECT_MAP.items() if v.lower() == raw_asp), None)
-        display_asp = VALID_ASPECTS.get(asp_id_match) or ASPECT_MAP.get(asp_id_match) or raw_asp
-        if asp_id_match not in VALID_ASPECTS:
-            continue  # skip General
-        result[tt]["aspects"][display_asp] = {
-            "satisfaction": int(row['satisfaction'] or 0),
-            "mentions": int(row['mentions'])
-        }
-    return list(result.values())
+    return await segment_preferences("traveler_type", product_id=product_id, brand=brand)
 
 @app.get("/api/comparison")
-async def comparison_alias(items: str = "", compare_by: str = "hotel"):
+def comparison_alias(items: str = "", compare_by: str = "hotel"):
     client = get_bq()
     if not client:
         raise HTTPException(status_code=500, detail="Database unavailable")
@@ -1960,7 +2090,7 @@ async def comparison_alias(items: str = "", compare_by: str = "hotel"):
                 SELECT h.product_id, h.hotel_name as display_name,
                        a.aspect_name, a.satisfaction_pct, a.share_of_voice_pct, a.total_mentions,
                        a.positive_count, a.negative_count
-                FROM `{PROJECT}.{DATASET}.hotel_master` h
+                FROM `{PROJECT}.{DATASET}.{MASTER_TABLE}` h
                 JOIN `{PROJECT}.{DATASET}.product_aspect_summary` a ON h.product_id = a.product_id
                 WHERE h.product_id = {pid}
                 """
@@ -1998,7 +2128,7 @@ async def comparison_alias(items: str = "", compare_by: str = "hotel"):
                        ROUND(SUM(a.satisfaction_pct*a.total_mentions)/NULLIF(SUM(a.total_mentions),0)) as satisfaction_pct,
                        SUM(a.total_mentions) as total_mentions,
                        SUM(a.positive_count) as positive_count, SUM(a.negative_count) as negative_count
-                FROM `{PROJECT}.{DATASET}.hotel_master` h
+                FROM `{PROJECT}.{DATASET}.{MASTER_TABLE}` h
                 JOIN `{PROJECT}.{DATASET}.product_aspect_summary` a ON h.product_id = a.product_id
                 WHERE h.brand_name = '{brand_name}'
                 GROUP BY h.brand_name, a.aspect_name
@@ -2028,3 +2158,33 @@ async def comparison_alias(items: str = "", compare_by: str = "hotel"):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8080)
+
+# ── Backward-compat aliases — /api/hotel/* → /api/product/* ──────────────────
+@app.get("/api/hotels")
+def get_hotels_alias(brand=None, city=None, star_category=None, category=CATEGORY):
+    return get_products(brand=brand, city=city, star_category=star_category, category=category)
+
+@app.get("/api/hotel/{product_id}/summary")
+async def get_hotel_summary_alias(product_id: int):
+    return await get_product_summary(product_id)
+
+@app.get("/api/hotel/{product_id}/aspects")
+def get_hotel_aspects_alias(product_id: int):
+    return get_product_aspects(product_id)
+
+@app.get("/api/hotel/{product_id}/pain_delights")
+def get_hotel_pain_delights_alias(product_id: int):
+    return get_product_pain_delights(product_id)
+
+@app.get("/api/hotel/{product_id}/emotions")
+def get_hotel_emotions_alias(product_id: int):
+    return get_product_emotions(product_id)
+
+@app.get("/api/hotel/{product_id}/rd_signals")
+def get_hotel_rd_signals_alias(product_id: int):
+    return get_product_rd_signals(product_id)
+
+@app.get("/api/hotel_details")
+async def hotel_details_compat(product_id=None, brand=None, city=None, star=None):
+    return await product_details_alias(product_id=product_id, brand=brand, city=city, star=star)
+
