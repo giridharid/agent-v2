@@ -1338,6 +1338,19 @@ async function cmpDrilldown(phrase, entityItem, signalType, cmpBy){
       finally{clearTimeout(tmo);}
       const d=await r.json();
       const reviews=d.reviews||[];
+      if(reviews.length===0){
+        // Close panel and mark element as permanently unclickable
+        document.getElementById('drilldownOverlay').classList.remove('open');
+        const clickedEl=document.querySelector(`[data-phrase="${CSS.escape(phrase)}"]`);
+        if(clickedEl){
+          clickedEl.onclick=null;
+          clickedEl.style.cursor='default';
+          clickedEl.style.opacity='0.6';
+          const arrow=clickedEl.querySelector('.sig-cnt');
+          if(arrow) arrow.textContent=(arrow.textContent||'').replace(' →','');
+        }
+        return;
+      }
       document.getElementById('drilldownCount').textContent=`${reviews.length} of ${d.total||reviews.length} reviews across brand`;
       document.getElementById('drilldownContent').innerHTML=reviews.length
         ? reviews.slice(0,15).map(rv=>{
@@ -1387,6 +1400,19 @@ async function cmpDrilldown(phrase, entityItem, signalType, cmpBy){
     });
     const d=await r.json();
     const reviews=d.reviews||[];
+    if(reviews.length===0){
+      // Close panel and mark phrase as permanently unclickable
+      document.getElementById('drilldownOverlay').classList.remove('open');
+      const clickedEl=document.querySelector(`[data-phrase="${CSS.escape(phrase)}"]`);
+      if(clickedEl){
+        clickedEl.onclick=null;
+        clickedEl.style.cursor='default';
+        clickedEl.style.opacity='0.6';
+        const arrow=clickedEl.querySelector('.sig-cnt');
+        if(arrow) arrow.textContent=(arrow.textContent||'').replace(' →','');
+      }
+      return;
+    }
     document.getElementById('drilldownCount').textContent=`${reviews.length} of ${d.total||reviews.length} reviews`;
     document.getElementById('drilldownContent').innerHTML=reviews.length
       ? reviews.slice(0,10).map(rv=>{
@@ -1746,8 +1772,20 @@ function dedupeByPhrase(items){
   return Object.values(map).sort((a,b)=>(b.mention_count||0)-(a.mention_count||0));
 }
 
-function renderPainPoints(pains){allPainPoints=dedupeByPhrase(pains);renderFilteredPains();}
-function renderDelights(delights){allDelights=dedupeByPhrase(delights);renderFilteredDelights();}
+function renderPainPoints(pains){
+  currentPainAspect='all';
+  const painSel=document.querySelector('#painDelightsRow select:first-of-type');
+  if(painSel) painSel.value='all';
+  allPainPoints=dedupeByPhrase(pains);
+  renderFilteredPains();
+}
+function renderDelights(delights){
+  currentDelightAspect='all';
+  const delightSel=document.querySelector('#painDelightsRow select:last-of-type');
+  if(delightSel) delightSel.value='all';
+  allDelights=dedupeByPhrase(delights);
+  renderFilteredDelights();
+}
 
 function renderFilteredPains(){
   const pid=currentProductId||currentHotel;
