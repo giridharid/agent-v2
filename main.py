@@ -456,7 +456,7 @@ def load_master_caches():
 
         emo_by_pid = {}
         for _, row in emo_df.iterrows():
-            pid = str(int(row['product_id']))
+            pid = str(row['product_id']).split('.')[0]
             emo_by_pid.setdefault(pid, []).append({
                 'emotion': str(row['emotion'] or ''),
                 'count': int(row['mention_count'] or 0),
@@ -476,12 +476,12 @@ def load_master_caches():
         pain_by_pid = {}
         delight_by_pid = {}
         for _, row in pd_df.iterrows():
-            pid = str(int(row['product_id']))
+            pid = str(row['product_id']).split('.')[0]
             phrase = str(row['phrase'] or '').strip()
             if not phrase or phrase.lower() in ('null','none','nan'): continue
             r = {
                 'phrase': phrase,
-                'aspect_name': VALID_ASPECTS.get(_aid) or ASPECT_MAP.get(_aid) or str(row['aspect_name'] or ''),
+                'aspect_name': str(row['aspect_name'] or ''),
                 'mention_count': int(row['mention_count'] or 0),
             }
             sig = str(row['signal_type'] or '')
@@ -502,7 +502,7 @@ def load_master_caches():
 
         demo_by_pid = {}
         for _, row in demo_df.iterrows():
-            pid = str(int(row['product_id']))
+            pid = str(row['product_id']).split('.')[0]
             dim = str(row['dimension'] or '')
             val = str(row['dimension_value'] or '').strip()
             if not val or val.lower() in ('unknown','none','null',''): continue
