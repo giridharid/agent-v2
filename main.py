@@ -1196,9 +1196,19 @@ def get_product_pain_delights(product_id: int):
     """
     df = client.query(query).to_dataframe()
     
-    pain_points = df[df['signal_type'] == 'pain_point'].to_dict(orient='records')
-    delights = df[df['signal_type'] == 'delight'].to_dict(orient='records')
-    
+    pid_str = str(product_id).split('.')[0]
+    dc = get_cache('drilldown_coverage') or set()
+    def _add_drill(rows):
+        out = []
+        for r in rows:
+            phrase = str(r.get('phrase') or '').strip()
+            r['has_drilldown'] = (pid_str, phrase.lower()) in dc
+            out.append(r)
+        return out
+
+    pain_points = _add_drill(df[df['signal_type'] == 'pain_point'].to_dict(orient='records'))
+    delights    = _add_drill(df[df['signal_type'] == 'delight'].to_dict(orient='records'))
+
     return {"pain_points": pain_points, "delights": delights}
 
 @app.get("/api/product/{product_id}/emotions")
