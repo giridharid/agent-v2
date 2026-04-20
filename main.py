@@ -2040,11 +2040,13 @@ async def drivers_alias(product_id: Optional[int] = None, brand: Optional[str] =
     return results
 
 @app.get("/api/satisfaction")
-async def satisfaction_alias(product_id: Optional[int] = None, brand: Optional[str] = None):
-    return await drivers_alias(product_id=product_id, brand=brand)
+async def satisfaction_alias(product_id: Optional[int] = None, brand: Optional[str] = None,
+                              city: Optional[str] = None, star: Optional[str] = None):
+    return await drivers_alias(product_id=product_id, brand=brand, city=city, star=star)
 
 @app.get("/api/demographics")
-async def demographics_alias(product_id: Optional[int] = None, brand: Optional[str] = None):
+async def demographics_alias(product_id: Optional[int] = None, brand: Optional[str] = None,
+                              city: Optional[str] = None, star: Optional[str] = None):
     client = get_bq()
     if not client:
         raise HTTPException(status_code=500, detail="Database unavailable")
@@ -2057,11 +2059,15 @@ async def demographics_alias(product_id: Optional[int] = None, brand: Optional[s
         """
         df = client.query(query).to_dataframe()
     elif brand:
+        safe_brand = brand.replace("'", "''")
+        where = f"h.brand_name = '{safe_brand}'"
+        if city: where += f" AND h.city = '{city.replace(chr(39),chr(39)*2)}'"
+        if star: where += f" AND h.star_category = '{star.replace(chr(39),chr(39)*2)}'"
         query = f"""
         SELECT d.dimension, d.dimension_value, SUM(d.review_count) as review_count, 0 as pct_of_total
         FROM `{PROJECT}.{DATASET}.product_demographics` d
         JOIN `{PROJECT}.{DATASET}.{MASTER_TABLE}` h ON d.product_id = h.product_id
-        WHERE h.brand_name = '{brand}'
+        WHERE {where}
         GROUP BY d.dimension, d.dimension_value
         ORDER BY d.dimension, review_count DESC
         """
