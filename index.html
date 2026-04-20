@@ -52,7 +52,7 @@ body.light{
   --shadow:rgba(90,60,180,.1);
 }
 
-body{background:var(--bg);color:var(--text);min-height:100vh;font-family:'DM Sans',system-ui,sans-serif;font-size:13px;display:flex;flex-direction:column;transition:background .2s,color .2s}
+body{background:var(--bg);color:var(--text);min-height:100vh;font-family:'DM Sans',system-ui,sans-serif;font-size:14px;display:flex;flex-direction:column;transition:background .2s,color .2s}
 
 /* ── Scrollbar ─────────────────────────────── */
 ::-webkit-scrollbar{width:6px;height:6px}
@@ -497,7 +497,7 @@ body.light .insights-body code{background:rgba(109,40,217,.08);color:#5b21b6}
     <button id="compareHotelsTab" class="mode-tab" onclick="switchMode('compareHotels')">Compare Hotels</button>
   </div>
   <button id="chatToggle" onclick="openChat()">💬 SmaartAnalyst</button>
-  <button id="themeToggle" onclick="toggleTheme()" title="Toggle light/dark mode" aria-label="Toggle theme" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 10px;cursor:pointer;color:var(--text3);font-size:14px;transition:all .2s;margin-left:6px">🌙</button>
+  <button id="themeToggle" onclick="toggleTheme()" title="Toggle light and dark mode" aria-label="Toggle theme" style="background:rgba(45,33,84,.4);border:1px solid var(--border2);border-radius:8px;padding:6px 12px;cursor:pointer;color:var(--text2);font-size:12px;font-weight:500;transition:all .2s;margin-left:6px;display:inline-flex;align-items:center;gap:6px;font-family:inherit"><span id="themeIcon">🌙</span><span id="themeLabel">Dark</span></button>
 </div>
 
 <!-- FILTER ROWS -->
@@ -659,10 +659,6 @@ body.light .insights-body code{background:rgba(109,40,217,.08);color:#5b21b6}
     <div class="card">
       <div class="card-title">Share of Voice</div>
       <div id="sovChart"></div>
-    </div>
-    <div class="card">
-      <div class="card-title">Satisfaction by Aspect</div>
-      <div id="satisfactionBarsDiv"></div>
     </div>
   </div>
 
@@ -1516,7 +1512,6 @@ async function loadDrivers(){
     const data=await r.json();
     if(!data||!data.length){
       document.getElementById('sovChart').innerHTML='<div class="no-data">No aspect data available</div>';
-      document.getElementById('satisfactionBarsDiv').innerHTML='';
       document.getElementById('chartsRow').classList.remove('hidden');
       return;
     }
@@ -1526,14 +1521,6 @@ async function loadDrivers(){
       let pct=d.share_of_voice||0;
       if(!pct&&d.total_mentions&&totalMentions)pct=Math.round(d.total_mentions*100/totalMentions);
       return `<div class="css-bar-row"><div class="css-bar-lbl">${ASPECT_ICONS[d.aspect_id]||''} ${d.aspect_name}</div><div class="css-bar-track"><div class="css-bar-fill" style="width:${Math.min(pct,100)}%;background:linear-gradient(90deg,#0d9488,#14b8a6)"></div></div><div class="css-bar-val" style="color:var(--text4)">${pct}%</div></div>`;
-    }).join('');
-    const sortedSat=[...data].filter(a=>a.aspect_name!=='General').sort((a,b)=>(a.satisfaction||0)-(b.satisfaction||0));
-    document.getElementById('satisfactionBarsDiv').innerHTML=sortedSat.map(d=>{
-      let pct=d.satisfaction||0;
-      if(!pct&&(d.positive_count||d.negative_count))pct=Math.round((d.positive_count||0)*100/((d.positive_count||0)+(d.negative_count||1)));
-      // Okabe-Ito colorblind-safe: blue=good, amber=mid, vermillion=poor
-      const col=pct>=80?'#0072b2':pct>=60?'#e69f00':'#d55e00';
-      return `<div class="css-bar-row"><div class="css-bar-lbl">${ASPECT_ICONS[d.aspect_id]||''} ${d.aspect_name}</div><div class="css-bar-track"><div class="css-bar-fill" style="width:${Math.min(pct,100)}%;background:${col}"></div></div><div class="css-bar-val" style="color:${col}">${pct}%</div></div>`;
     }).join('');
     // Always show chartsRow once data is loaded — showSubTab handles visibility
     document.getElementById('chartsRow').classList.remove('hidden');
@@ -1728,12 +1715,6 @@ async function loadHotelDataV2(productId){
         let p=d.share_of_voice_pct||0;if(p===0&&d.total_mentions&&totalMentions)p=Math.round(d.total_mentions*100/totalMentions);
         return `<div class="css-bar-row"><div class="css-bar-lbl">${ASPECT_ICONS[d.aspect_id]||''} ${d.aspect_name}</div><div class="css-bar-track"><div class="css-bar-fill" style="width:${Math.min(p,100)}%;background:linear-gradient(90deg,#0d9488,#14b8a6)"></div></div><div class="css-bar-val" style="color:var(--text4)">${p}%</div></div>`;
       }).join('');
-      const sortedSat=[...aspects].sort((a,b)=>(a.satisfaction_pct||0)-(b.satisfaction_pct||0));
-      document.getElementById('satisfactionBarsDiv').innerHTML=sortedSat.map(d=>{
-        let p=d.satisfaction_pct||0;if(p===0&&(d.positive_count||d.negative_count))p=Math.round((d.positive_count||0)*100/((d.positive_count||0)+(d.negative_count||0)));
-        const col=p>=80?'#0072b2':p>=60?'#e69f00':'#d55e00';
-        return `<div class="css-bar-row"><div class="css-bar-lbl">${ASPECT_ICONS[d.aspect_id]||''} ${d.aspect_name}</div><div class="css-bar-track"><div class="css-bar-fill" style="width:${Math.min(p,100)}%;background:${col}"></div></div><div class="css-bar-val" style="color:${col}">${p}%</div></div>`;
-      }).join('');
       document.getElementById('chartsRow').classList.remove('hidden');
     }
     treemapData=data.aspects||[];
@@ -1797,7 +1778,7 @@ function renderFilteredPains(){
   document.getElementById('painPointsList').innerHTML=filtered.length
     ?filtered.slice(0,10).map(p=>{
       const d=JSON.stringify(p.phrase).replace(/'/g,"&#39;");
-      const canDrill = p.has_drilldown !== false;
+      const canDrill = p.has_drilldown === true;
       const fn=canDrill?(isBrand?`handleBrandDrill(this,'pain_point')`:`openDrilldown(${pid},this.dataset.phrase,'pain_point')`):'';
       return `<div class="sig-item pain${canDrill?'':' no-drill'}" ${canDrill?`onclick="${fn}"`:'style="cursor:default;opacity:0.6"'} data-phrase='${p.phrase.replace(/'/g,"&#39;")}' data-brand='${(currentBrand||'').replace(/'/g,"&#39;")}'>
         <span class="sig-txt-r">${escHtml(p.phrase)}</span>
@@ -1817,7 +1798,7 @@ function renderFilteredDelights(){
   ).sort((a,b)=>(b.mention_count||0)-(a.mention_count||0));
   document.getElementById('delightsList').innerHTML=filtered.length
     ?filtered.slice(0,10).map(d=>{
-      const canDrill = d.has_drilldown !== false;
+      const canDrill = d.has_drilldown === true;
       const fn=canDrill?(isBrand?`handleBrandDrill(this,'delight')`:`openDrilldown(${pid},this.dataset.phrase,'delight')`):'';
       return `<div class="sig-item delight${canDrill?'':' no-drill'}" ${canDrill?`onclick="${fn}"`:'style="cursor:default;opacity:0.6"'} data-phrase='${d.phrase.replace(/'/g,"&#39;")}' data-brand='${(currentBrand||'').replace(/'/g,"&#39;")}'>
         <span class="sig-txt-g">${escHtml(d.phrase)}</span>
@@ -1975,8 +1956,13 @@ async function loadComparison(items,compareBy){
       }
     }
     const allStats=bmStats?[...itemStats,bmStats]:itemStats;
+    // Color legend strip — name shows once here in readable size, color carries identity everywhere else
+    const legendHtml=`<div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;padding:10px 14px;margin-bottom:16px;background:var(--card-bg);border:1px solid var(--card-border);border-radius:10px">
+      <span style="color:var(--text4);font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase">Legend</span>
+      ${allStats.map(s=>`<span style="display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:600;color:${s.color}"><span style="width:11px;height:11px;border-radius:50%;background:${s.color}${s.isBm?';border:1.5px dashed '+s.color+';background:transparent':''};display:inline-block"></span>${escHtml(s.isBm?'⌀ '+s.name:s.name)}</span>`).join('')}
+    </div>`;
     const hdrCols=allStats.map(s=>`<th class="item-col"><div class="item-header"><div class="dot" style="background:${s.color}${s.isBm?";border:2px dashed "+s.color+";background:transparent":""}" ></div><div class="name" style="color:${s.color}">${s.isBm?"⌀ "+s.name:s.name}</div></div></th>`).join("");
-    let html=`<div style="margin-bottom:24px"><h3 style="color:var(--accent2);font-size:14px;font-weight:700;margin-bottom:10px">Satisfaction Score</h3>
+    let html=legendHtml+`<div style="margin-bottom:24px"><h3 style="color:var(--accent2);font-size:14px;font-weight:700;margin-bottom:10px">Satisfaction Score</h3>
     <table class="data-table"><thead><tr><th></th>${hdrCols}</tr></thead><tbody>
     <tr><td style="color:var(--text3)">Review Count</td>${allStats.map(s=>`<td><span class="heat-cell heat-high">${s.tot.toLocaleString()}</span></td>`).join("")}</tr>
     <tr><td style="color:var(--text3)">+ve Sentiment</td>${allStats.map(s=>`<td><span class="heat-cell ${getHeatClass(s.pos)}">${s.pos}%</span></td>`).join("")}</tr>
@@ -2167,12 +2153,11 @@ function renderCmpDynamic(asp){
   nonBmPd.forEach(item=>{
     const fp=filterByAsp(item.pain||[]).slice(0,5);
     const fd=filterByAsp(item.delights||[]).slice(0,5);
-    dyn+=`<div style="background:var(--card-bg);border-radius:9px;padding:12px;border-top:3px solid ${item.color};text-align:center">
-      <div style="color:${item.color};font-size:11px;font-weight:700;margin-bottom:8px">${item.name}</div>
+    dyn+=`<div style="background:var(--card-bg);border-radius:9px;padding:12px;border-top:4px solid ${item.color};text-align:center">
       <div style="color:#d55e00;font-size:10px;font-weight:700;margin-bottom:3px">⚠ Pain Points</div>
-      ${fp.length?fp.map(p=>{const cd=p.has_drilldown!==false;return `<div ${cd?`onclick="cmpDrilldown('${escHtml(p.phrase)}','${escHtml(item.item)}','pain_point','${compareBy||''}')"`:''} style="padding:3px 0;border-bottom:1px solid rgba(45,33,84,.12);color:${cd?'#fdba74':'#9a7a6a'};font-size:13px;font-weight:500;display:flex;justify-content:space-between;cursor:${cd?'pointer':'default'};opacity:${cd?'1':'0.6'};transition:opacity .15s" ${cd?`onmouseover="this.style.opacity='.7'" onmouseleave="this.style.opacity='1'"`:''}><span>• ${escHtml(p.phrase)}</span><span style="color:var(--text5);font-family:monospace;font-size:11px">${p.mention_count||''}${cd?' →':''}</span></div>`;}).join(''):`<div style="color:var(--text5);font-size:12px;padding:3px 0">No data</div>`}
+      ${fp.length?fp.map(p=>{const cd=p.has_drilldown===true;return `<div ${cd?`onclick="cmpDrilldown('${escHtml(p.phrase)}','${escHtml(item.item)}','pain_point','${compareBy||''}')"`:''} style="padding:3px 0;border-bottom:1px solid rgba(45,33,84,.12);color:${cd?'#fdba74':'#9a7a6a'};font-size:13px;font-weight:500;display:flex;justify-content:space-between;cursor:${cd?'pointer':'default'};opacity:${cd?'1':'0.6'};transition:opacity .15s" ${cd?`onmouseover="this.style.opacity='.7'" onmouseleave="this.style.opacity='1'"`:''}><span>• ${escHtml(p.phrase)}</span><span style="color:var(--text5);font-family:monospace;font-size:11px">${p.mention_count||''}${cd?' →':''}</span></div>`;}).join(''):`<div style="color:var(--text5);font-size:12px;padding:3px 0">No data</div>`}
       <div style="color:#56b4e9;font-size:10px;font-weight:700;margin:7px 0 3px">★ Delights</div>
-      ${fd.length?fd.map(d=>{const cd=d.has_drilldown!==false;return `<div ${cd?`onclick="cmpDrilldown('${escHtml(d.phrase)}','${escHtml(item.item)}','delight','${compareBy||''}')"`:''} style="padding:3px 0;border-bottom:1px solid rgba(45,33,84,.12);color:${cd?'#93c5fd':'#6a8a9a'};font-size:13px;font-weight:500;display:flex;justify-content:space-between;cursor:${cd?'pointer':'default'};opacity:${cd?'1':'0.6'};transition:opacity .15s" ${cd?`onmouseover="this.style.opacity='.7'" onmouseleave="this.style.opacity='1'"`:''}><span>• ${escHtml(d.phrase)}</span><span style="color:var(--text5);font-family:monospace;font-size:11px">${d.mention_count||''}${cd?' →':''}</span></div>`;}).join(''):`<div style="color:var(--text5);font-size:12px;padding:3px 0">No data</div>`}
+      ${fd.length?fd.map(d=>{const cd=d.has_drilldown===true;return `<div ${cd?`onclick="cmpDrilldown('${escHtml(d.phrase)}','${escHtml(item.item)}','delight','${compareBy||''}')"`:''} style="padding:3px 0;border-bottom:1px solid rgba(45,33,84,.12);color:${cd?'#93c5fd':'#6a8a9a'};font-size:13px;font-weight:500;display:flex;justify-content:space-between;cursor:${cd?'pointer':'default'};opacity:${cd?'1':'0.6'};transition:opacity .15s" ${cd?`onmouseover="this.style.opacity='.7'" onmouseleave="this.style.opacity='1'"`:''}><span>• ${escHtml(d.phrase)}</span><span style="color:var(--text5);font-family:monospace;font-size:11px">${d.mention_count||''}${cd?' →':''}</span></div>`;}).join(''):`<div style="color:var(--text5);font-size:12px;padding:3px 0">No data</div>`}
     </div>`;
   });
   dyn+='</div></div>';
@@ -2604,16 +2589,18 @@ function showCmpInsights(bodyHtml,title,entity){
 }
 function applyTheme(light){
   document.body.classList.toggle('light', light);
-  const btn=document.getElementById('themeToggle');
-  if(btn) btn.textContent=light?'🌑':'🌙';
+  const icon=document.getElementById('themeIcon');
+  const label=document.getElementById('themeLabel');
+  if(icon) icon.textContent=light?'☀️':'🌙';
+  if(label) label.textContent=light?'Light':'Dark';
 }
 function toggleTheme(){
   const isLight=!document.body.classList.contains('light');
   localStorage.setItem('sb_theme', isLight?'light':'dark');
   applyTheme(isLight);
 }
-// Apply saved theme immediately on load
-(function(){applyTheme(localStorage.getItem('sb_theme')==='light');})();
+// Apply saved theme immediately on load — default is light
+(function(){applyTheme(localStorage.getItem('sb_theme')!=='dark');})();
 
 // ── Treemap tooltip ───────────────────────────────────────────
 function showTmTip(e,label,cnt,sat){
