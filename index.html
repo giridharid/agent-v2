@@ -1681,7 +1681,13 @@ async function loadHotelDataV2(productId){
   try{
     const aspects=data.aspects||[];
     const mentions=aspects.reduce((s,a)=>s+(a.total_mentions||0),0);
-    document.getElementById('statOverall').textContent=(data.overall_satisfaction||0)+'%';
+    // Derive overall satisfaction from aspect counts — same formula as brand view
+    // so brand Udaipur vs hotel Udaipur agree to the percent
+    const pos=aspects.reduce((s,a)=>s+(a.positive_count||0),0);
+    const neg=aspects.reduce((s,a)=>s+(a.negative_count||0),0);
+    const denom=pos+neg;
+    const overall=denom>0?Math.round(pos*100/denom):0;
+    document.getElementById('statOverall').textContent=overall+'%';
     document.getElementById('statMentions').textContent=`Based on ${mentions.toLocaleString()} mentions`;
     const filtered=aspects.filter(a=>a.aspect_name!=='General');
     const sortedA=[...filtered].sort((a,b)=>(b.satisfaction_pct||0)-(a.satisfaction_pct||0));

@@ -2092,7 +2092,9 @@ async def demographics_alias(product_id: Optional[int] = None, brand: Optional[s
 def segment_preferences(
     dimension: str,
     product_id: Optional[int] = None,
-    brand: Optional[str] = None
+    brand: Optional[str] = None,
+    city: Optional[str] = None,
+    star: Optional[str] = None
 ):
     """Generic segment × aspect satisfaction cross-tab.
     dimension: any segment_type value in product_segment_aspect
@@ -2110,6 +2112,8 @@ def segment_preferences(
     elif brand:
         safe_brand = brand.replace("'", "''")
         where = f"h.brand_name = '{safe_brand}'"
+        if city: where += f" AND h.city = '{city.replace(chr(39),chr(39)*2)}'"
+        if star: where += f" AND h.star_category = '{star.replace(chr(39),chr(39)*2)}'"
         join_clause = f"JOIN `{PROJECT}.{DATASET}.{MASTER_TABLE}` h ON s.product_id = h.product_id"
     else:
         return []
